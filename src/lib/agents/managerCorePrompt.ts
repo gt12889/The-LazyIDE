@@ -477,7 +477,7 @@ When the user wants scraping, browsing, logging into a site, a live computer, or
 
 71. run_lazybot — Run a LazyBot on a task: launches its own managed mission on the active project. Use when the user says "lance le bot X sur ..." or "make bot X do Y". Returns the run id + mission id.
     {"type": "run_lazybot", "botId": "bot_...", "task": "what the bot should do", "model": "swe-2-high"}
-    "model" is optional and accepts ANY routable reference — an exact catalog id (Devin CLI ids like "swe-2-high", OpenRouter "provider/model" ids, native or BYOK ids) OR a tier hint ("haiku|sonnet|opus", applied within the live rail per the TIER vs EXACT MODEL guidance). When the user names a model explicitly, pass ITS id verbatim — never downgrade it to a tier. Omit "model" to inherit the conversation's model. An unroutable id falls back to a ready rail and the result says so honestly.
+    "model" is optional and accepts ANY routable reference — an exact catalog id (Devin CLI ids like "swe-2-high", native CLI ids like "claude-sonnet-5", local ids like "local/hermes3") OR a tier hint ("haiku|sonnet|opus", applied within the live rail per the TIER vs EXACT MODEL guidance). When the user names a model explicitly, pass ITS id verbatim — never downgrade it to a tier. Omit "model" to inherit the conversation's model. An unroutable id falls back to a ready rail and the result says so honestly.
 
 72. stop_lazybot — Stop every currently running run of a LazyBot. Use when the user wants to halt a bot's activity ("arrête le bot X", "stop bot X").
     {"type": "stop_lazybot", "botId": "bot_..."}
@@ -485,22 +485,16 @@ When the user wants scraping, browsing, logging into a site, a live computer, or
 73. list_lazybots — List all saved LazyBots with a coarse runtime summary (id, name, autonomy, enabled, activeRuns, status). Use before referencing a bot by id, or when the user asks "quels bots j'ai ?" / "list my bots".
     {"type": "list_lazybots"}
 
-74. delete_lazybot — PERMANENTLY delete a LazyBot's configuration (destructive — bots have no archive; requires approval even in YOLO). The executor first stops every active run of that bot (same real-abort path as stop_lazybot, so no cloud session is orphaned), closes its canvas VM window, then removes the config. Run history is kept in .lazy. Use when the user says "supprime le bot X" / "delete bot X" — never use clear_canvas for this (canvas nodes are derived from the bot list and disappear on their own).
+ 74. delete_lazybot — PERMANENTLY delete a bot's configuration (destructive — bots have no archive; requires approval even in YOLO). The executor first stops every active run of that bot (same real-abort path as stop_lazybot). Run history is kept in .lazy. Use when the user says "supprime le bot X" / "delete bot X" — never use clear_canvas for this (canvas nodes are derived from the bot list and disappear on their own).
     {"type": "delete_lazybot", "botId": "bot_... or its name"}
 
-75. resolve_bot_intervention — Resolve a bot's outstanding human gate from chat — identical to the header note's "Resolved — resume bot" button. Use when the user confirms they handled the captcha/login/2FA ("c'est bon", "il peut continuer", "résolu"). Reports honestly when the bot has nothing outstanding.
+ 75. resolve_bot_intervention — Resolve a bot's outstanding human gate from chat — identical to the header note's "Resolved — resume bot" button. Use when the user confirms they handled the captcha/login/2FA ("c'est bon", "il peut continuer", "résolu"). Reports honestly when the bot has nothing outstanding.
     {"type": "resolve_bot_intervention", "botId": "bot_... or its name"}
 
-76. sweep_solari — Release Solari cloud resources (browser sessions, sandboxes, Agent Computer desktops) still held by missions that are no longer live. The boot-time sweep runs this automatically; use it on demand when the user reports a stuck cloud session, a leaked VM, or "il reste une session ouverte". Live runs are untouched.
-    {"type": "sweep_solari"}
-
-77. lazybot_runs — List a LazyBot's recent run history (newest first): missionId, status, task, summary, and whether a replay was saved. Use when the user asks what a bot did, or to find a run/mission id.
+ 76. lazybot_runs — List a bot's recent run history (newest first): missionId, status, task, summary. Use when the user asks what a bot did, or to find a run/mission id.
     {"type": "lazybot_runs", "botId": "bot_... or its name", "limit": 10}
 
-78. toggle_bot_vm — Open or close a bot's live VM window on the canvas ("montre-moi le bot X en direct", "ferme la fenêtre du bot"). Display-only — never affects runs.
-    {"type": "toggle_bot_vm", "botId": "bot_... or its name", "open": true}
-
-79. teach_lazybot — Teach-by-demonstration for a LazyBot. mode:"start" opens the bot's VM window and starts recording (the human demonstrates the workflow in the live view — navigations and actions are journaled); mode:"stop" ends the session, compiles the journal into a skill and merges it into the bot's system prompt under "=== TEACH SKILL ===" (replacing any prior teach block). Reports honestly when nothing was recorded or no session is active.
+ 77. teach_lazybot — Teach-by-demonstration for a bot. mode:"start" starts recording (the human demonstrates the workflow — actions are journaled); mode:"stop" ends the session, compiles the journal into a skill and merges it into the bot's system prompt under "=== TEACH SKILL ===" (replacing any prior teach block). Reports honestly when nothing was recorded or no session is active.
     {"type": "teach_lazybot", "botId": "bot_... or its name", "mode": "start", "skillName": "Order from Amazon"}
     {"type": "teach_lazybot", "botId": "bot_...", "mode": "stop"}
 

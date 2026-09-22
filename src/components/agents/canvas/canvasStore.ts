@@ -68,7 +68,6 @@ import {
 } from './canvasTypes';
 import { clearTerminalActivity } from '../../../lib/agents/terminalActivity';
 import { ensureUniqueCanvasRefs, sanitizeCanvasPositions } from './canvasRefIntegrity';
-import { emitLocalCanvasNote } from '../../../lib/collab/canvasOpBridge';
 
 // ── State shape ────────────────────────────────────────────────────
 
@@ -1120,15 +1119,12 @@ export const canvasStoreVanilla = createStore<CanvasState>()(
 
       addNote: (note) => {
         set((state) => ({ notes: [...state.notes, note] }));
-        emitLocalCanvasNote(note.id, { text: note.text, projectId: note.projectId });
       },
 
       updateNote: (id, patch) => {
         set((state) => ({
           notes: state.notes.map((note) => (note.id === id ? { ...note, ...patch } : note)),
         }));
-        const next = get().notes.find((n) => n.id === id);
-        if (next) emitLocalCanvasNote(id, { text: next.text, projectId: next.projectId });
       },
 
       removeNote: (id) => {

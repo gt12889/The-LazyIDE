@@ -174,11 +174,11 @@ describe('captureEdit', () => {
 });
 
 describe('dispatch stamps department on team-brain captures', () => {
-  it('copies dept from the capture identity onto the event', async () => {
+  it('leaves dept undefined in a local build (no teams)', async () => {
     resolveCaptureIdentityMock.mockResolvedValue({
       author: 'Alice',
-      authorId: 'user-uuid-abc',
-      dept: 'engineering',
+      authorId: undefined,
+      dept: undefined,
     });
     const spy = vi.spyOn(WebPlatform.brain, 'capture').mockResolvedValue({
       id: 'dept-1', path: '', sizeBytes: 0, attrsCount: 0,
@@ -188,7 +188,7 @@ describe('dispatch stamps department on team-brain captures', () => {
     await vi.runAllTimersAsync();
 
     expect(spy).toHaveBeenCalledOnce();
-    expect(spy.mock.calls[0][0].dept).toBe('engineering');
+    expect(spy.mock.calls[0][0].dept).toBeUndefined();
   });
 });
 

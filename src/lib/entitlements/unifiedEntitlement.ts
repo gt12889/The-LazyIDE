@@ -1,44 +1,33 @@
-/* unifiedEntitlement.ts — Single source of truth for feature entitlements.
+/* unifiedEntitlement.ts — Single source of truth for feature entitlements
+   (Forge: no accounts, no tiers — everything local is enabled).
 
-   Unifies three previously-separate gating systems:
-   1. Engine readiness (cli/byok/pro) from entitlement.ts
-   2. Plan tier (free/pro/pro+) from useSubscription
-   3. Org scope (solo/team/dept/global) from scope.ts
+   Unifies the previously-separate gating systems into one synchronous
+   `getEntitlements()` call returning a complete feature map, used by UI
+   components to gate visibility. The module is pure/synchronous — all
+   runtime signals are cached elsewhere and only read here, same pattern
+   as entitlement.ts.
 
-   Provides a synchronous `getEntitlements()` call that returns a complete
-   feature map, used by UI components to gate visibility without each
-   component needing to independently check three different systems.
-
-   The module is pure/synchronous — all runtime signals are cached elsewhere
-   and only read here, same pattern as entitlement.ts.
+   Every gate that used to depend on a plan tier now resolves permissively:
+   on a local-first IDE there is nothing to upsell.
 */
 
 import { loadAccessSettings } from '../models/accessSettings.js';
 import { isCliBackendAvailable } from '../models/cliBackendProvider.js';
-import { hasAnthropicKey } from '../models/anthropicProvider.js';
-import { hasManagedCreditsActive, getProPlanState } from '../models/index.js';
-import type { OrgScope } from '../brain/scope.js';
-import { teamsActive } from '../features.js';
 
 // ── Types ───────────────────────────────────────────────────────────
 
-export type PlanTier = 'free' | 'pro' | 'pro_plus';
-export type EngineMode = 'cli' | 'byok' | 'pro';
+export type PlanTier = 'free';
+export type EngineMode = 'cli' | 'local';
 
 export interface UnifiedEntitlements {
   planTier: PlanTier;
   engineMode: EngineMode;
   engineReady: boolean;
-  orgScope: OrgScope;
-  teamsEnabled: boolean;
   features: {
     canLaunchMissions: boolean;
-    canUseManagedProxy: boolean;
     canUseFederatedRecall: boolean;
     canUseDecisionRegistry: boolean;
     canUseNightShift: boolean;
-    canUseRootTrunk: boolean;
-    canUseTeamSearch: boolean;
     canUseCockpitV2: boolean;
     canUseLoops: boolean;
     maxConcurrentMissions: number;
@@ -46,57 +35,23 @@ export interface UnifiedEntitlements {
   };
 }
 
-// ── Plan tier resolution ────────────────────────────────────────────
+// ── Plan tier (single tier — kept as a type so call sites compile) ──
 
-let _planTier: PlanTier = 'free';
-
-/**
- * Push the current plan tier from the billing layer.
- * Called by useSubscription when the subscription state settles.
- */
-export function setPlanTier(tier: PlanTier): void {
-  _planTier = tier;
+export function setPlanTier(_tier: PlanTier): void {
+  void _tier;
 }
 
-/**
- * Read the cached plan tier. Defaults to 'free' until the billing
- * layer pushes an update — same cold-start pattern as getProPlanState.
- */
 export function getPlanTier(): PlanTier {
-  // If pro plan state is 'unknown', we haven't settled yet —
-  // stay optimistic for Pro users by checking managed credits
-  if (_planTier === 'free' && getProPlanState() === 'unknown' && hasManagedCreditsActive()) {
-    return 'pro';
-  }
-  return _planTier;
+  return 'free';
 }
 
-// ── Org scope cache ─────────────────────────────────────────────────
-
-let _orgScope: OrgScope = 'solo';
-
-/**
- * Push the current org scope from the teams layer.
- * Called when scope.json is loaded or changes.
- */
-export function setOrgScope(scope: OrgScope): void {
-  _orgScope = scope;
+export function setOrgScope(_scope: string): void {
+  void _scope;
 }
 
-/**
- * Read the cached org scope. Defaults to 'solo'.
- */
-export function getOrgScopeCached(): OrgScope {
-  return _orgScope;
+export function getOrgScopeCached(): string {
+  return 'solo';
 }
-
-// ── Feature limits per tier ─────────────────────────────────────────
-
-const TIER_LIMITS: Record<PlanTier, { maxConcurrent: number; maxProjects: number }> = {
-  free: { maxConcurrent: 1, maxProjects: 1 },
-  pro: { maxConcurrent: 3, maxProjects: 5 },
-  pro_plus: { maxConcurrent: 10, maxProjects: 20 },
-};
 
 // ── Unified entitlements ────────────────────────────────────────────
 
@@ -106,64 +61,48 @@ const TIER_LIMITS: Record<PlanTier, { maxConcurrent: number; maxProjects: number
  */
 export function getEntitlements(): UnifiedEntitlements {
   const settings = loadAccessSettings();
-  const planTier = getPlanTier();
-  const orgScope = getOrgScopeCached();
 
   // Engine readiness — mirrors entitlement.ts logic
-  let engineMode: EngineMode = 'cli';
-  let engineReady = false;
+  let engineMode: EngineMode;
+  let engineReady: boolean;
 
-  if (hasManagedCreditsActive()) {
-    engineMode = 'pro';
-    engineReady = true;
-  } else if (isCliBackendAvailable('claude') === true || isCliBackendAvailable('codex') === true) {
+  if (isCliBackendAvailable('claude') === true || isCliBackendAvailable('codex') === true) {
     engineMode = 'cli';
-    engineReady = true;
-  } else if (hasAnthropicKey()) {
-    engineMode = 'byok';
     engineReady = true;
   } else if (isCliBackendAvailable('claude') === null) {
     // Startup window — optimistic
     engineMode = 'cli';
     engineReady = true;
+  } else {
+    engineMode = 'local';
+    engineReady = true;
   }
 
   // If an explicit mode is set, respect it
   if (settings.accessMode) {
-    engineMode = settings.accessMode as EngineMode;
+    engineMode = settings.accessMode;
     if (engineMode === 'cli') {
       const tool = settings.cliTool ?? 'claude';
       const avail = isCliBackendAvailable(tool);
       engineReady = avail !== false;
-    } else if (engineMode === 'byok') {
-      engineReady = hasAnthropicKey();
-    } else if (engineMode === 'pro') {
-      const planState = getProPlanState();
-      engineReady = hasManagedCreditsActive() || planState === 'unknown';
+    } else {
+      engineReady = true;
     }
   }
 
-  const limits = TIER_LIMITS[planTier];
-  const isTeamContext = orgScope !== 'solo' && teamsActive();
-
   return {
-    planTier,
+    planTier: 'free',
     engineMode,
     engineReady,
-    orgScope,
-    teamsEnabled: teamsActive(),
     features: {
       canLaunchMissions: engineReady,
-      canUseManagedProxy: planTier !== 'free' && engineReady,
-      canUseFederatedRecall: planTier !== 'free',
-      canUseDecisionRegistry: planTier !== 'free',
-      canUseNightShift: planTier !== 'free',
-      canUseRootTrunk: planTier === 'pro_plus',
-      canUseTeamSearch: isTeamContext && planTier !== 'free',
+      canUseFederatedRecall: true,
+      canUseDecisionRegistry: true,
+      canUseNightShift: true,
       canUseCockpitV2: true,
-      canUseLoops: planTier !== 'free',
-      maxConcurrentMissions: limits.maxConcurrent,
-      maxProjects: limits.maxProjects,
+      canUseLoops: true,
+      maxConcurrentMissions: 3,
+      maxProjects: 25,
     },
   };
 }

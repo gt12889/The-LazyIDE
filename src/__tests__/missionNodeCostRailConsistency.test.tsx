@@ -108,9 +108,9 @@ describe('MissionNode — cost chip rail consistency (2026-08-19 dollar-kill inc
     expect(costChip.title).toBeTruthy(); // costNoDebitTitle tooltip present
   });
 
-  it('a managed-rail mission still shows its REAL cost (credits) in both chips — unaffected', () => {
-    storedMissions = [makeFullMission({ model: 'anthropic/claude-sonnet-5' })];
-    const data = makeMissionData({ model: 'anthropic/claude-sonnet-5' });
+  it('a local-rail mission shows its REAL cost (credits) in both chips — unaffected', () => {
+    storedMissions = [makeFullMission({ model: 'local/hermes3' })];
+    const data = makeMissionData({ model: 'local/hermes3' });
     renderCard(data);
 
     const metricsChip = screen.getByTestId('mission-node-metrics-chip');

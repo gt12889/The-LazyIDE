@@ -1,29 +1,35 @@
 /**
  * Tests for planAndAct's PER-MISSION model-based routing (routing-by-chosen-
- * model): a managed/OpenRouter id (contains '/') must route to the managed
- * ReAct loop with the id forwarded UNMANGLED, regardless of provider; a
- * native Claude id/label (no '/') must route to the native agent_run loop;
- * and a mismatch between the chosen model's engine family and what's
- * actually ready (Pro inactive/out of credits, or no CLI detected) must fail
- * the mission early with a clear reason instead of silently running on the
- * wrong engine. See runtime.ts's classifyMissionModel / isManagedModelReady
- * / isNativeModelReady / planAndAct for the implementation this covers.
+ * model): a `local/` id routes to the local ReAct loop with the id forwarded
+ * UNMANGLED; a Devin-catalog id routes to the managed loop with the Devin CLI
+ * streamer; a native CLI id routes to the native agent_run loop; and a
+ * mismatch between the chosen model's engine family and what's actually
+ * ready (no CLI detected) fails the mission early with a clear reason
+ * instead of silently running on the wrong engine. See runtime.ts's
+ * classifyMissionModel / isNativeModelReady / planAndAct.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { invoke } from '@tauri-apps/api/core';
 
-// ── Mock getProviderMode only — every other export (hasManagedCreditsActive,
-// getProPlanState, isCliBackendAvailable, setManagedAvailability,
-// setProPlanActive) stays REAL so this file can drive the mode-INDEPENDENT
-// readiness signals the new routing actually uses, independent of whatever
-// accessMode getProviderMode() would otherwise resolve to. ─────────────────
+// ── Mock getProviderMode only — isCliBackendAvailable stays REAL except
+// where overridden below, so the mode-INDEPENDENT readiness signals the new
+// routing actually uses stay honest. ─────────────────────────────────────
 vi.mock('../lib/models/index', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/models/index')>();
   return {
     ...actual,
     getProviderMode: vi.fn(() => 'mock' as const),
+  };
+});
+
+// ── Mock CLI-backend availability so isNativeModelReady() is controllable ──
+vi.mock('../lib/models/cliBackendProvider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/models/cliBackendProvider')>();
+  return {
+    ...actual,
+    isCliBackendAvailable: vi.fn(() => true),
   };
 });
 
@@ -58,11 +64,12 @@ vi.mock('../lib/brain/context', () => ({
 
 import { planAndAct, classifyMissionModel } from '../lib/agents/runtime';
 import type { PlanStep } from '../lib/agents/types';
-import { setManagedAvailability, setProPlanActive } from '../lib/models/index';
+import { isCliBackendAvailable } from '../lib/models/cliBackendProvider';
 import { planAndActManaged } from '../lib/agents/managedAgent';
 
 const mockedInvoke = invoke as ReturnType<typeof vi.fn>;
 const mockedPlanAndActManaged = planAndActManaged as ReturnType<typeof vi.fn>;
+const mockedCliAvailable = isCliBackendAvailable as ReturnType<typeof vi.fn>;
 
 /** Toggle the global flag that isTauriRuntime() reads. */
 function setTauriRuntime(active: boolean): void {
@@ -101,10 +108,8 @@ function makeOpts(overrides: Partial<Parameters<typeof planAndAct>[0]> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockedInvoke.mockResolvedValue(undefined);
+  mockedCliAvailable.mockReturnValue(true);
   setTauriRuntime(true);
-  // Cold-start default (_managedActive=false) — tests that need managed
-  // ready call setManagedAvailability(true) themselves.
-  setManagedAvailability(false);
 });
 
 afterEach(() => {
@@ -112,31 +117,19 @@ afterEach(() => {
 });
 
 describe('classifyMissionModel', () => {
-  it('classifies an OpenRouter id (any provider) as managed', () => {
-    expect(classifyMissionModel('openai/gpt-5.5')).toBe('managed');
-    expect(classifyMissionModel('anthropic/claude-sonnet-5')).toBe('managed');
-    expect(classifyMissionModel('google/gemini-3.5-flash')).toBe('managed');
-    expect(classifyMissionModel('x-ai/grok-4.3')).toBe('managed');
-    expect(classifyMissionModel('deepseek/deepseek-v4-flash')).toBe('managed');
-    expect(classifyMissionModel('meta-llama/llama-4-maverick')).toBe('managed');
+  it('classifies a local/ id as local', () => {
+    expect(classifyMissionModel('local/hermes3')).toBe('local');
+    expect(classifyMissionModel('local/llama3')).toBe('local');
   });
 
-  it('classifies a native Claude id/label as native', () => {
+  it('classifies a Devin-catalog id as devin', () => {
+    expect(classifyMissionModel('swe-2-medium')).toBe('devin');
+    expect(classifyMissionModel('swe-2-high')).toBe('devin');
+  });
+
+  it('classifies a native CLI id/label as native', () => {
     expect(classifyMissionModel('claude-sonnet-5')).toBe('native');
     expect(classifyMissionModel('Claude Sonnet 5')).toBe('native');
-  });
-
-  it('BYOK wave: a BYOK catalog id with its key set routes to byok', () => {
-    localStorage.setItem('lazy.apikey.deepseek', 'sk-test');
-    expect(classifyMissionModel('deepseek-chat')).toBe('byok');
-    expect(classifyMissionModel('deepseek-reasoner')).toBe('byok');
-    // groq catalog id with no key stays native (no silent byok)
-    expect(classifyMissionModel('llama-4-maverick')).toBe('native');
-  });
-
-  it('BYOK wave: a BYOK catalog id WITHOUT a key stays native (no silent byok)', () => {
-    localStorage.removeItem('lazy.apikey.deepseek');
-    expect(classifyMissionModel('deepseek-chat')).toBe('native');
   });
 
   it('returns undefined for an absent/empty model (callers fall back to mode-based routing)', () => {
@@ -146,15 +139,14 @@ describe('classifyMissionModel', () => {
 });
 
 describe('planAndAct — routing by chosen model', () => {
-  it('a managed id (openai/gpt-5.5) routes to the managed loop with the id forwarded unmangled', async () => {
-    setManagedAvailability(true);
-    const opts = makeOpts({ managedModel: 'openai/gpt-5.5' });
+  it('a local/ id routes to the managed loop with the id forwarded unmangled', async () => {
+    const opts = makeOpts({ managedModel: 'local/hermes3' });
 
     await planAndAct(opts);
 
     expect(mockedPlanAndActManaged).toHaveBeenCalledTimes(1);
     expect(mockedPlanAndActManaged).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'openai/gpt-5.5' }),
+      expect.objectContaining({ model: 'local/hermes3' }),
     );
     expect(mockedInvoke).not.toHaveBeenCalledWith('agent_run', expect.anything());
   });
@@ -184,22 +176,16 @@ describe('planAndAct — routing by chosen model', () => {
     expect(mockedPlanAndActManaged).not.toHaveBeenCalled();
   });
 
-  it('a managed id with Pro inactive fails early with a clear reason instead of a silent wrong-model run', async () => {
-    setManagedAvailability(false);
-    // Settle the cold-start 'unknown' plan state to a confirmed 'inactive' —
-    // isManagedModelReady() treats 'unknown' as optimistically ready, so the
-    // mismatch only triggers once the plan state is genuinely settled.
-    setProPlanActive(false);
-    const opts = makeOpts({ managedModel: 'openai/gpt-5.5' });
+  it('a native id with no CLI detected fails early with a clear reason instead of a silent wrong-engine run', async () => {
+    mockedCliAvailable.mockReturnValue(false);
+    const opts = makeOpts({ managedModel: 'claude-sonnet-5' });
 
     await planAndAct(opts);
 
     expect(mockedPlanAndActManaged).not.toHaveBeenCalled();
     expect(mockedInvoke).not.toHaveBeenCalledWith('agent_run', expect.anything());
     expect(opts.onAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        text: expect.stringMatching(/^Erreur agent:.*LazyPro/),
-      }),
+      expect.objectContaining({ kind: 'error' }),
     );
     expect(opts.onProgress).toHaveBeenCalledWith(100);
     // Every plan step is marked as errored, same terminal shape as the

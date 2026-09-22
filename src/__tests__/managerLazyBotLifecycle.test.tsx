@@ -1,11 +1,10 @@
 /**
- * Tests for the LazyManager LazyBot lifecycle actions: delete_lazybot,
- * resolve_bot_intervention, sweep_solari, lazybot_runs, toggle_bot_vm.
+ * Tests for the manager bot lifecycle actions: delete_lazybot,
+ * resolve_bot_intervention, lazybot_runs, teach_lazybot.
  *
- * Motivation (user requirement: "le lazymanager doit pouvoir tout faire"):
- * the Bots surface has NO management UI — the LazyManager chat is the only
- * CRUD surface for LazyBots, and deleteBot()/sweepOrphans()/the header's
- * resolve button previously had no manager action at all (console-only).
+ * Motivation: the Bots surface has NO management UI — the manager chat is
+ * the only CRUD surface for bots, and deleteBot()/the header's resolve
+ * button previously had no manager action at all (console-only).
  *
  * The suite drives the REAL executor path — parse-free: runManagerTurn is
  * mocked to emit the action, then sendManagerMessage runs the ordinary
@@ -32,9 +31,6 @@ import { registerBotRun, listActiveRunsForBot } from '../lib/bots/botEngine';
 import {
   requestUserIntervention, getOutstandingIntervention, resetInterventions,
 } from '../lib/bots/botRequestIntervention';
-import {
-  isBotVmWindowOpen, openBotVmWindow, resetBotVmWindows,
-} from '../lib/solari/botVmWindows';
 import {
   isTeachModeActive, recordTeachStep, resetTeachMode,
 } from '../lib/bots/teachMode';
@@ -139,7 +135,6 @@ beforeEach(() => {
   setBotsRoot('/repo');
   setBotRuntimeRoot('/repo');
   resetInterventions();
-  resetBotVmWindows();
   resetTeachMode();
   vi.mocked(runManagerTurn).mockReset();
   mockInvoke.mockReset();
@@ -216,19 +211,6 @@ describe('executeManagerAction — delete_lazybot', () => {
     void runMissionId;
     localStorage.removeItem('lazy.locale');
   });
-
-  it('closes an open VM window so the derived botVm canvas node disappears', async () => {
-    await saveBot(makeBot());
-    openBotVmWindow('bot_1');
-    expect(isBotVmWindowOpen('bot_1')).toBe(true);
-    const { result } = renderHook(() => useAgentsStore(), { wrapper });
-
-    await dispatch(result.current.sendManagerMessage, result.current.activeConversationId, [
-      { type: 'delete_lazybot', botId: 'bot_1' },
-    ]);
-
-    expect(isBotVmWindowOpen('bot_1')).toBe(false);
-  });
 });
 
 // ── resolve_bot_intervention ────────────────────────────────────────────
@@ -266,22 +248,7 @@ describe('executeManagerAction — resolve_bot_intervention', () => {
   });
 });
 
-// ── sweep_solari / lazybot_runs / toggle_bot_vm ─────────────────────────
-
-describe('executeManagerAction — sweep_solari', () => {
-  it('runs the orphan sweep without throwing and reports completion', async () => {
-    localStorage.setItem('lazy.locale', 'en');
-    const { result } = renderHook(() => useAgentsStore(), { wrapper });
-
-    await dispatch(result.current.sendManagerMessage, result.current.activeConversationId, [
-      { type: 'sweep_solari' },
-    ]);
-
-    const lastMsg = result.current.managerMessages[result.current.managerMessages.length - 1];
-    expect(lastMsg.content).toContain('sweep_solari: orphan sweep complete');
-    localStorage.removeItem('lazy.locale');
-  });
-});
+// ── lazybot_runs ───────────────────────────────────────────────────────
 
 describe('executeManagerAction — lazybot_runs', () => {
   it('lists persisted run history entries for the bot', async () => {
@@ -320,42 +287,10 @@ describe('executeManagerAction — lazybot_runs', () => {
   });
 });
 
-describe('executeManagerAction — toggle_bot_vm', () => {
-  it('opens the VM window, then closes it again', async () => {
-    localStorage.setItem('lazy.locale', 'en');
-    await saveBot(makeBot());
-    const { result } = renderHook(() => useAgentsStore(), { wrapper });
-
-    await dispatch(result.current.sendManagerMessage, result.current.activeConversationId, [
-      { type: 'toggle_bot_vm', botId: 'bot_1', open: true },
-    ]);
-    expect(isBotVmWindowOpen('bot_1')).toBe(true);
-
-    await dispatch(result.current.sendManagerMessage, result.current.activeConversationId, [
-      { type: 'toggle_bot_vm', botId: 'bot_1', open: false },
-    ]);
-    expect(isBotVmWindowOpen('bot_1')).toBe(false);
-    localStorage.removeItem('lazy.locale');
-  });
-
-  it('fails honestly for an unknown bot', async () => {
-    localStorage.setItem('lazy.locale', 'en');
-    const { result } = renderHook(() => useAgentsStore(), { wrapper });
-
-    await dispatch(result.current.sendManagerMessage, result.current.activeConversationId, [
-      { type: 'toggle_bot_vm', botId: 'ghost' },
-    ]);
-
-    const lastMsg = result.current.managerMessages[result.current.managerMessages.length - 1];
-    expect(lastMsg.content).toContain('no LazyBot matches "ghost"');
-    localStorage.removeItem('lazy.locale');
-  });
-});
-
 // ── teach_lazybot ───────────────────────────────────────────────────────
 
 describe('executeManagerAction — teach_lazybot', () => {
-  it('mode "start" opens the VM window and begins recording', async () => {
+  it('mode "start" begins recording', async () => {
     localStorage.setItem('lazy.locale', 'en');
     await saveBot(makeBot());
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
@@ -365,7 +300,6 @@ describe('executeManagerAction — teach_lazybot', () => {
     ]);
 
     expect(isTeachModeActive('bot_1')).toBe(true);
-    expect(isBotVmWindowOpen('bot_1')).toBe(true);
     const lastMsg = result.current.managerMessages[result.current.managerMessages.length - 1];
     expect(lastMsg.content).toContain('recording started for "QA Bot"');
     expect(lastMsg.content).toContain('"Order flow"');

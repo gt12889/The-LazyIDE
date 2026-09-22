@@ -1,24 +1,18 @@
-/* Model registry — selectable models grouped by provider.
+/* Model registry — selectable models grouped by provider (Forge).
 
-   Two namespaces coexist:
-   - Native Anthropic ids (e.g. 'claude-sonnet-5'): used by the CLI/BYOK Rust path.
-   - OpenRouter ids (e.g. 'anthropic/claude-sonnet-5'): used by the managed Pro path.
-   Never mix them — keep each path consuming its own id format.
+   Native ids only (e.g. 'claude-sonnet-5'): consumed by the CLI backends.
+   Local models use 'local/<name>' ids (see localProvider.ts). There is no
+   hosted catalog — the managed OpenRouter proxy is gone.
 */
 
 import type { ModelInfo } from './types.js';
-export {
-  OPENROUTER_MODELS,
-  OPENROUTER_MODELS_BY_PROVIDER,
-  DEFAULT_OPENROUTER_MODEL_ID,
-  findOpenRouterModel,
-  priceBadge,
-} from './openrouterCatalog.js';
-export type { OpenRouterModel, ModelTier, ReasoningEffort } from './openrouterCatalog.js';
 
-// ── Native Anthropic ids (CLI / BYOK path only) ────────────────────
-// These ids are consumed by anthropicProvider and claudeCodeProvider.
-// Do NOT use them with the OpenRouter / managed proxy.
+/** Reasoning effort level (accepted by CLI tools that support it; local
+    Ollama models ignore it). */
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'max';
+
+// ── Native Anthropic ids (CLI path only) ────────────────────
+// These ids are consumed by claudeCodeProvider and cliBackendProvider.
 const ANTHROPIC_MODELS: ModelInfo[] = [
   {
     id: 'claude-opus-5',
@@ -46,9 +40,7 @@ const ANTHROPIC_MODELS: ModelInfo[] = [
   },
 ];
 
-// ── ALL_MODELS (CLI / BYOK registry — native ids only) ────────────
-// The OpenAI and Google placeholder stubs are removed; the Pro path uses
-// the OpenRouter catalog directly (see openrouterCatalog.ts).
+// ── ALL_MODELS (CLI registry — native ids only) ────────────
 export const ALL_MODELS: ModelInfo[] = [...ANTHROPIC_MODELS];
 
 export const MODELS_BY_PROVIDER: Record<string, ModelInfo[]> = {

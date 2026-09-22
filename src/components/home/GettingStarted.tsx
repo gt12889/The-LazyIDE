@@ -6,39 +6,32 @@
         in as `hasMissions`) OR the lazy.firstAssistantSend flag (set by the
         composer send path, see Composer.tsx handleSend)
    Dismiss ("Masquer") and auto-hide-once-all-done are both persisted
-   per-account in localStorage, so a graduated user is never nagged again.
+   in localStorage, so a graduated user is never nagged again.
    Tauri only — the isTauri() gate lives here so HomeSpace can render it
    unconditionally.
 */
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAppContext } from '../../app/AppContext';
-import { useAuth } from '../../lib/auth/useAuth';
 import { useI18n } from '../../i18n';
 import { isTauri } from '../../lib/platform';
 import { getEngineReadiness } from '../../lib/models/entitlement';
 import { emit } from '../../lib/bus';
 
-const FIRST_SEND_KEY = 'lazy.firstAssistantSend';
-const DISMISSED_PREFIX = 'lazy.gettingStarted.dismissed';
+const FIRST_SEND_KEY = 'forge.firstAssistantSend';
+const DISMISSED_KEY = 'forge.gettingStarted.dismissed';
 
-function dismissedKey(userId: string): string {
-  return `${DISMISSED_PREFIX}:${userId}`;
-}
-
-function readDismissed(userId: string | null): boolean {
-  if (!userId) return false;
+function readDismissed(): boolean {
   try {
-    return localStorage.getItem(dismissedKey(userId)) === '1';
+    return localStorage.getItem(DISMISSED_KEY) === '1';
   } catch {
     return false;
   }
 }
 
-function writeDismissed(userId: string | null): void {
-  if (!userId) return;
+function writeDismissed(): void {
   try {
-    localStorage.setItem(dismissedKey(userId), '1');
+    localStorage.setItem(DISMISSED_KEY, '1');
   } catch {
     // localStorage unavailable — silently ignore.
   }
@@ -124,10 +117,8 @@ function StepRow({ label, done, actionLabel, onAction }: StepRowProps) {
 export function GettingStarted({ hasMissions }: GettingStartedProps) {
   const { t } = useI18n();
   const { projectRoot, openProject, setActiveSpace } = useAppContext();
-  const { user } = useAuth();
-  const userId = user?.id ?? null;
 
-  const [dismissed, setDismissed] = useState(() => readDismissed(userId));
+  const [dismissed, setDismissed] = useState(() => readDismissed());
 
   const step1Done = Boolean(projectRoot);
   const step2Done = getEngineReadiness().ready;
@@ -139,13 +130,13 @@ export function GettingStarted({ hasMissions }: GettingStartedProps) {
   // even if a later signal (e.g. closing the project) would otherwise flip
   // a step back to "undone".
   useEffect(() => {
-    if (allDone) writeDismissed(userId);
-  }, [allDone, userId]);
+    if (allDone) writeDismissed();
+  }, [allDone]);
 
   const handleDismiss = useCallback(() => {
-    writeDismissed(userId);
+    writeDismissed();
     setDismissed(true);
-  }, [userId]);
+  }, []);
 
   const goConfigureEngine = useCallback(() => {
     emit('nav:navigateSpace', 'models');

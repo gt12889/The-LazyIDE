@@ -1,14 +1,12 @@
-/* KpiGroup — 5 real-data KPI tiles (design §5's bandeau KPI group, extended
-   from 4 to 5 per the Wave 2 spec's explicit "crédits restants" card).
-   Every number below is derived from a real source — see each tile's
-   comment for exactly which one. */
+/* KpiGroup — 5 real-data KPI tiles. Every number below is derived from a
+   real source — see each tile's comment for exactly which one. The 5th
+   tile shows this session's estimated model spend (costStore). */
 
 import { useEffect, useState } from 'react';
 import { useI18n } from '../../../i18n';
 import { useUsageMetrics } from '../../metrics';
 import { getCostState, subscribeCost, type CostState } from '../../../lib/models/costStore';
-import { useSubscriptionContext, formatCredits } from '../../../lib/billing';
-import { AccountPopover, useAccountPopoverTrigger } from '../../account/AccountPopover';
+import { formatCredits } from '../../../lib/billing';
 import type { FleetProject } from '../../../lib/agents/fleetMissions';
 import { countActiveByModelFamily } from './cockpitHelpers';
 import { formatTokenCountShort } from '../../../lib/agents/tokenFormat';
@@ -116,11 +114,7 @@ interface KpiGroupProps {
 export function KpiGroup({ projects, pendingDecisions, onDecisionsClick, onAgentsClick, onMergedClick, onBrainClick }: KpiGroupProps) {
   const { t } = useI18n();
   const metrics = useUsageMetrics('today');
-  const { subscription, isPro } = useSubscriptionContext();
   const [cost, setCost] = useState<CostState>(getCostState);
-  // QA fix (B1): the credits tile opens the SAME AccountPopover as the
-  // header AccountChip — real shared trigger + popover, not a re-implementation.
-  const { elRef: creditsRef, anchorRect, toggle, close } = useAccountPopoverTrigger<HTMLDivElement>();
 
   useEffect(() => subscribeCost(setCost), []);
 
@@ -166,13 +160,10 @@ export function KpiGroup({ projects, pendingDecisions, onDecisionsClick, onAgent
       />
       <KpiTile
         label={t('cockpit.kpi.creditsLabel')}
-        value={isPro && subscription ? formatCredits(subscription.credits_remaining_cents) : t('cockpit.kpi.creditsFree')}
+        value={formatCredits(cost.totalCostUsd * 100)}
         last
-        onClick={toggle}
         testId="cockpit-kpi-credits"
-        triggerRef={creditsRef}
       />
-      {anchorRect && <AccountPopover anchorRect={anchorRect} onClose={close} triggerRef={creditsRef} />}
     </div>
   );
 }

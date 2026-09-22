@@ -70,8 +70,8 @@ import type { FleetProject } from '../../../lib/agents/fleetMissions';
 import type { StoredAgent } from '../../../lib/agents/agentsStorage';
 import { formatCron } from '../../../lib/agents/scheduleUtils';
 import { rankUrgentMissions } from '../cockpit/cockpitHelpers';
-import { makeRef, type BotNodeData, type BotNodeStatus, type BotVmNodeData, type CanvasPrefs, type Chain, type DraftSpec, type FrameSpec, type JoinSpec, type NodeRef, type NoteData, type ProjectNodeCounts, type ProjectNodeData, type RouterSpec, type ScheduleNodeData, type SurfaceSpec } from './canvasTypes';
-import { BOT_VM_WINDOW_DEFAULT_SIZE } from '../../../lib/solari/botVmWindows';
+import { makeRef, type BotNodeData, type BotNodeStatus, type CanvasPrefs, type Chain, type DraftSpec, type FrameSpec, type JoinSpec, type NodeRef, type NoteData, type ProjectNodeCounts, type ProjectNodeData, type RouterSpec, type ScheduleNodeData, type SurfaceSpec } from './canvasTypes';
+
 import type { BotConfig } from '../../../lib/bots/botTypes';
 import {
   computeZoneLayout,
@@ -98,7 +98,6 @@ import {
   buildSurfaceEdges,
   type CanvasReactFlowEdge,
 } from './reconcilerEdges';
-import { buildCollisionEdges } from '../../../lib/collab/collisionEdges';
 
 // ── Re-exports (public barrel — see this file's header) ──────────────
 
@@ -129,10 +128,6 @@ export interface BotNodeInput {
   activeRuns: number;
   activeRunIds?: string[];
   lastAction?: string;
-  /** True when the bot's connected VM window node should be rendered (▶ VM). */
-  vmOpen?: boolean;
-  /** Current window footprint when vmOpen (user-resizable). */
-  vmSize?: { width: number; height: number };
 }
 
 export interface ReconcileInputs {
@@ -531,14 +526,13 @@ export function reconcile(inputs: ReconcileInputs): ReconcileResult {
     emitZone(result, position, ctx, out);
   }
 
-  // ── LazyBot zone (additive, LazyBot canvas wave) ──────────────────────
-  // A dedicated "LazyBots" group zone (mirroring the synthetic Transverse
+  // ── Bot zone (additive, bot canvas wave) ──────────────────────
+  // A dedicated "Bots" group zone (mirroring the synthetic Transverse
   // zone) hosting every bot node. Bots are BotConfigs, not FleetMissions, so
   // this is emitted DIRECTLY (not through the project-zone machinery). It is
   // always rendered (even empty) so the surface stays discoverable; bot
   // children sit inside the group at simple grid cells.
-  const botVmEdgesFromBots: CanvasReactFlowEdge[] = [];
-  // Canvas always passes `bots` (possibly empty) so the LazyBots zone stays
+  // Canvas always passes `bots` (possibly empty) so the Bots zone stays
   // visible and distinct from project agent zones. Tests that omit `bots`
   // keep the previous node set (no extra zone).
   if (inputs.bots !== undefined) {
@@ -597,7 +591,6 @@ export function reconcile(inputs: ReconcileInputs): ReconcileResult {
       data: groupData as ProjectNodeData & Record<string, unknown>,
     });
     out.renderedIds.add(botsZoneRef);
-    const botVmEdges: CanvasReactFlowEdge[] = [];
     bots.forEach((b, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
@@ -621,53 +614,14 @@ export function reconcile(inputs: ReconcileInputs): ReconcileResult {
         data,
       });
       out.renderedIds.add(botRef);
-
-      // Connected VM window: a `botVm` node shown to the RIGHT of its bot node,
-      // tethered by a quiet hierarchy edge (same contract as local agents'
-      // connected live windows — TerminalNode/PreviewNode). The node is
-      // top-level (draggable away from the LazyBots zone if the user wants).
-      if (b.vmOpen) {
-        const vmRef = makeRef('botVm', b.bot.id);
-        const vmSize = b.vmSize ?? BOT_VM_WINDOW_DEFAULT_SIZE;
-        const vmPos = positions[vmRef];
-        out.nodes.push({
-          id: vmRef,
-          type: 'botVm',
-          zIndex: 20,
-          width: vmSize.width,
-          height: vmSize.height,
-          position: vmPos ?? {
-            x: botsGroupPos.x + BOT_GUTTER + col * BOT_COL_W + BOT_COL_W + 24,
-            y: botsGroupPos.y + BOT_HEADER_H + row * BOT_ROW_H,
-          },
-          data: {
-            botId: b.bot.id,
-            botName: b.bot.name,
-            status: b.status,
-            width: vmSize.width,
-            height: vmSize.height,
-          } as BotVmNodeData,
-        });
-        out.renderedIds.add(vmRef);
-        botVmEdges.push({
-          id: `hierarchy:bot:${b.bot.id}:vm`,
-          type: 'hierarchy',
-          source: botRef,
-          target: vmRef,
-          data: {},
-        });
-      }
     });
-    botVmEdgesFromBots.push(...botVmEdges);
   }
 
   const rawEdges = [
-    ...botVmEdgesFromBots,
     ...buildHierarchyEdges(allMissionsForFold, missionLoopMeta, out.renderedIds),
     ...buildIterationEdges(out.renderedIds, out.nodes),
     ...buildSurfaceEdges(surfaces, out.renderedIds),
     ...buildChainEdges(chains, out.renderedIds, nowMs, hiddenMissionIds, missionLoopMeta, routers),
-    ...buildCollisionEdges(allMissionsForFold, out.renderedIds),
   ];
 
   // Ghost-edge backstop (2026-08-04 live dogfood: canvas still rendered ~35

@@ -8,4 +8,3 @@ export { HomeSpace } from './HomeSpace';
 export { ReviewSpace } from './ReviewSpace';
 export { SettingsSpace } from './SettingsSpace';
 export type { SettingsTab } from './SettingsSpace';
-export { TeamSpace } from './TeamSpace';

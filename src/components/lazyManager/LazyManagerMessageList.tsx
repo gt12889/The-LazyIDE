@@ -215,9 +215,7 @@ function actionSummary(action: ManagerAction, t: (key: string, params?: Record<s
     // Same "label only" convention as above — t() falls back to the raw key.
     case 'delete_lazybot': return t('cockpit.manager.action.deleteLazybot', { name: action.botId });
     case 'resolve_bot_intervention': return t('cockpit.manager.action.resolveBotIntervention', { name: action.botId });
-    case 'sweep_solari': return t('cockpit.manager.action.sweepSolari');
     case 'lazybot_runs': return t('cockpit.manager.action.lazybotRuns', { name: action.botId });
-    case 'toggle_bot_vm': return t('cockpit.manager.action.toggleBotVm', { name: action.botId });
     case 'teach_lazybot': return t('cockpit.manager.action.teachLazybot', { name: action.botId });
     case 'info': return action.message;
     // Structural project digest (projectDigest.ts) — grounding action, same

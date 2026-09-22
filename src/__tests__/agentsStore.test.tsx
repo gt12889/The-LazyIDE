@@ -9,9 +9,8 @@ import type { MissionContract, JudgeVerdict, Mission } from '../lib/agents/types
 import { emit } from '../lib/bus';
 import { invoke } from '@tauri-apps/api/core';
 import { runManagerTurn, formatMissionDetail, MANAGER_TURN_TIMEOUT_MS, MANAGER_LLM_CALL_TIMEOUT_MS, MANAGER_LLM_CALL_ABSOLUTE_TIMEOUT_MS, getManagerDefaultModelId } from '../lib/agents/managerEngine';
-import { saveAccessSettings, setManagedAvailability, getDefaultModelIdForMode } from '../lib/models/index';
+import { saveAccessSettings } from '../lib/models/index';
 import { DEFAULT_MODEL } from '../lib/models/registry';
-import { DEFAULT_OPENROUTER_MODEL_ID, FREE_OPENROUTER_MODEL_ID } from '../lib/models/openrouterCatalog';
 import { getCostState, resetCost, addUsage } from '../lib/models/costStore';
 import { LS_AGENTS_COST_LIMIT } from '../components/settings/AgentsPanel';
 
@@ -169,7 +168,6 @@ function simulateTauri(): void {
 
 function clearProviderModeSimulation(): void {
   delete (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'];
-  setManagedAvailability(false);
   localStorage.clear();
 }
 
@@ -1129,9 +1127,9 @@ describe('LazyManager launched missions — mode-aware model', () => {
     clearProviderModeSimulation();
   });
 
-  it('launch_mission in managed mode resolves to a valid OpenRouter id, not the native default', async () => {
+  it('launch_mission in cli mode resolves to a native id, not a stale default label', async () => {
     simulateTauri();
-    setManagedAvailability(true); // auto-detect -> 'managed' (no explicit accessMode)
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
 
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
     const countBefore = result.current.missions.length;
@@ -1143,14 +1141,13 @@ describe('LazyManager launched missions — mode-aware model', () => {
     });
 
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'lance @coder sur fix the bug', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'lance @coder sur fix the bug', 'claude-sonnet-5');
     });
 
     expect(result.current.missions.length).toBe(countBefore + 1);
     const mission = result.current.missions[result.current.missions.length - 1];
-    // Must be an OpenRouter-format id (contains a provider prefix) — the
-    // ai-proxy rejects anything else with "Modèle non supporté".
-    expect(mission.model).toContain('/');
+    // Native CLI id (no provider prefix).
+    expect(mission.model).not.toContain('/');
     expect(mission.model.toLowerCase()).toContain('haiku');
     expect(mission.model).not.toBe('Haiku 4.5');
   });
@@ -1178,9 +1175,9 @@ describe('LazyManager launched missions — mode-aware model', () => {
     expect(mission.model.toLowerCase()).toContain('sonnet');
   });
 
-  it('launch_mission with no tier hint still defaults to a valid managed model (managed mode)', async () => {
+  it('launch_mission with no tier hint still defaults to the cli default (cli mode)', async () => {
     simulateTauri();
-    setManagedAvailability(true);
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
 
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
     const countBefore = result.current.missions.length;
@@ -1192,17 +1189,17 @@ describe('LazyManager launched missions — mode-aware model', () => {
     });
 
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'lance @coder sur fix the bug', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'lance @coder sur fix the bug', 'claude-sonnet-5');
     });
 
     expect(result.current.missions.length).toBe(countBefore + 1);
     const mission = result.current.missions[result.current.missions.length - 1];
-    expect(mission.model).toBe(DEFAULT_OPENROUTER_MODEL_ID);
+    expect(mission.model).toBe(DEFAULT_MODEL.id);
   });
 
-  it('create_loop in managed mode registers the loop with a valid OpenRouter model id', async () => {
+  it('create_loop in cli mode registers the loop with a valid native id', async () => {
     simulateTauri();
-    setManagedAvailability(true);
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
 
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
     const countBefore = result.current.missions.length;
@@ -1214,12 +1211,12 @@ describe('LazyManager launched missions — mode-aware model', () => {
     });
 
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'loop lint every 15m', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'loop lint every 15m', 'claude-sonnet-5');
     });
 
     expect(result.current.missions.length).toBe(countBefore + 1);
     const loopMission = result.current.missions[result.current.missions.length - 1];
-    expect(loopMission.model).toContain('/');
+    expect(loopMission.model).not.toContain('/');
     expect(loopMission.model.toLowerCase()).toContain('opus');
   });
 
@@ -1237,7 +1234,7 @@ describe('LazyManager launched missions — mode-aware model', () => {
         rawResponse: '',
       });
       await act(async () => {
-        await result.current.sendManagerMessage(result.current.activeConversationId, 'loop lint every 15m', 'anthropic/claude-sonnet-5');
+        await result.current.sendManagerMessage(result.current.activeConversationId, 'loop lint every 15m', 'claude-sonnet-5');
       });
       return result.current.missions[result.current.missions.length - 1];
     }
@@ -1253,7 +1250,7 @@ describe('LazyManager launched missions — mode-aware model', () => {
         rawResponse: '',
       });
       await act(async () => {
-        await result.current.sendManagerMessage(result.current.activeConversationId, `pause le loop ${loopMission.id}`, 'anthropic/claude-sonnet-5');
+        await result.current.sendManagerMessage(result.current.activeConversationId, `pause le loop ${loopMission.id}`, 'claude-sonnet-5');
       });
 
       const updated = result.current.missions.find((m) => m.id === loopMission.id);
@@ -1273,7 +1270,7 @@ describe('LazyManager launched missions — mode-aware model', () => {
         rawResponse: '',
       });
       await act(async () => {
-        await result.current.sendManagerMessage(result.current.activeConversationId, 'supprime le loop lint', 'anthropic/claude-sonnet-5');
+        await result.current.sendManagerMessage(result.current.activeConversationId, 'supprime le loop lint', 'claude-sonnet-5');
       });
 
       expect(result.current.missions.length).toBe(countBeforeDelete - 1);
@@ -1293,9 +1290,9 @@ describe('LazyManager launched missions — modelId (exact catalog id)', () => {
     clearProviderModeSimulation();
   });
 
-  it('launch_mission with an exact modelId in managed mode creates a mission carrying that EXACT id', async () => {
+  it('launch_mission with an exact modelId in cli mode creates a mission carrying that EXACT id', async () => {
     simulateTauri();
-    setManagedAvailability(true);
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
 
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
     const countBefore = result.current.missions.length;
@@ -1303,25 +1300,25 @@ describe('LazyManager launched missions — modelId (exact catalog id)', () => {
     vi.mocked(runManagerTurn).mockResolvedValueOnce({
       responseText: 'Launching now.',
       actions: [
-        { type: 'launch_mission', agentName: 'coder', task: 'Fix the bug', model: 'haiku', modelId: 'openai/gpt-5.6-luna' },
+        { type: 'launch_mission', agentName: 'coder', task: 'Fix the bug', model: 'haiku', modelId: 'claude-opus-5' },
       ],
       rawResponse: '',
     });
 
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'lance @coder sur fix the bug avec GPT-5.6 Luna', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'lance @coder sur fix the bug avec Opus', 'claude-sonnet-5');
     });
 
     expect(result.current.missions.length).toBe(countBefore + 1);
     const mission = result.current.missions[result.current.missions.length - 1];
     // modelId took priority over the "haiku" tier hint, and was NOT
     // reinterpreted/abbreviated.
-    expect(mission.model).toBe('openai/gpt-5.6-luna');
+    expect(mission.model).toBe('claude-opus-5');
   });
 
   it('launch_mission with a modelId unknown to the effective rail creates NO mission and reports an honest failure naming the id', async () => {
     simulateTauri();
-    setManagedAvailability(true);
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
 
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
     const countBefore = result.current.missions.length;
@@ -1336,7 +1333,7 @@ describe('LazyManager launched missions — modelId (exact catalog id)', () => {
     });
 
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'lance @coder sur fix the bug', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'lance @coder sur fix the bug', 'claude-sonnet-5');
     });
 
     // No mission was silently created on some fallback default model.
@@ -1347,9 +1344,9 @@ describe('LazyManager launched missions — modelId (exact catalog id)', () => {
     expect(combined).toContain('not-a-real/model-id');
   });
 
-  it('a valid CLI-rail (native) modelId requested on the Pro rail launches via the inferred rail switch, carrying the CLI id unchanged', async () => {
+  it('a native modelId requested on the local rail launches via the inferred rail switch, carrying the CLI id unchanged', async () => {
     simulateTauri();
-    setManagedAvailability(true);
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
 
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
     const countBefore = result.current.missions.length;
@@ -1361,7 +1358,7 @@ describe('LazyManager launched missions — modelId (exact catalog id)', () => {
     });
 
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'lance @coder', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'lance @coder', 'claude-sonnet-5');
     });
 
     // Inferred rail switch (2026-08-05): unambiguous elsewhere (the CLI rail), so it launches there instead of being refused.
@@ -1372,7 +1369,7 @@ describe('LazyManager launched missions — modelId (exact catalog id)', () => {
 
   it('create_loop with an exact modelId registers the loop carrying that EXACT id', async () => {
     simulateTauri();
-    setManagedAvailability(true);
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
 
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
     const countBefore = result.current.missions.length;
@@ -1380,18 +1377,18 @@ describe('LazyManager launched missions — modelId (exact catalog id)', () => {
     vi.mocked(runManagerTurn).mockResolvedValueOnce({
       responseText: 'Loop created.',
       actions: [
-        { type: 'create_loop', agentName: 'lint-checker', task: 'Run lint', cadence: '15m', modelId: 'deepseek/deepseek-v4-flash' },
+        { type: 'create_loop', agentName: 'lint-checker', task: 'Run lint', cadence: '15m', modelId: 'claude-opus-5' },
       ],
       rawResponse: '',
     });
 
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'loop lint every 15m avec deepseek flash', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'loop lint every 15m avec opus', 'claude-sonnet-5');
     });
 
     expect(result.current.missions.length).toBe(countBefore + 1);
     const loopMission = result.current.missions[result.current.missions.length - 1];
-    expect(loopMission.model).toBe('deepseek/deepseek-v4-flash');
+    expect(loopMission.model).toBe('claude-opus-5');
   });
 });
 
@@ -1418,9 +1415,9 @@ describe('LazyManager launched missions — plan-first modelId + engine chain (M
     clearProviderModeSimulation();
   });
 
-  it('a plan step naming an exact modelId AND a deliberate "cli" engine override creates a mission on that model/rail, even though the AMBIENT mode is managed/Pro', async () => {
+  it('a plan step naming an exact modelId AND a deliberate "cli" engine override creates a mission on that model/rail, even though the AMBIENT mode is local', async () => {
     simulateTauri();
-    setManagedAvailability(true); // ambient mode: managed/Pro
+    saveAccessSettings({ accessMode: 'local' }); // ambient mode: local
 
     const fsStore = new Map<string, string>();
     vi.mocked(invoke).mockImplementation((cmd: string, args?: unknown) => {
@@ -1460,7 +1457,7 @@ describe('LazyManager launched missions — plan-first modelId + engine chain (M
       rawResponse: '',
     });
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'plan it', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'plan it', 'claude-sonnet-5');
     });
 
     const planMsg = result.current.managerMessages.find((m) => m.proposal);
@@ -1476,7 +1473,7 @@ describe('LazyManager launched missions — plan-first modelId + engine chain (M
       rawResponse: '',
     });
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'go', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'go', 'claude-sonnet-5');
     });
 
     expect(result.current.missions.length).toBe(countBefore + 1);
@@ -1564,7 +1561,7 @@ describe('LazyManager launched missions — plan-first cross-project READ access
       rawResponse: '',
     });
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'plan it', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'plan it', 'claude-sonnet-5');
     });
 
     const planMsg = result.current.managerMessages.find((m) => m.proposal);
@@ -1577,7 +1574,7 @@ describe('LazyManager launched missions — plan-first cross-project READ access
       rawResponse: '',
     });
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'go', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'go', 'claude-sonnet-5');
     });
 
     expect(result.current.missions.length).toBe(countBefore + 1);
@@ -1608,7 +1605,7 @@ describe('LazyManager launched missions — plan-first cross-project READ access
       rawResponse: '',
     });
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'plan it', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'plan it', 'claude-sonnet-5');
     });
 
     const planMsg = result.current.managerMessages.find((m) => m.proposal);
@@ -1621,7 +1618,7 @@ describe('LazyManager launched missions — plan-first cross-project READ access
       rawResponse: '',
     });
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'go', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'go', 'claude-sonnet-5');
     });
 
     expect(result.current.missions.length).toBe(countBefore + 1);
@@ -1653,7 +1650,7 @@ describe('LazyManager launched missions — plan-first cross-project READ access
       rawResponse: '',
     });
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'plan it', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'plan it', 'claude-sonnet-5');
     });
 
     const planMsg = result.current.managerMessages.find((m) => m.proposal);
@@ -1666,7 +1663,7 @@ describe('LazyManager launched missions — plan-first cross-project READ access
       rawResponse: '',
     });
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'go', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'go', 'claude-sonnet-5');
     });
 
     expect(result.current.missions.length).toBe(countBefore + 1);
@@ -1704,7 +1701,7 @@ describe('generate_plan — result message is humanized, never leaks the interna
       rawResponse: '',
     });
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'plan it', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'plan it', 'claude-sonnet-5');
     });
 
     const planMsg = result.current.managerMessages.find((m) => m.proposal);
@@ -1785,7 +1782,7 @@ describe('Plan accept — real materialization + real execution (B2/B3 fix)', ()
       rawResponse: '',
     });
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'plan it', 'anthropic/claude-sonnet-5');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'plan it', 'claude-sonnet-5');
     });
     const planMsg = result.current.managerMessages.find((m) => m.proposal);
     return planMsg!.proposal!.planId!;
@@ -1956,44 +1953,41 @@ describe('managerModel store state', () => {
     clearProviderModeSimulation();
   });
 
-  it('defaults to the first free OpenRouter id outside Tauri (mock mode)', () => {
+  it('defaults to the manager default outside Tauri (mock mode)', () => {
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
-    // Browser cannot run the native Claude CLI — default is the free GLM, not
-    // Sonnet / Haiku. See getManagerDefaultModelId('mock') in managerEngine.ts.
+    // See getManagerDefaultModelId('mock') in managerEngine.ts.
     expect(result.current.managerModel).toBe(getManagerDefaultModelId('mock'));
-    expect(result.current.managerModel).toBe(FREE_OPENROUTER_MODEL_ID);
-    expect(result.current.managerModel).not.toBe(DEFAULT_MODEL.id);
   });
 
-  it('ignores a persisted native Claude id outside Tauri', () => {
-    localStorage.setItem('lazy.manager.model', 'claude-sonnet-5');
+  it('ignores a persisted id that is not selectable outside Tauri', () => {
+    localStorage.setItem('lazy.manager.model', 'not-a-real-model-xyz');
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
-    expect(result.current.managerModel).toBe(FREE_OPENROUTER_MODEL_ID);
+    expect(result.current.managerModel).toBe(getManagerDefaultModelId('mock'));
   });
 
-  it('defaults to the OpenRouter id when initialised in managed mode', () => {
+  it('defaults to the native default when initialised in cli mode', () => {
     simulateTauri();
-    setManagedAvailability(true);
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
-    expect(result.current.managerModel).toBe(getDefaultModelIdForMode('managed'));
-    expect(result.current.managerModel).toContain('/');
+    expect(result.current.managerModel).toBe(getManagerDefaultModelId('claude-code'));
+    expect(result.current.managerModel).not.toContain('/');
   });
 
   it('setManagerModel updates managerModel and the new value is retained', () => {
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
 
     act(() => {
-      result.current.setManagerModel('anthropic/claude-opus-5');
+      result.current.setManagerModel('claude-opus-5');
     });
 
-    expect(result.current.managerModel).toBe('anthropic/claude-opus-5');
+    expect(result.current.managerModel).toBe('claude-opus-5');
 
     // Unrelated store activity (e.g. selecting a mission) must not reset it —
     // managerModel is plain state, not derived/recomputed on other updates.
     act(() => {
       result.current.setSelectedMissionId(result.current.missions[0]?.id ?? null);
     });
-    expect(result.current.managerModel).toBe('anthropic/claude-opus-5');
+    expect(result.current.managerModel).toBe('claude-opus-5');
   });
 });
 
@@ -2047,10 +2041,10 @@ describe('agentsStore — pauseMission/resumeMission/interveneMission', () => {
 
   it('pauseMission/resumeMission flip the pauseSignal the running managed loop actually polls', async () => {
     simulateTauri();
-    setManagedAvailability(true); // auto-detect -> 'managed' (isManagedAgentAvailable() -> true)
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' }); // auto-detect -> 'managed' (isManagedAgentAvailable() -> true)
 
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
-    const missionId = await addRunningMission(result, 'Managed mission', 'anthropic/claude-sonnet-5');
+    const missionId = await addRunningMission(result, 'Managed mission', 'claude-sonnet-5');
 
     const { pauseSignal } = lastRunMissionOpts();
     expect(pauseSignal()).toBe(false);
@@ -2096,10 +2090,10 @@ describe('agentsStore — pauseMission/resumeMission/interveneMission', () => {
 
   it('interveneMission enqueues text for a managed mission into the exact drainIntervenes queue the loop polls', async () => {
     simulateTauri();
-    setManagedAvailability(true);
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
 
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
-    const missionId = await addRunningMission(result, 'Managed mission', 'anthropic/claude-sonnet-5');
+    const missionId = await addRunningMission(result, 'Managed mission', 'claude-sonnet-5');
 
     const { drainIntervenes } = lastRunMissionOpts();
 
@@ -2144,7 +2138,7 @@ describe('agentsStore — pauseMission/resumeMission/interveneMission', () => {
         title: 'Still queued',
         repo: '.',
         worktree: '',
-        modelLabel: 'anthropic/claude-sonnet-5',
+        modelLabel: 'claude-sonnet-5',
         mode: 'agent',
         orchestrator: false,
       });
@@ -3341,12 +3335,12 @@ describe('sendManagerMessage — credits grounding (no SubscriptionProvider moun
     vi.mocked(runManagerTurn).mockReset();
   });
 
-  it('embeds an honest free-plan creditsSummary in the context passed to runManagerTurn', async () => {
+  it('embeds an honest no-billing creditsSummary in the context passed to runManagerTurn', async () => {
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
 
     vi.mocked(runManagerTurn).mockResolvedValueOnce({
-      responseText: 'You are on the free plan.',
-      actions: [{ type: 'info', message: 'You are on the free plan.' }],
+      responseText: 'No billing here.',
+      actions: [{ type: 'info', message: 'No billing here.' }],
       rawResponse: '',
     });
 
@@ -3355,7 +3349,7 @@ describe('sendManagerMessage — credits grounding (no SubscriptionProvider moun
     });
 
     const callArgs = vi.mocked(runManagerTurn).mock.calls[0][0];
-    expect(callArgs.context.creditsSummary).toMatch(/free plan/i);
+    expect(callArgs.context.creditsSummary).toMatch(/No billing/i);
   });
 });
 

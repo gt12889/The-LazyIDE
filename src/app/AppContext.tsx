@@ -8,7 +8,6 @@ import type { ProjectEntryOut } from '../lib/platform/tauri';
 import { initProviderMode } from '../lib/models';
 import { on } from '../lib/bus';
 import type { NavigateSpacePayload } from '../lib/bus';
-import { useTeamsSync } from '../lib/teams/useTeamsSync';
 import { stripVerbatimPrefix } from '../lib/paths';
 import { invalidateProjectRootCache } from '../lib/agents/projectRootCache';
 
@@ -310,10 +309,7 @@ export function AppProvider({ children }: AppProviderProps) {
     };
   }, [setActiveSpace]);
 
-  // Teams auth reconciliation: sync org-context + store JWT on login / token refresh.
-  // No-op in solo mode (scope !== 'team'), on the web build, and when not connected.
-  // projectRoot drives scope resolution — re-registers when the project switches.
-  useTeamsSync({ projectRoot });
+  // Forge is single-user: no teams auth reconciliation.
 
   // On mount: init provider mode (claude CLI availability check) + project root
   useEffect(() => {

@@ -22,7 +22,7 @@ import {
   setApprovalMode as persistApprovalMode,
 } from '../../lib/agents/approvalMode';
 import { captureAgentMission, captureConversationSummary } from '../../lib/brain/capture';
-import { runMission, mergeWorktree, discardWorktree, isManagedAgentAvailable, isLiveAgentAvailable, isNativeModelReady, isManagedModelReady, classifyMissionModel, killAgentRun, worktreeDiff } from '../../lib/agents/runtime';
+import { runMission, mergeWorktree, discardWorktree, isLocalLoopAvailable, isLiveAgentAvailable, isNativeModelReady, classifyMissionModel, killAgentRun, worktreeDiff } from '../../lib/agents/runtime';
 import type { MissionUpdate, PermissionMode } from '../../lib/agents/runtime';
 import { runLearningLoop } from '../../lib/agents/learningLoop';
 import { runManagerActionHandler } from '../../lib/agents/managerActionDispatch';
@@ -37,8 +37,6 @@ import { resolveLazyBotRef, summarizeLazyBot } from '../../lib/bots/botManagerCo
 import { resolveLazyBotRunModel } from '../../lib/bots/botRunModel';
 import { markCaptchaSolved } from '../../lib/bots/botCaptchaResume';
 import { getOutstandingIntervention } from '../../lib/bots/botRequestIntervention';
-import { sweepOrphans } from '../../lib/solari/solariSessions';
-import { isBotVmWindowOpen, toggleBotVmWindow, openBotVmWindow } from '../../lib/solari/botVmWindows';
 import { startTeachSession, endTeachSession, isTeachModeActive } from '../../lib/bots/teachMode';
 import { compileSkillOverlay } from '../../lib/bots/skillCompiler';
 import { applyTeachSkillToPersona } from '../../lib/bots/applyTeachSkill';
@@ -49,8 +47,6 @@ import {
 import { resolveAutomatedTurnModel } from '../../lib/agents/automatedTurnModel';
 import { getActiveModel } from '../../lib/models';
 import {
-  managerTurnNeedsSession,
-  hasManagedSession,
   formatManagerUserError,
   MANAGER_ERROR_MAX_CHARS,
 } from '../../lib/agents/managerSessionGate';
@@ -170,7 +166,6 @@ import {
   formatMissionNotFound,
   resolveManagerModelId,
   getManagerDefaultModelId,
-  formatCreditsSummary,
   formatEntitlementsSummary,
   formatBrainStatus,
   dedupeRepeatedSegments,
@@ -197,12 +192,10 @@ import { liveManagerStoreView } from '../../lib/agents/managerLiveState';
 import { loadPersistedGoals, persistConversationGoal } from '../../lib/agents/managerGoalPersist';
 import { getCharterDecision, recordCharterDecision } from '../../lib/agents/managerCharterStore';
 import { noteManagerDecision } from '../../lib/agents/brainNotation';
-// Pure billing/credits + the shared subscription context (same source the
-// credits KPI tile / AccountChip read — no second Supabase fetch) so the
-// manager's "combien ai-je de crédits ?" answers use real account state.
-import { useSubscriptionContext, isOutOfCredits, formatRenewalDate, usdToCredits } from '../../lib/billing';
-import { getProviderMode, getDefaultModelIdForMode, findOpenRouterModel } from '../../lib/models/index';
-import { isOpenRouterFreeModel, migrateRetiredOpenRouterId } from '../../lib/models/openrouterCatalog';
+// Pure credits math (1 credit == 1 USD cent) so the manager's cost answers
+// use real session figures.
+import { usdToCredits } from '../../lib/billing';
+import { getProviderMode, getDefaultModelIdForMode } from '../../lib/models/index';
 import { loadAccessSettings, saveAccessSettings } from '../../lib/models/accessSettings';
 import { isDevinModel } from '../../lib/models/devinCatalog';
 import { getEngineReadiness, engineReasonKey } from '../../lib/models/entitlement';
@@ -4503,12 +4496,12 @@ const MANAGER_MODEL_STORAGE_KEY = 'lazy.manager.model';
 
 /**
  * Validates the persisted id against whichever catalog it actually belongs
- * to (findModelById for native Anthropic ids, findOpenRouterModel for the
- * managed/Pro OpenRouter namespace — see getDefaultModelIdForMode's own doc
- * comment for why the two id namespaces must never be conflated). A stored
- * id from a since-retired model (or a leftover id from a different provider
- * mode) falls back to today's real default instead of silently sending an
- * unrecognized model id over the wire.
+ * to (findModelById for native ids, `local/…` for the local engine — see
+ * getDefaultModelIdForMode's own doc comment for why the two id namespaces
+ * must never be conflated). A stored id from a since-retired model (or a
+ * leftover id from a different provider mode) falls back to today's real
+ * default instead of silently sending an unrecognized model id over the
+ * wire.
  *
  * A persisted choice ALWAYS wins over the default below, explicit or not —
  * this is what keeps a manually-picked model sticky across reloads (see
@@ -4519,22 +4512,20 @@ function loadManagerModel(): string {
   try {
     const stored = localStorage.getItem(MANAGER_MODEL_STORAGE_KEY);
     if (stored) {
-      const id = migrateRetiredOpenRouterId(stored);
-      if (isSelectablePickerModel(id)) return id;
-      // Boot-window persistence (real repro 2026-09-08): a stored id on a
-      // rail whose probe hasn't settled yet (CLI detection still null ->
-      // group absent from the picker) must survive — dropping it here
-      // silently rewrote the manager onto a DIFFERENT rail (persisted
-      // swe-2-medium -> BYOK DeepSeek -> next turn 402'd). The header's
-      // detection-pending guard owns the deferred reset once probes land;
-      // a settled-unusable or garbage id still falls through to default.
-      if (isModelRailPending(id)) return id;
+      if (isSelectablePickerModel(stored)) return stored;
+      // Boot-window persistence: a stored id on a rail whose probe hasn't
+      // settled yet (CLI detection still null -> group absent from the
+      // picker) must survive — dropping it here silently rewrote the
+      // manager onto a DIFFERENT rail. The header's detection-pending guard
+      // owns the deferred reset once probes land; a settled-unusable or
+      // garbage id still falls through to default.
+      if (isModelRailPending(stored)) return stored;
     }
   } catch {
     // localStorage unavailable — fall through to the real default below
   }
-  // Manager-specific default (Sonnet for native desktop modes; free GLM on
-  // the browser mock rail). NOT the shared getDefaultModelIdForMode, whose
+  // Manager-specific default (Sonnet for native desktop modes; local Hermes
+  // on the local rail). NOT the shared getDefaultModelIdForMode, whose
   // native-id branch (Haiku) is right for cost-sensitive worker missions.
   return getManagerDefaultModelId(getProviderMode());
 }
@@ -4838,15 +4829,9 @@ export function AgentsStoreProvider({ children }: Props) {
   const tRef = useRef(t);
   tRef.current = t;
   const { toast } = useToast();
-  // Real credits/subscription state for the LazyManager's "combien ai-je de
-  // crédits ?" grounding (see sendManagerMessage below) — reads the SAME
-  // shared context the credits KPI tile / AccountChip already display, no
-  // extra fetch. Falls back to the inert DEFAULT_STATE (isPro: false,
-  // subscription: null) when no SubscriptionProvider ancestor is mounted
-  // (e.g. most existing tests render AgentsStoreProvider standalone) —
-  // formatCreditsSummary then honestly reports the free-plan state instead
-  // of throwing or fabricating a number.
-  const { subscription, isPro } = useSubscriptionContext();
+  // Forge has no billing: the manager's cost grounding is a static note.
+  // (The shared SubscriptionProvider stub still wraps the tree so any
+  // consumer keeps compiling.)
 
   // P58 fleet hygiene (2026-07-22 memory-pressure incident fix) — the
   // test-scratch OPEN PROJECT closure rule needs the live openProjects
@@ -7082,7 +7067,7 @@ export function AgentsStoreProvider({ children }: Props) {
   const pauseMission = useCallback((id: string) => {
     const mission = state.missions.find((m) => m.id === id);
     if (!mission || mission.status !== 'running' || mission.paused) return;
-    const managed = isManagedAgentAvailable();
+    const managed = isLocalLoopAvailable();
     const native = isLiveAgentAvailable();
     if (!managed && !native) return;
 
@@ -7145,7 +7130,7 @@ export function AgentsStoreProvider({ children }: Props) {
     const mission = state.missions.find((m) => m.id === id);
     if (!mission || mission.status !== 'running') return;
 
-    const managed = isManagedAgentAvailable();
+    const managed = isLocalLoopAvailable();
     if (managed) {
       const queue = interveneQueues.current.get(id);
       if (queue) queue.items = [...queue.items, trimmed];
@@ -7192,7 +7177,7 @@ export function AgentsStoreProvider({ children }: Props) {
     const mission = state.missions.find((m) => m.id === id);
     if (!mission || mission.status !== 'running') return;
 
-    const managed = isManagedAgentAvailable();
+    const managed = isLocalLoopAvailable();
     const mode = managed ? 'managed' : 'native';
 
     if (managed) {
@@ -7243,7 +7228,7 @@ export function AgentsStoreProvider({ children }: Props) {
 
     const root = await resolveProjectRoot().catch(() => '.');
     const branch = mission.worktree ?? '';
-    const managed = isManagedAgentAvailable();
+    const managed = isLocalLoopAvailable();
 
     // Capture the human diff from the worktree
     let diffSummary = '';
@@ -8349,25 +8334,21 @@ export function AgentsStoreProvider({ children }: Props) {
       // surfaced at all.
       //
       // Reuses the EXACT mode-independent signals planAndAct's own dispatch
-      // decision uses (classifyMissionModel + isManagedModelReady /
-      // isNativeModelReady, runtime.ts) — never a new detection invented
-      // here — so this verdict can never disagree with the real dispatch
-      // further down. Gated on isTauri() to mirror planAndAct's own
-      // Tauri-only branch (chosenKind stays undefined off Tauri, so the
-      // mock/scripted engine there is never second-guessed by this check) —
-      // the web demo, and every test that doesn't simulate Tauri, see zero
-      // behavior change.
+      // decision uses (classifyMissionModel + isNativeModelReady,
+      // runtime.ts) — never a new detection invented here — so this verdict
+      // can never disagree with the real dispatch further down. Gated on
+      // isTauri() to mirror planAndAct's own Tauri-only branch (chosenKind
+      // stays undefined off Tauri, so the mock/scripted engine there is
+      // never second-guessed by this check) — the web demo, and every test
+      // that doesn't simulate Tauri, see zero behavior change.
       if (isTauri()) {
         const routeKind = classifyMissionModel(newMission.model);
         const engineNotReady =
-          (routeKind === 'managed' && !isManagedModelReady()) ||
-          (routeKind === 'native' && !isNativeModelReady());
+          (routeKind === 'native' && !isNativeModelReady()) ||
+          (routeKind === 'devin' && !isNativeModelReady());
         if (engineNotReady) {
-          // Pro-rail wording is founder-specified verbatim; the native/CLI
-          // wording mirrors it for the same honest, one-step-fixable shape.
-          const reason = routeKind === 'managed'
-            ? `Lancement refusé : le moteur Pro n'a plus de crédits — choisis un autre moteur.`
-            : `Lancement refusé : le CLI Claude/Codex est introuvable — choisis un autre moteur.`;
+          // Honest, one-step-fixable wording.
+          const reason = `Launch refused: the Claude/Codex CLI was not found — pick another engine.`;
           updateMission({
             id: newMission.id,
             patch: { status: 'failed', statusReason: reason },
@@ -8378,7 +8359,7 @@ export function AgentsStoreProvider({ children }: Props) {
             projectId,
             missionId: newMission.id,
             actor: 'system',
-            payload: { reason: routeKind === 'managed' ? 'pro_no_credits' : 'cli_not_found' },
+            payload: { reason: 'cli_not_found' },
           });
           toast(reason, 'error');
           return newMission.id;
@@ -10793,10 +10774,9 @@ stopAll(action.filter);
         for (let i = 0; i < count; i++) {
           const mod = mods[i] ?? {};
           // STACK fix: each submission may independently set "engine":
-          // "cli"|"pro" (see spawn_submissions' doc comment in
-          // managerEngine.ts) — narrowed here since `mod` is an untyped bag,
+          // "cli"|"local" — narrowed here since `mod` is an untyped bag,
           // same treatment as `mod.model`/`mod.task` below.
-          const modEngine = mod.engine === 'cli' || mod.engine === 'pro' ? mod.engine : undefined;
+          const modEngine = mod.engine === 'cli' || mod.engine === 'local' ? mod.engine : undefined;
           // modelId catalog wave: `modifications` is an untyped bag (same as
           // mod.model/mod.engine above) — read `mod.modelId` the same way,
           // narrowed to a string, no type change needed on ManagerAction's
@@ -12356,7 +12336,7 @@ stopAll(action.filter);
               // resolveManagerModelId already gives launch_mission/
               // launch_best_of_n/create_loop's own `modelId` field.
               // Mission P fix: opts?.engine (SgrLaunchOpts.engine, the plan
-              // step's own "cli"/"pro"/"auto" rail choice, threaded here from
+              // step's own "cli"/"local"/"auto" rail choice, threaded here from
               // launchOptsFromNode/StepContract.engine) used to be dropped —
               // this callback always passed `undefined` for engineOverride,
               // so a step's deliberate rail choice was silently discarded the
@@ -12364,9 +12344,10 @@ stopAll(action.filter);
               // modelId thread above; launch_mission's own case already
               // forwards action.engine the same way, see that case's
               // comment). 'auto' narrows to undefined — resolveManagerModelId's
-              // engineOverride only accepts ManagerEngineChoice ('cli'|'pro'),
-              // 'auto' means "no deliberate override", same as absent.
-              const engineOverride = opts?.engine === 'cli' || opts?.engine === 'pro' ? opts.engine : undefined;
+              // engineOverride only accepts ManagerEngineChoice
+              // ('cli'|'local'), 'auto' means "no deliberate override",
+              // same as absent.
+              const engineOverride = opts?.engine === 'cli' || opts?.engine === 'local' ? opts.engine : undefined;
               const modelLabel = resolveManagerModelId(opts?.model ?? 'sonnet', getProviderMode(), engineOverride, opts?.modelId);
               const permissionMode = (opts?.permissionMode ?? 'acceptEdits') as PermissionMode;
               // Cross-project READ access, plan-first leg (closes the gap a
@@ -12925,16 +12906,12 @@ stopAll(action.filter);
           return { failed: true, message: msg };
         }
         // Stop every live run through the same real-abort path stop_lazybot
-        // uses — deleting a bot must never orphan a running mission or its
-        // Solari cloud resources.
+        // uses — deleting a bot must never orphan a running mission.
         const runs = listActiveRunsForBot(bot.id);
         for (const run of runs) {
           stopMission(run.missionId);
           await stopBotRun(run).catch(() => {});
         }
-        // Close the canvas VM window so the derived botVm node disappears
-        // with the bot node (both re-derive from the emitted lazybots:changed).
-        if (isBotVmWindowOpen(bot.id)) toggleBotVmWindow(bot.id);
         await deleteBot(bot.id);
         const msg = `delete_lazybot: deleted LazyBot "${bot.name}" (${bot.id})`
           + (runs.length > 0 ? ` — stopped ${runs.length} active run(s) first.` : '.')
@@ -12963,15 +12940,6 @@ stopAll(action.filter);
         toast(msg, 'success');
         return { message: msg };
       },
-      sweep_solari: async () => {
-        if (action.type !== 'sweep_solari') return;
-        // The boot-time orphan sweep, runnable on demand — releases browser
-        // sessions / sandboxes / Agent Computers still held by dead missions.
-        await sweepOrphans();
-        const msg = 'sweep_solari: orphan sweep complete — cloud sessions, sandboxes and desktops held by dead missions were released (live ones untouched).';
-        toast(msg, 'success');
-        return { message: msg };
-      },
       lazybot_runs: async () => {
         if (action.type !== 'lazybot_runs') return;
         const bot = resolveLazyBotRef(await listBots(), action.botId);
@@ -12984,26 +12952,10 @@ stopAll(action.filter);
         const history = (await listBotRunHistory(bot.id)).slice(0, limit);
         const lines = history.length > 0
           ? history.map((r) => `${r.missionId} [${r.status}] started ${r.startedAt}`
-              + (r.summary ? ` — ${r.summary.slice(0, 200)}` : '')
-              + (r.replayUrl || r.replayPath ? ' (replay saved)' : '')).join('\n')
+              + (r.summary ? ` — ${r.summary.slice(0, 200)}` : '')).join('\n')
           : `(no run history for "${bot.name}")`;
         toast(`LazyBot "${bot.name}": ${history.length} run(s) in history`, 'info');
         return { message: `lazybot_runs "${bot.name}" (${bot.id}), newest first:\n${lines}` };
-      },
-      toggle_bot_vm: async () => {
-        if (action.type !== 'toggle_bot_vm') return;
-        const bot = resolveLazyBotRef(await listBots(), action.botId);
-        if (!bot) {
-          const msg = `toggle_bot_vm: no LazyBot matches "${action.botId}".`;
-          toast(msg, 'error');
-          return { failed: true, message: msg };
-        }
-        const wasOpen = isBotVmWindowOpen(bot.id);
-        const shouldOpen = action.open ?? !wasOpen;
-        if (shouldOpen !== wasOpen) toggleBotVmWindow(bot.id);
-        const msg = `toggle_bot_vm: VM window for "${bot.name}" (${bot.id}) is now ${shouldOpen ? 'open' : 'closed'} on the canvas.`;
-        toast(msg, 'success');
-        return { message: msg };
       },
       teach_lazybot: async () => {
         if (action.type !== 'teach_lazybot') return;
@@ -13019,12 +12971,11 @@ stopAll(action.filter);
             toast(msg, 'info');
             return { message: msg };
           }
-          // The journal is fed by the bot's live-view state stream — the VM
-          // window must be open for the user to demonstrate, so open it.
-          openBotVmWindow(bot.id);
+          // The journal feeds the skill compiler — demonstrate the workflow
+          // in a run, then stop to compile.
           const name = action.skillName?.trim() || `Skill ${new Date().toLocaleTimeString()}`;
           startTeachSession(bot.id, name);
-          const msg = `teach_lazybot: recording started for "${bot.name}" (${bot.id}) — skill "${name}". Its VM window is open on the canvas: demonstrate the workflow in the live view (or a run), then teach_lazybot {mode:"stop"} compiles it into the bot's system prompt.`;
+          const msg = `teach_lazybot: recording started for "${bot.name}" (${bot.id}) — skill "${name}". Demonstrate the workflow (or a run), then teach_lazybot {mode:"stop"} compiles it into the bot's system prompt.`;
           toast(msg, 'success');
           return { message: msg };
         }
@@ -13145,83 +13096,12 @@ stopAll(action.filter);
       timestamp: new Date().toISOString(),
     };
 
-    // W-MGRCREDITS fix (no-credits preflight): a manager turn on a
-    // managed/pro-routed model with an already-known-empty wallet used to
-    // ALWAYS make the network call anyway and sit on the shared timeout —
-    // proven live to read as an indefinite hang (see MANAGER_TURN_TIMEOUT_MS's
-    // doc comment, managerEngine.ts). The missions runtime already refuses
-    // this case instantly via recovery.ts's noCreditsPolicy; the manager chat
-    // had no equivalent. `subscription`/`isPro` here are the SAME shared
-    // useSubscriptionContext() state the header's "Pro ⊙ 0" chip reads (no
-    // extra fetch) — when it agrees credits are exhausted AND the currently
-    // resolved provider mode would actually route this turn through the
-    // managed ai-proxy, short-circuit BEFORE ever setting managerBusy: no
-    // spinner, no wait, an honest card with real recovery actions instead.
-    const mode = getProviderMode();
-    // Unsigned browser + free OpenRouter id: the ai-proxy
-    // requires a user JWT even for free models (measured 2026-08-28 —
-    // ManagedUnavailableError after a doomed streamManagedAgentTurn).
-    // Same shape as the credits preflight: no spinner, honest card, CTA.
-    if (managerTurnNeedsSession(model, mode) && !(await hasManagedSession())) {
-      const blockedMsg: ManagerMessage = {
-        id: createMessageId(),
-        role: 'assistant',
-        content: t('cockpit.manager.sessionRequiredMessage'),
-        timestamp: new Date().toISOString(),
-        sessionBlocked: true,
-      };
-      setState((prev) => appendConversationMessages(prev, conversationId, [userMsg, blockedMsg]));
-      return;
-    }
+    // Forge has no accounts and no metered rails: manager turns run on the
+    // ambient engine (CLI or local) with no session/credits preflight. A
+    // turn whose engine is unreachable fails honestly inside runManagerTurn
+    // instead of here.
 
-    const isManagedRouted = mode === 'managed' || mode === 'pro';
-    // FREE MODEL BYPASS (2026-08-25): a free OpenRouter model is
-    // served by the ai-proxy at zero cost with no plan/credits requirement
-    // (see entitlement.ts's getEngineReadiness free-tier short-circuit).
-    // The credits-exhausted gate below must never block a turn whose
-    // selected model is free — proven live: a user with an active Pro plan
-    // + 0 credits + the free model selected was refused outright despite it
-    // costing nothing. The model is read from the same `model` argument
-    // this turn was called with (the manager's own selection).
-    const isFreeModel = isOpenRouterFreeModel(model);
-    const creditsExhausted =
-      !isFreeModel &&
-      isManagedRouted && isPro && !!subscription &&
-      isOutOfCredits(subscription.credits_remaining_cents, subscription.status);
-
-    // STACK fix: a user can hold both a Claude CLI/BYOK subscription and an
-    // active Lazy Pro plan at once (they stack, never mutually exclusive —
-    // see modelPickerOptions.ts's module doc comment). 0 Pro credits must
-    // never refuse the manager's OWN turn outright when a CLI subscription
-    // is ready to serve it instead — isNativeModelReady() is the SAME
-    // mode-independent readiness signal runtime.ts's own per-mission
-    // dispatch already uses (isManagedModelReady/isNativeModelReady), no new
-    // detection invented here. Only refuse (below) when NEITHER rail can
-    // serve this turn; otherwise route it onto the CLI via runManagerTurn's
-    // engineOverride (see the call site further down).
-    const nativeRescue = creditsExhausted && isNativeModelReady();
-
-    if (creditsExhausted && !nativeRescue) {
-      // W-MODELSEL fix: honest auto-refill messaging — includes the real
-      // renewal date (subscription.period_end, the SAME field already
-      // forwarded to the LLM via creditsSummary below) when available,
-      // falls back to a date-less "next automatic refill" line rather than
-      // ever inventing a date.
-      const renewalDate = formatRenewalDate(subscription?.period_end, locale);
-      const blockedMsg: ManagerMessage = {
-        id: createMessageId(),
-        role: 'assistant',
-        content: renewalDate
-          ? t('cockpit.manager.noCreditsMessageWithDate', { date: renewalDate })
-          : t('cockpit.manager.noCreditsMessage'),
-        timestamp: new Date().toISOString(),
-        creditsBlocked: true,
-      };
-      setState((prev) => appendConversationMessages(prev, conversationId, [userMsg, blockedMsg]));
-      return;
-    }
-
-    const streamDraftId = createMessageId();
+      const streamDraftId = createMessageId();
     setState((prev) => appendConversationMessages(
       withConversation(prev, conversationId, { busy: true, phase: 'turn', elapsedMs: 0 }),
       conversationId,
@@ -13471,25 +13351,16 @@ stopAll(action.filter);
       // reflects the committed state that includes the new mission.
       const liveState = stateRef.current;
       const baseCtx = await gatherManagerContext(agents, liveState.missions, getEffectiveAutonomy({ mode: liveState.autonomyLevel }));
-      // Real account/credits state (same shared useSubscriptionContext()
-      // read as the credits KPI tile / AccountChip — no second Supabase
-      // fetch) so "combien ai-je de crédits ?" is grounded on every turn,
-      // not just a follow-up-gated one.
-      const creditsSummary = formatCreditsSummary({
-        isPro,
-        status: subscription?.status,
-        creditsRemainingCents: subscription?.credits_remaining_cents,
-        creditsIncludedCents: subscription?.credits_included_cents,
-        periodEnd: subscription?.period_end,
-      });
-      // STACK fix: live status of the two independent engine rails — same
+      // Forge has no billing: cost grounding is a static honest note.
+      const creditsSummary = 'No billing — every engine is local (Ollama) or your own CLI subscription.';
+      // STACK fix: live status of the independent engine rails — same
       // detectModelEntitlements() primitive every model picker already uses,
       // no new detection. See ManagerContext.entitlementsSummary's doc
       // comment (managerEngine.ts) for why this is separate from creditsSummary.
       const modelEntitlements = detectModelEntitlements();
       const entitlementsSummary = formatEntitlementsSummary(
         modelEntitlements,
-        subscription?.credits_remaining_cents,
+        undefined,
       );
       // PERF: fleetContext and autonomyContext are already computed inside
       // gatherManagerContext (baseCtx above) with the exact same arguments —
@@ -13546,11 +13417,9 @@ stopAll(action.filter);
         startupContext,
         creditsSummary,
         entitlementsSummary,
-        // modelId catalog wave: gates the compact full-catalog block
-        // (buildCompactModelCatalog, managerEngine.ts) — the CLI-only rail
-        // can never route to any of those ids, see ManagerContext.
-        // proRailActive's own doc comment.
-        proRailActive: modelEntitlements.pro === 'active',
+        // Legacy field — the engine catalog block is now unconditional (see
+        // ManagerContext.proRailActive's doc comment, managerEngine.ts).
+        proRailActive: false,
         brainStatus: formatBrainStatus(brainInfo, brainSidecarReachable),
         canvasDigest,
         // Real saved LazyBots (ids + runtime state) every turn — see
@@ -13628,11 +13497,9 @@ stopAll(action.filter);
           // see ManagerTurnOptions.onChunk's doc comment (managerEngine.ts).
           onChunk: mainCall.reportActivity,
           onPartial: paintStreamPreview,
-          // STACK fix: rescue this turn onto the CLI rail when the preflight
-          // above found the ambient mode empty-walleted but a native CLI
-          // subscription ready (see nativeRescue above) — never refuse the
-          // manager outright when a working rail exists.
-          engineOverride: nativeRescue ? 'cli' : undefined,
+          // No engine override: the ambient mode (CLI or local) serves the
+          // turn. There is no metered rail to rescue from.
+          engineOverride: undefined,
         });
       } finally {
         mainCallElapsedMs = Date.now() - mainCallStartedAt;
@@ -13759,18 +13626,12 @@ stopAll(action.filter);
       // R4b fix (deliverable #4): real measured delta since costBeforeTurn —
       // see ManagerMessage.approxCreditsUsed's doc comment. Never shown when
       // it rounds to 0 (nothing measurable — never fabricate a placeholder).
-      // Credit-metering gate (2026-09-08): the "credits" label only means
-      // something on the managed rail — a native CLI turn (claude/codex/devin
-      // subscription), a BYOK key, or a managed :free model consumes ZERO
-      // Lazy credits, so attaching the token-derived estimate there renders
-      // a fake "~3 credits" under every CLI/BYOK/Devin reply.
+      // Forge has no metered rail: every turn's estimate is informational
+      // only (local runs cost $0; CLI runs bill the user's own
+      // subscription, never this app).
       const costAfterTurn = getCostState();
       const deltaCostUsd = Math.max(0, costAfterTurn.totalCostUsd - costBeforeTurn.totalCostUsd);
-      const creditsMetered =
-        classifyMissionModel(model) === 'managed' && !isOpenRouterFreeModel(model);
-      const approxCreditsUsed = creditsMetered
-        ? Math.round(deltaCostUsd * 100) || undefined
-        : undefined;
+      const approxCreditsUsed = Math.round(deltaCostUsd * 100) || undefined;
 
       // ── Proposal gating (plan-expand UX) ──
       // When the manager's actions include a `generate_plan`, the message
@@ -14692,7 +14553,7 @@ stopAll(action.filter);
   // callback no longer needs to be rebuilt on each missions/conversations
   // mutation — which also shrinks the window in which sendManagerMessageRef
   // can lag behind.
-  }, [executeManagerAction, acquireManagerTurnSlot, releaseManagerTurnSlot, addMission, t, locale, isPro, subscription]);
+  }, [executeManagerAction, acquireManagerTurnSlot, releaseManagerTurnSlot, addMission, t, locale]);
 
   /** Stop button (LazyManagerRail's send/stop toggle, or Escape while
    *  busy) for ONE conversation — see managerAbortRef/managerStoppedRef's
@@ -14923,19 +14784,13 @@ stopAll(action.filter);
   ), [managerPersistedSessions]);
 
   const setManagerModel = useCallback((model: string) => {
-    // REAL-USER FIX (2026-08-08, QA dogfood): the LazyManager picker used to
-    // persist ONLY the model id — never the access mode. A user picking
-    // "Claude Sonnet 5" from the "Abonnement Claude" (claude-sub) group got
-    // the native id stored, but getProviderMode() still auto-resolved to
-    // 'managed' (their active Pro plan wins when accessMode is unset), so
-    // the manager turn was still routed to the ai-proxy with a NATIVE id →
-    // "Modèle non supporté" (400 invalid_model) from the deployed proxy.
-    // Mirror Composer.handleModelSelect exactly: an OpenRouter id (contains
-    // '/') switches accessMode to 'pro'; a native Anthropic id switches it
-    // to 'cli' so the turn routes through the Claude CLI the user picked.
+    // Mirror Composer.handleModelSelect exactly: a `local/…` id switches
+    // accessMode to 'local'; a Devin-catalog id pins cliTool so the next
+    // turn actually reaches `devin acp`; a native id switches to 'cli' so
+    // the turn routes through the CLI the user picked.
     const current = loadAccessSettings();
-    if (model.includes('/')) {
-      saveAccessSettings({ ...current, accessMode: 'pro', model });
+    if (model.startsWith('local/')) {
+      saveAccessSettings({ ...current, accessMode: 'local', model });
     } else if (isDevinModel(model)) {
       // Devin-catalog id — pin cliTool so the next turn actually reaches
       // `devin acp` (a devin id sent to the claude/codex binary fails).
@@ -15989,11 +15844,8 @@ stopAll(action.filter);
     if (!step) return;
     // modelId → display label via the same picker the header uses, so the
     // persisted `model` stays a human label, never an id (same convention as
-    // generate_plan's own stamping). Covers the OpenRouter catalog (Claude
-    // Pro ids) AND the BYOK group (deepseek-chat, deepseek-reasoner, ...).
+    // generate_plan's own stamping).
     const label = (() => {
-      const orModel = findOpenRouterModel(modelId);
-      if (orModel) return orModel.label;
       for (const group of buildModelPickerOptions(detectModelEntitlements()).groups) {
         const m = group.models.find((x) => x.id === modelId);
         if (m) return m.label;

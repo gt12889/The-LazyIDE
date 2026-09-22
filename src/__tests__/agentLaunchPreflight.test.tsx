@@ -82,10 +82,10 @@ function wrapper({ children }: { children: React.ReactNode }) {
 }
 
 const READY: EngineReadiness = { mode: 'cli', ready: true };
-const NOT_READY_PRO_INACTIVE: EngineReadiness = {
-  mode: 'pro',
+const NOT_READY_CLI: EngineReadiness = {
+  mode: 'cli',
   ready: false,
-  reason: 'pro-inactive',
+  reason: 'cli-not-found',
 };
 
 beforeEach(() => {
@@ -100,7 +100,7 @@ beforeEach(() => {
 
 describe('agent:launch bus subscriber — engine preflight (FIX B)', () => {
   it('not ready: creates no mission and fires exactly one localized toast', async () => {
-    mockGetEngineReadiness.mockReturnValue(NOT_READY_PRO_INACTIVE);
+    mockGetEngineReadiness.mockReturnValue(NOT_READY_CLI);
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
     const missionsBefore = result.current.missions.length;
 
@@ -118,7 +118,7 @@ describe('agent:launch bus subscriber — engine preflight (FIX B)', () => {
 
     expect(result.current.missions.length).toBe(missionsBefore);
     expect(mockToast).toHaveBeenCalledTimes(1);
-    expect(mockToast).toHaveBeenCalledWith(en['engine.reason.pro-inactive'], 'error');
+    expect(mockToast).toHaveBeenCalledWith(en['engine.reason.cli-not-found'], 'error');
     expect(navSpy).not.toHaveBeenCalled();
 
     unsubNav();

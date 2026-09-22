@@ -2,8 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useRef, useState, useEffect } from 'react';
 import type { ChatMessage, ChatMode, ModelInfo, StreamChatRequest, StreamEvent, StreamPart } from '../../lib/models';
-import { DEFAULT_MODEL, getProvider, describeProviderReadiness, findModelById, findOpenRouterModel } from '../../lib/models';
-import { migrateRetiredOpenRouterId } from '../../lib/models/openrouterCatalog';
+import { DEFAULT_MODEL, getProvider, describeProviderReadiness, findModelById } from '../../lib/models';
 import { streamTimeout, StreamTimeoutError } from '../../lib/models/streamTimeout';
 import { DEFAULT_CEILING_MS as CLAUDE_CODE_ACTIVITY_CEILING_MS } from '../../lib/models/activityWatchdog';
 import { withTimeout, BRAIN_RECALL_TIMEOUT_MS, BRAIN_RECALL_FALLBACK_TIMEOUT_MS } from '../../lib/models/brainSearchLoop';
@@ -117,21 +116,18 @@ const SELECTED_MODEL_KEY = 'lazy.assistant.model';
 /** Restore the last model the user picked for this composer, validated
  *  against the live catalogs before trusting it — a stale id (removed
  *  model, corrupted storage) must fall back to DEFAULT_MODEL rather than
- *  hand the provider an id it can't resolve. Checks BOTH namespaces (see
- *  registry.ts's module comment): native Anthropic ids (claude-code/BYOK
- *  path) and OpenRouter ids (managed/Pro path) — the composer's ModelPicker
- *  can set either (see Composer.tsx's handleModelSelect), so restricting
- *  validation to one namespace would silently drop a Pro user's persisted
- *  choice on every reload. */
+ *  hand the provider an id it can't resolve. Checks native registry ids
+ *  AND `local/…` ids (the composer's ModelPicker can set either — see
+ *  Composer.tsx's handleModelSelect). */
 function loadSelectedModel(): ModelInfo {
   try {
     const raw = localStorage.getItem(SELECTED_MODEL_KEY);
     if (!raw) return DEFAULT_MODEL;
-    const id = migrateRetiredOpenRouterId(raw);
-    const native = findModelById(id);
+    const native = findModelById(raw);
     if (native) return native;
-    const openRouter = findOpenRouterModel(id);
-    if (openRouter) return { id: openRouter.id, label: openRouter.label, provider: openRouter.provider };
+    if (raw.startsWith('local/')) {
+      return { id: raw, label: raw.slice('local/'.length), provider: 'local' };
+    }
     return DEFAULT_MODEL;
   } catch {
     return DEFAULT_MODEL;

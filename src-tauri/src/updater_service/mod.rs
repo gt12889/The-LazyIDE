@@ -50,8 +50,8 @@ const STATE_TMP_EXTENSION: &str = "json.tmp";
 /// Windows NSIS installer naming convention this app's own release pipeline
 /// already produces (`productName` = "Lazy" in `tauri.conf.json`) — matches
 /// the exact example in the spec's `state.json` schema
-/// (`"Lazy_0.1.12_x64-setup.exe"`).
-const INSTALLER_FILE_PREFIX: &str = "Lazy";
+/// (`"Forge_0.1.12_x64-setup.exe"`) .
+const INSTALLER_FILE_PREFIX: &str = "Forge";
 const INSTALLER_FILE_SUFFIX: &str = "_x64-setup.exe";
 
 /// `attempts >= this` at boot means the staged update has already failed to

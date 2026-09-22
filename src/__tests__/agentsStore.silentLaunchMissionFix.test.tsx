@@ -50,8 +50,8 @@ import { AppProvider } from '../app/AppContext';
 import { I18nProvider } from '../i18n';
 import { ToastProvider } from '../components/ui/Toast';
 import { runManagerTurn } from '../lib/agents/managerEngine';
-import { runMission, isManagedModelReady, isNativeModelReady } from '../lib/agents/runtime';
-import { setManagedAvailability } from '../lib/models/index';
+import { runMission, isNativeModelReady } from '../lib/agents/runtime';
+import { saveAccessSettings } from '../lib/models/index';
 import { _resetCanvasStoreForTests } from '../components/agents/canvas/canvasStore';
 
 const mockInvoke = vi.mocked(invoke);
@@ -68,17 +68,16 @@ vi.mock('../lib/agents/managerEngine', async (importOriginal) => {
   };
 });
 
-// isManagedModelReady/isNativeModelReady replaced with controllable spies
-// (default: both ready). classifyMissionModel and everything else in
-// runtime.ts stays REAL, so route-kind classification (managed vs native —
-// whether the resolved model id contains '/') is the actual production
-// logic, never re-implemented here.
+// isNativeModelReady replaced with a controllable spy
+// (default: ready). classifyMissionModel and everything else in
+// runtime.ts stays REAL, so route-kind classification (native vs local —
+// whether the resolved model id starts with 'local/') is the actual
+// production logic, never re-implemented here.
 vi.mock('../lib/agents/runtime', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/agents/runtime')>();
   return {
     ...actual,
     runMission: vi.fn().mockResolvedValue(undefined),
-    isManagedModelReady: vi.fn(() => true),
     isNativeModelReady: vi.fn(() => true),
   };
 });
@@ -89,7 +88,6 @@ function simulateTauri(): void {
 
 function clearProviderModeSimulation(): void {
   delete (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'];
-  setManagedAvailability(false);
   localStorage.clear();
 }
 
@@ -118,7 +116,6 @@ beforeEach(() => {
   _resetCanvasStoreForTests();
   vi.mocked(runManagerTurn).mockReset();
   vi.mocked(runMission).mockClear();
-  vi.mocked(isManagedModelReady).mockReturnValue(true);
   vi.mocked(isNativeModelReady).mockReturnValue(true);
   mockInvoke.mockReset();
   mockInvoke.mockResolvedValue(undefined);
@@ -129,15 +126,15 @@ afterEach(() => {
 });
 
 describe('launch_mission via approval — engine-readiness preflight (row-first, never silent)', () => {
-  it('Pro rail with 0 credits: mission row is created FAILED with the exact founder-specified reason — never silence', async () => {
+  it('native rail with no CLI detected: mission row is created FAILED with a precise reason — never silence', async () => {
     simulateTauri();
-    vi.mocked(isManagedModelReady).mockReturnValue(false);
+    vi.mocked(isNativeModelReady).mockReturnValue(false);
 
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
     const countBefore = result.current.missions.length;
 
     await dispatch(result.current.sendManagerMessage, result.current.activeConversationId, [
-      { type: 'launch_mission', agentName: 'coder', task: 'Fix the bug', engine: 'pro' },
+      { type: 'launch_mission', agentName: 'coder', task: 'Fix the bug', model: 'sonnet', engine: 'cli' },
     ]);
     expect(result.current.pendingApprovals).toHaveLength(1);
     const pendingId = result.current.pendingApprovals[0]!.id;
@@ -157,36 +154,10 @@ describe('launch_mission via approval — engine-readiness preflight (row-first,
     const mission = result.current.missions[result.current.missions.length - 1]!;
     expect(mission.status).toBe('failed');
     expect(mission.statusReason).toBe(
-      "Lancement refusé : le moteur Pro n'a plus de crédits — choisis un autre moteur.",
+      'Launch refused: the Claude/Codex CLI was not found — pick another engine.',
     );
     // Never reached dispatch — proves this is the EARLY row-first preflight,
     // not the pre-existing deep planAndAct mismatch path.
-    expect(vi.mocked(runMission)).not.toHaveBeenCalled();
-  });
-
-  it('native rail with no CLI detected: mission row is created FAILED with a precise reason — never silence', async () => {
-    simulateTauri();
-    vi.mocked(isNativeModelReady).mockReturnValue(false);
-
-    const { result } = renderHook(() => useAgentsStore(), { wrapper });
-    const countBefore = result.current.missions.length;
-
-    await dispatch(result.current.sendManagerMessage, result.current.activeConversationId, [
-      { type: 'launch_mission', agentName: 'coder', task: 'Fix the bug', model: 'sonnet', engine: 'cli' },
-    ]);
-    expect(result.current.pendingApprovals).toHaveLength(1);
-    const pendingId = result.current.pendingApprovals[0]!.id;
-
-    await act(async () => {
-      await result.current.approvePendingAction(result.current.activeConversationId, pendingId);
-    });
-
-    expect(result.current.missions.length).toBe(countBefore + 1);
-    const mission = result.current.missions[result.current.missions.length - 1]!;
-    expect(mission.status).toBe('failed');
-    expect(mission.statusReason).toBe(
-      'Lancement refusé : le CLI Claude/Codex est introuvable — choisis un autre moteur.',
-    );
     expect(vi.mocked(runMission)).not.toHaveBeenCalled();
   });
 
@@ -220,7 +191,7 @@ describe('launch_mission via approval — engine-readiness preflight (row-first,
 describe('launch_mission via approval — executor throw mid-launch (never silent)', () => {
   it('an unknown modelId throws BEFORE addMission — approval stays pending with the real reason, no mission created', async () => {
     simulateTauri();
-    setManagedAvailability(true);
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
 
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
     const countBefore = result.current.missions.length;

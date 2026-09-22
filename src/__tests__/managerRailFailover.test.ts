@@ -2,14 +2,15 @@
  * Tests for managerRailFailover: recoverable-error classification, fallback
  * rail ordering/availability gates, and the bounded runWithRailFailover loop
  * that keeps a manager turn alive when its resolved rail dies.
+ *
+ * Rails (Forge: local-first, no hosted backend): claude-code → codex →
+ * devin → local. `mock` is never a failover target.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mockIsManagedActive = vi.fn<() => boolean>(() => false);
 const mockCliAvailable = vi.fn<(tool: string) => boolean | null>(() => null);
 const mockDevinBlocked = vi.fn<() => string | null>(() => null);
-const mockHasByokKey = vi.fn<() => boolean>(() => false);
 
 // isDesktopRuntime reads the '__TAURI_INTERNALS__' sentinel on window —
 // toggle it directly (the module deliberately does NOT import platform).
@@ -19,14 +20,6 @@ function setDesktopRuntime(v: boolean): void {
   else delete w.__TAURI_INTERNALS__;
 }
 
-vi.mock('../lib/models/index', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/models/index')>();
-  return {
-    ...actual,
-    isManagedActive: () => mockIsManagedActive(),
-    loadAccessSettings: () => ({ byokProvider: 'deepseek' }),
-  };
-});
 vi.mock('../lib/models/cliBackendProvider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/models/cliBackendProvider')>();
   return { ...actual, isCliBackendAvailable: (t: string) => mockCliAvailable(t) };
@@ -34,10 +27,6 @@ vi.mock('../lib/models/cliBackendProvider', async (importOriginal) => {
 vi.mock('../lib/models/devinAuthGuard', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/models/devinAuthGuard')>();
   return { ...actual, devinAuthBlocked: () => mockDevinBlocked() };
-});
-vi.mock('../lib/models/byokProviders', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/models/byokProviders')>();
-  return { ...actual, hasByokKey: () => mockHasByokKey() };
 });
 
 import {
@@ -48,17 +37,14 @@ import {
   runWithRailFailover,
 } from '../lib/agents/managerRailFailover';
 import type { ManagerRailAttempt } from '../lib/agents/managerRailFailover';
-import { BYOK_PROVIDER_DEFS } from '../lib/models/byokProviders';
 
-const modeAttempt = (mode: 'managed' | 'claude-code' | 'codex' | 'devin' | 'live-key'): ManagerRailAttempt =>
+const modeAttempt = (mode: 'local' | 'claude-code' | 'codex' | 'devin'): ManagerRailAttempt =>
   ({ kind: 'mode', mode, model: 'm' });
 
 beforeEach(() => {
-  mockIsManagedActive.mockReturnValue(false);
   setDesktopRuntime(true);
   mockCliAvailable.mockReturnValue(null);
   mockDevinBlocked.mockReturnValue(null);
-  mockHasByokKey.mockReturnValue(false);
 });
 
 describe('isRailRecoverableError', () => {
@@ -82,42 +68,38 @@ describe('isRailRecoverableError', () => {
 
 describe('fallbackModeRails', () => {
   it('excludes the failed primary mode and preserves auto-detect order', () => {
-    mockIsManagedActive.mockReturnValue(true);
     mockCliAvailable.mockReturnValue(true);
-    mockHasByokKey.mockReturnValue(true);
     const rails = fallbackModeRails(modeAttempt('claude-code'));
     expect(rails.map((r) => (r.kind === 'mode' ? r.mode : r.kind))).toEqual(
-      ['managed', 'codex', 'devin', 'live-key'],
+      ['codex', 'devin', 'local'],
+    );
+  });
+
+  it('a failed local primary still offers the CLI rails', () => {
+    mockCliAvailable.mockReturnValue(true);
+    const rails = fallbackModeRails(modeAttempt('local'));
+    expect(rails.map((r) => (r.kind === 'mode' ? r.mode : r.kind))).toEqual(
+      ['claude-code', 'codex', 'devin'],
     );
   });
 
   it('skips CLI rails off-Tauri even when availability is unprobed (null)', () => {
     setDesktopRuntime(false);
-    mockIsManagedActive.mockReturnValue(true);
-    const rails = fallbackModeRails(modeAttempt('managed'));
+    const rails = fallbackModeRails(modeAttempt('claude-code'));
     expect(rails).toEqual([]);
   });
 
   it('skips devin while the auth breaker is engaged', () => {
     mockCliAvailable.mockReturnValue(true);
     mockDevinBlocked.mockReturnValue('devin auth required');
-    const rails = fallbackModeRails(modeAttempt('managed'));
+    const rails = fallbackModeRails(modeAttempt('claude-code'));
     expect(rails.map((r) => (r.kind === 'mode' ? r.mode : r.kind))).not.toContain('devin');
   });
 
-  it('skips live-key without a configured BYOK key', () => {
+  it('never offers mock as a failover target', () => {
     mockCliAvailable.mockReturnValue(true);
-    mockHasByokKey.mockReturnValue(false);
-    const rails = fallbackModeRails(modeAttempt('managed'));
-    expect(rails.map((r) => (r.kind === 'mode' ? r.mode : r.kind))).not.toContain('live-key');
-  });
-
-  it('never offers mock/pro/local as failover targets', () => {
-    mockIsManagedActive.mockReturnValue(true);
-    mockCliAvailable.mockReturnValue(true);
-    mockHasByokKey.mockReturnValue(true);
-    const modes = fallbackModeRails(modeAttempt('managed')).map((r) => (r.kind === 'mode' ? r.mode : r.kind));
-    for (const m of modes) expect(['claude-code', 'codex', 'devin', 'live-key']).toContain(m);
+    const modes = fallbackModeRails(modeAttempt('local')).map((r) => (r.kind === 'mode' ? r.mode : r.kind));
+    for (const m of modes) expect(['claude-code', 'codex', 'devin', 'local']).toContain(m);
   });
 
   it('excludes the devin mode rail when the failed primary was a devin-model pick', () => {
@@ -130,15 +112,12 @@ describe('fallbackModeRails', () => {
     expect(modes).toContain('claude-code');
   });
 
-  it('excludes live-key when the failed keyed-BYOK pick IS the selected provider', () => {
-    mockIsManagedActive.mockReturnValue(true);
+  it('excludes the local mode rail when the failed primary was a local-model pick', () => {
     mockCliAvailable.mockReturnValue(true);
-    mockHasByokKey.mockReturnValue(true);
-    const deepseek = BYOK_PROVIDER_DEFS.find((d) => d.id === 'deepseek');
-    expect(deepseek).toBeTruthy();
-    const modes = fallbackModeRails({ kind: 'keyed-byok', def: deepseek!, model: 'deepseek-chat' })
+    const modes = fallbackModeRails({ kind: 'local-model', model: 'local/hermes3' })
       .map((r) => (r.kind === 'mode' ? r.mode : r.kind));
-    expect(modes).not.toContain('live-key');
+    expect(modes).not.toContain('local');
+    expect(modes).toContain('claude-code');
   });
 });
 
@@ -146,7 +125,7 @@ describe('runWithRailFailover', () => {
   it('returns on the first successful rail without calling onFallback', async () => {
     const onFallback = vi.fn();
     const dispatch = vi.fn().mockResolvedValue(undefined);
-    await runWithRailFailover([modeAttempt('managed'), modeAttempt('codex')], dispatch, { onFallback });
+    await runWithRailFailover([modeAttempt('local'), modeAttempt('codex')], dispatch, { onFallback });
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(onFallback).not.toHaveBeenCalled();
   });
@@ -204,25 +183,27 @@ describe('notice + labels', () => {
   });
 
   it('keeps the full dead-rail chain so earlier notices survive the accumulator reset', () => {
-    const notice = railFailoverNotice(modeAttempt('managed'), [
+    const notice = railFailoverNotice(modeAttempt('local'), [
       { label: 'Devin swe-2-medium', reason: 'blocked' },
       { label: 'Claude Code', reason: 'OAuth session expired' },
     ]);
     expect(notice).toContain('Devin swe-2-medium (blocked)');
     expect(notice).toContain('Claude Code (OAuth session expired)');
-    expect(notice).toContain('Lazy Pro');
+    expect(notice).toContain('Local LLM');
   });
 
   it('truncates very long notices', () => {
-    const notice = railFailoverNotice(modeAttempt('managed'), [
+    const notice = railFailoverNotice(modeAttempt('local'), [
       { label: 'X', reason: 'x'.repeat(300) },
     ]);
     expect(notice.length).toBeLessThanOrEqual(420);
-    expect(notice).toContain('Lazy Pro');
+    expect(notice).toContain('Local LLM');
   });
 
   it('labels each attempt kind distinctly', () => {
     expect(railAttemptLabel({ kind: 'devin-model', model: 'swe-2-medium' })).toContain('swe-2-medium');
+    expect(railAttemptLabel({ kind: 'local-model', model: 'local/hermes3' })).toContain('local/hermes3');
     expect(railAttemptLabel(modeAttempt('claude-code'))).toBe('Claude Code');
+    expect(railAttemptLabel(modeAttempt('local'))).toBe('Local LLM');
   });
 });

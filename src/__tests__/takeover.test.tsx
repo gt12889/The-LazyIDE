@@ -57,7 +57,7 @@ vi.mock('../lib/agents/runtime', () => ({
   runMission: vi.fn(() => Promise.resolve()),
   mergeWorktree: vi.fn(() => Promise.resolve()),
   discardWorktree: vi.fn(() => Promise.resolve()),
-  isManagedAgentAvailable: vi.fn(() => false),
+  isLiveAgentAvailable: vi.fn(() => false),
   // addMission's launch preflight (agentsStore.tsx) calls these two whenever
   // isTauri() is simulated and the mission's model classifies to a rail. They
   // must exist on the mock or vitest throws "No export is defined" the moment
@@ -66,16 +66,18 @@ vi.mock('../lib/agents/runtime', () => ({
   // module-level provider state other suites may have set. Default both ready,
   // as agentsStore.silentLaunchMissionFix.test.tsx does.
   isNativeModelReady: vi.fn(() => true),
-  isManagedModelReady: vi.fn(() => true),
+  isLocalLoopAvailable: vi.fn(() => true),
   killAgentRun: vi.fn(() => Promise.resolve()),
   worktreeDiff: vi.fn(() => Promise.resolve('diff --git a/foo b/foo\n+human edits')),
   // scheduler.ts's resolveProvider (exercised now that addMission's launch
   // path is no longer aborted early by the updateQueuedMission fix below)
   // imports this directly from runtime — mirrors the real implementation
   // (runtime.ts) so routing stays realistic under test.
-  classifyMissionModel: vi.fn((model: string | undefined) =>
-    model ? (model.includes('/') ? 'managed' : 'native') : undefined,
-  ),
+  classifyMissionModel: vi.fn((model: string | undefined) => {
+    if (!model) return undefined;
+    if (model.startsWith('local/')) return 'local';
+    return 'native';
+  }),
 }));
 vi.mock('../lib/platform/tauri', () => ({ gitRevertMerge: vi.fn(() => Promise.resolve()) }));
 vi.mock('../lib/models/usageHistory', () => ({ recordMissionCompleted: vi.fn() }));

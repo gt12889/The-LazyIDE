@@ -50,7 +50,7 @@ export interface SgrLaunchOpts {
   projectId?: string;
   budgetCapUsd?: number;
   maxDurationMs?: number;
-  engine?: 'cli' | 'pro' | 'auto';
+  engine?: 'cli' | 'local' | 'auto';
   permissionMode?: 'plan' | 'acceptEdits' | 'full';
   effort?: string;
 }

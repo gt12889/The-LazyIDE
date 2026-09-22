@@ -14,7 +14,7 @@ vi.mock('../lib/agents/budgetTracker', () => ({
 }));
 
 vi.mock('../lib/agents/runtime', () => ({
-  classifyMissionModel: vi.fn().mockReturnValue('managed'),
+  classifyMissionModel: vi.fn().mockReturnValue('native'),
 }));
 
 import { dispatch, resetSchedulerForTests } from '../lib/agents/scheduler';
@@ -33,7 +33,7 @@ function makeMission(overrides: Partial<Mission> = {}): Mission {
     id: 'M1',
     title: 'Test mission',
     status: 'queued',
-    model: 'anthropic/claude-sonnet-5',
+    model: 'claude-sonnet-5',
     ...overrides,
   };
 }
@@ -44,7 +44,7 @@ beforeEach(() => {
   resetSystemPressureForTests();
   vi.clearAllMocks();
   mockedEstimateMissionCostCents.mockReturnValue(10);
-  mockedClassifyMissionModel.mockReturnValue('managed');
+  mockedClassifyMissionModel.mockReturnValue('native');
 });
 
 afterEach(() => {

@@ -1,12 +1,11 @@
 /**
  * onboardingModelStep.test.tsx
  *
- * v0.1.5 W3.3 — onboarding "model" step honesty. The step now presents the
- * 3 real access modes (cli/byok/pro) with LIVE detection via the same
- * getEngineReadiness() used everywhere else (mission/composer preflight,
- * locked managed models), instead of a home-grown binary configured/missing
- * check. CLI is marked "recommended" when detected ready. Picking a mode
- * writes accessMode through the same saveAccessSettings() path Settings uses.
+ * Onboarding "model" step honesty. The step presents the 2 real access
+ * modes (local/cli) with LIVE detection via the same getEngineReadiness()
+ * used everywhere else (mission/composer preflight). Local is marked
+ * "recommended" — it ships with the Forge setup. Picking a mode writes
+ * accessMode through the same saveAccessSettings() path Settings uses.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -30,10 +29,9 @@ vi.mock('../lib/models/cliBackendProvider', async (importOriginal) => {
 
 const mockedReadiness = vi.mocked(getEngineReadiness);
 
-function readinessFor(mode: string): { mode: 'cli' | 'byok' | 'pro'; ready: boolean; reason?: 'cli-not-found' | 'byok-no-key' | 'pro-inactive' | 'pro-no-credits' } {
+function readinessFor(mode: string): { mode: 'cli' | 'local'; ready: boolean; reason?: 'cli-not-found' | 'local-unreachable' } {
   if (mode === 'cli') return { mode: 'cli', ready: true };
-  if (mode === 'byok') return { mode: 'byok', ready: false, reason: 'byok-no-key' };
-  return { mode: 'pro', ready: false, reason: 'pro-inactive' };
+  return { mode: 'local', ready: true };
 }
 
 function renderStep(onNext = vi.fn(), onBack = vi.fn()) {
@@ -49,47 +47,42 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   localStorage.setItem('lazy.locale', 'fr');
-  mockedReadiness.mockImplementation((forMode) => readinessFor(forMode ?? 'cli'));
+  mockedReadiness.mockImplementation((forMode) => readinessFor(forMode ?? 'local'));
 });
 
-describe('ModelCheckStep — 3-mode live detection (W3.3)', () => {
-  it('renders all 3 modes with their live detection state', async () => {
+describe('ModelCheckStep — 2-mode live detection', () => {
+  it('renders both modes with their live detection state', async () => {
     renderStep();
 
     expect(await screen.findByText(fr['onboarding.model.mode.cli'])).toBeInTheDocument();
-    expect(screen.getByText(fr['onboarding.model.mode.byok'])).toBeInTheDocument();
-    expect(screen.getByText(fr['onboarding.model.mode.pro'])).toBeInTheDocument();
+    expect(screen.getByText(fr['onboarding.model.mode.local'])).toBeInTheDocument();
 
-    // CLI is ready -> honest "ready" one-liner, not a blocking reason.
-    expect(screen.getByText(fr['onboarding.model.ready'])).toBeInTheDocument();
-    // BYOK/Pro are not ready -> the SAME reason copy used by every other
-    // preflight surface (mission modal, composer), never bespoke text.
-    expect(screen.getByText(fr['engine.reason.byok-no-key'])).toBeInTheDocument();
-    expect(screen.getByText(fr['engine.reason.pro-inactive'])).toBeInTheDocument();
+    // Both ready -> honest "ready" one-liners.
+    expect(screen.getAllByText(fr['onboarding.model.ready']).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('marks CLI as "recommended" once it is detected ready', async () => {
-    renderStep();
-    await screen.findByText(fr['onboarding.model.mode.cli']);
-    expect(screen.getAllByText(fr['onboarding.model.recommended'])).toHaveLength(1);
-  });
-
-  it('does not recommend any mode when CLI is not detected', async () => {
+  it('shows the CLI reason copy when the CLI is not detected', async () => {
     mockedReadiness.mockImplementation((forMode) => {
       if (forMode === 'cli') return { mode: 'cli', ready: false, reason: 'cli-not-found' };
-      return readinessFor(forMode ?? 'byok');
+      return { mode: 'local', ready: true };
     });
     renderStep();
     await screen.findByText(fr['onboarding.model.mode.cli']);
-    expect(screen.queryByText(fr['onboarding.model.recommended'])).toBeNull();
+    expect(screen.getByText(fr['engine.reason.cli-not-found'])).toBeInTheDocument();
+  });
+
+  it('marks local as "recommended"', async () => {
+    renderStep();
+    await screen.findByText(fr['onboarding.model.mode.local']);
+    expect(screen.getAllByText(fr['onboarding.model.recommended'])).toHaveLength(1);
   });
 
   it('selecting a mode writes accessMode through saveAccessSettings (same path Settings uses)', async () => {
     renderStep();
-    fireEvent.click(await screen.findByText(fr['onboarding.model.mode.byok']));
+    fireEvent.click(await screen.findByText(fr['onboarding.model.mode.cli']));
 
     await waitFor(() => {
-      expect(loadAccessSettings().accessMode).toBe('byok');
+      expect(loadAccessSettings().accessMode).toBe('cli');
     });
   });
 

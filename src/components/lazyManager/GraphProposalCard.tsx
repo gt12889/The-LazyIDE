@@ -185,7 +185,7 @@ import {
   buildModelPickerOptions,
   type ModelOptionGroup,
 } from '../../lib/models/modelPickerOptions';
-import { ENGINE_I18N_KEY, CREDIT_METERED_ENGINES, type EngineKey } from './LazyManagerHeader';
+import { ENGINE_I18N_KEY, type EngineKey } from './LazyManagerHeader';
 import { typeAccentColor, TypeGlyph } from '../agents/canvas/chrome/nodeChrome';
 import { ModelPickerDropdown } from '../common/ModelPickerDropdown';
 import { useDismissable } from '../common/useDismissable';
@@ -1587,14 +1587,12 @@ export function GraphProposalCard({ msg, onAccept, onModify, onReject, onStepMod
       )}
 
       {/* Estimates — item 7 fix (real user QA, 2026-08-01): this used to
-          always show `~$${estimatedCostUsd}` regardless of engine, even
-          while the header badge read "Claude · abonnement" (a CLI
-          subscription turn that never spends a single Lazy-managed
-          credit). The owner's standing rule: an estimate is credits per
-          model, never a raw dollar figure, and a subscription-routed plan
-          must say explicitly that it costs no credits. `engineMode` reuses
+          always show `~$${estimatedCostUsd}` regardless of engine. The
+          owner's standing rule: an estimate is credits per model, never a
+          raw dollar figure, and a plan must say explicitly that it costs no
+          credits (Forge has no metered engine at all). `engineMode` reuses
           the SAME classification LazyManagerHeader.tsx's own engine badge
-          is built from (getProviderMode/CREDIT_METERED_ENGINES, exported
+          is built from (getProviderMode/ENGINE_I18N_KEY, exported
           from that file rather than re-derived here) — never a second,
           possibly-drifting notion of "which engine am I on". Credits come
           straight from `proposal.estimatedCreditsByModel`
@@ -1604,7 +1602,6 @@ export function GraphProposalCard({ msg, onAccept, onModify, onReject, onStepMod
           never two conversions. */}
       {(proposal.estimatedCostUsd !== undefined || proposal.estimatedDurationMs !== undefined) && (() => {
         const engineMode = getProviderMode() as EngineKey;
-        const usesCredits = CREDIT_METERED_ENGINES.has(engineMode);
         const engineLabelKey = ENGINE_I18N_KEY[engineMode] ?? ENGINE_I18N_KEY.mock;
         const creditsByModel = proposal.estimatedCreditsByModel;
         const totalCredits = creditsByModel
@@ -1612,14 +1609,16 @@ export function GraphProposalCard({ msg, onAccept, onModify, onReject, onStepMod
           : proposal.estimatedCostUsd !== undefined
             ? Math.round(proposal.estimatedCostUsd * 100)
             : undefined;
+        // Forge has no metered engine (CREDIT_METERED_ENGINES is empty):
+        // every estimate is informational only. The card always says so
+        // explicitly AND shows the estimate — never a raw dollar figure.
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10.5, color: 'var(--color-text-disabled)' }}>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {!usesCredits ? (
-                <span data-testid="graph-proposal-no-credits">
-                  {t('lazyManager.proposal.noCreditsSubscription', { engine: t(engineLabelKey) })}
-                </span>
-              ) : totalCredits !== undefined && (
+              <span data-testid="graph-proposal-no-credits">
+                {t('lazyManager.proposal.noCreditsSubscription', { engine: t(engineLabelKey) })}
+              </span>
+              {totalCredits !== undefined && (
                 <span data-testid="graph-proposal-estimated-credits">
                   {t('lazyManager.proposal.estimatedCost')}: {t('lazyManager.proposal.estimatedCreditsValue', { credits: totalCredits })}
                 </span>
@@ -1628,7 +1627,7 @@ export function GraphProposalCard({ msg, onAccept, onModify, onReject, onStepMod
                 <span>{t('lazyManager.proposal.estimatedDuration')}: ~{Math.round(proposal.estimatedDurationMs / 60000)}min</span>
               )}
             </div>
-            {usesCredits && creditsByModel && Object.keys(creditsByModel).length > 1 && (
+            {creditsByModel && Object.keys(creditsByModel).length > 1 && (
               <div data-testid="graph-proposal-estimated-credits-by-model" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {Object.entries(creditsByModel).map(([model, credits]) => (
                   <span key={model}>{t('lazyManager.proposal.estimatedCreditsByModel', { model, credits })}</span>

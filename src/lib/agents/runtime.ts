@@ -11,17 +11,14 @@
 
    Per-mission model routing: planAndAct's PRIMARY dispatch is keyed off the
    mission's own CHOSEN model (Mission.model, see classifyMissionModel)
-   rather than the single globally-resolved getProviderMode() — a managed/
-   OpenRouter id (contains '/') routes to planAndActManaged, a native Claude
-   id/label (no '/') routes to planAndActLive, each gated on that SPECIFIC
-   engine's own readiness (isManagedModelReady / isNativeModelReady) rather
-   than the mutually-exclusive accessMode. This is what lets a user entitled
-   to BOTH a Claude subscription and an active LazyPro plan at once (see
-   modelPickerOptions.ts) actually get the engine they picked for THIS
-   mission — a mismatched pick (e.g. a managed model chosen while Pro is
-   inactive/out of credits) fails the mission early with a clear reason
-   instead of silently running on the wrong engine with a mangled model id.
-   getProviderMode()-based routing (isManagedAgentAvailable/
+   rather than the single globally-resolved getProviderMode() — a `local/`
+   id routes to planAndActManaged with the local turn streamer, a native
+   CLI id routes to planAndActLive, each gated on that SPECIFIC engine's
+   own readiness (isLocalLoopAvailable / isNativeModelReady) rather than
+   the mutually-exclusive accessMode. A mismatched pick (e.g. a native
+   model chosen while no CLI is detected) fails the mission early with a
+   clear reason instead of silently running on the wrong engine.
+   getProviderMode()-based routing (isLocalLoopAvailable/
    isLiveAgentAvailable) remains a FALLBACK for calls with no classifiable
    model (legacy/low-level callers — see planAndAct).
 
@@ -46,9 +43,8 @@ import { invoke } from '@tauri-apps/api/core';
 import type { Mission, PlanStep, ActionEvent, ProofArtifact, ProofRequirement } from '../agents/types.js';
 import {
   getProviderMode,
-  hasManagedCreditsActive,
-  getProPlanState,
   isCliBackendAvailable,
+  createLocalAgentTurnStreamer,
   type ProviderMode,
 } from '../models/index.js';
 import { getPlatform } from '../platform/index.js';
@@ -63,8 +59,7 @@ import { StreamTimeoutError } from '../models/streamTimeout.js';
 import { captureOutcome } from './captureOutcome.js';
 import { planAndActManaged } from './managedAgent.js';
 import { loadAccessSettings } from '../models/accessSettings.js';
-import { BYOK_PROVIDER_DEFS, hasByokKey, resolveByokAgentTurnStreamer } from '../models/byokProviders.js';
-import { DEFAULT_OPENROUTER_MODEL_ID, isOpenRouterFreeModel } from '../models/openrouterCatalog.js';
+import { DEFAULT_LOCAL_MODEL_ID } from '../models/index.js';
 import { isDevinModel } from '../models/devinCatalog.js';
 import { createCliAgentTurnStreamer } from './cliAgentTurnStreamer.js';
 import { emitEvent, emitBuffered } from '../journal/journal.js';
@@ -230,15 +225,13 @@ export function canResumeNative(missionMetrics?: { sessionId?: string }): boolea
   return !!missionMetrics?.sessionId;
 }
 
-/** True when the managed agent (Pro tier) can run via the ai-proxy.
- *  Strictly 'managed' — claude-code/codex are native CLI tools and must
- *  always route to the live loop (see isLiveAgentAvailable / planAndActLive),
- *  never to the reimplemented ReAct loop in managedAgent.ts. claude-code used
- *  to also match here, which silently downgraded real CLI missions onto the
- *  managed loop instead of the native agent_run loop. */
-export function isManagedAgentAvailable(): boolean {
+/** True when the Forge ReAct loop (planAndActManaged) can run with a local
+ *  engine. The local engine needs no account and no key; reachability is
+ *  async, so this stays optimistic and a refused Ollama connection surfaces
+ *  loudly from the loop itself. */
+export function isLocalLoopAvailable(): boolean {
   if (!isTauriRuntime()) return false;
-  return getProviderMode() === 'managed';
+  return true;
 }
 
 // ── Per-mission model routing ──────────────────────────────────────
@@ -254,45 +247,22 @@ export function isManagedAgentAvailable(): boolean {
 // model, and (b) other call sites that genuinely want "the current engine"
 // (pause/intervene gating in agentsStore.tsx, ReviewSpace, MissionDetail).
 
-export type ModelRouteKind = 'managed' | 'native' | 'byok' | 'devin';
+export type ModelRouteKind = 'native' | 'devin' | 'local';
 
-/** OpenRouter (managed) ids always carry a '/' (e.g. 'openai/gpt-5.5',
- *  'anthropic/claude-sonnet-5'); native Anthropic ids/labels never do
- *  (e.g. 'claude-sonnet-5', 'Claude Sonnet 5') — see registry.ts /
- *  openrouterCatalog.ts's own "never mix them" contract. Same convention
- *  already used by evaluator.ts's resolveManagedModel, modelPickerOptions.ts,
- *  and Composer.tsx's handleModelSelect. BYOK wave: a model id from a
- *  non-Anthropic BYOK provider catalog (deepseek-chat, deepseek-reasoner,
- *  grok-4, ...) routes to the BYOK ReAct loop when that provider's key is
- *  set — the user's own key, no CLI, no Pro credits. Returns undefined for
- *  an empty/absent model — callers fall back to mode-based routing. */
+/** Local-engine ids always carry the `local/` prefix (e.g. 'local/hermes3'
+ *  — see localProvider.ts); native CLI ids never do (e.g. 'claude-sonnet-5').
+ *  Same convention already used by modelPickerOptions.ts and Composer.tsx's
+ *  handleModelSelect. Returns undefined for an empty/absent model — callers
+ *  fall back to mode-based routing. */
 export function classifyMissionModel(model: string | undefined): ModelRouteKind | undefined {
   if (!model) return undefined;
-  if (model.includes('/')) return 'managed';
-  for (const def of BYOK_PROVIDER_DEFS) {
-    if (def.id === 'anthropic') continue;
-    if (def.models.some((m) => m.id === model) && hasByokKey(def.id)) return 'byok';
-  }
+  if (model.startsWith('local/')) return 'local';
   // Devin-catalog ids (swe-2-medium, ...) get their own route — the Devin
   // CLI can't run the native code-agent rail (planAndActLive is the claude
-  // agent_run path), but it CAN serve as the managed loop's brain via
-  // createCliAgentTurnStreamer — same pattern as the BYOK route.
+  // agent_run path), but it CAN serve as the loop's brain via
+  // createCliAgentTurnStreamer.
   if (isDevinModel(model)) return 'devin';
   return 'native';
-}
-
-/** Mode-INDEPENDENT readiness for the MANAGED engine — true when credits are
- *  actively usable, OR the billing layer's first subscription fetch simply
- *  hasn't settled yet (getProPlanState() === 'unknown'). Mirrors
- *  entitlement.ts's proReadiness() optimistic cold-start handling so a real
- *  Pro user launching a mission in the first seconds after app start never
- *  sees a false "Pro inactive" rejection; only a SETTLED non-active plan (or
- *  a settled active plan with 0 credits) is not-ready. Unlike
- *  isManagedAgentAvailable(), this ignores accessMode entirely — it answers
- *  "is Pro itself usable", not "is Pro the CURRENTLY SELECTED engine". */
-export function isManagedModelReady(): boolean {
-  if (!isTauriRuntime()) return false;
-  return hasManagedCreditsActive() || getProPlanState() === 'unknown';
 }
 
 /** Mode-INDEPENDENT readiness for the NATIVE engine — true when EITHER CLI
@@ -699,37 +669,31 @@ async function planAndActScripted(opts: PlanAndActScriptedOpts): Promise<void> {
 function unavailableEngineMessage(mode: ProviderMode, t?: TFunc): string {
   return t
     ? t('agents.runtime.unavailableEngine', { mode })
-    : `Backend indisponible : le mode "${mode}" n'est pas configuré pour exécuter des missions. Configure Claude Code ou Codex (CLI), ou active l'abonnement Pro, dans Réglages > Modèles.`;
+    : `Engine unavailable: mode "${mode}" cannot run missions. Start Ollama or configure a CLI tool (Claude Code / Codex) in Settings > Models.`;
 }
 
 /** Explanation for a mission whose CHOSEN model unambiguously belongs to one
  *  engine family (see classifyMissionModel) but that specific engine isn't
  *  usable right now — distinct from unavailableEngineMessage above (no
  *  engine configured AT ALL): here the user picked a valid model, but its
- *  entitlement/CLI is momentarily missing (Pro inactive/out of credits for a
- *  managed pick, no CLI detected for a native pick) — a precise,
- *  one-step-fixable mismatch. Translated via `t` — see
+ *  CLI is momentarily missing (no CLI detected for a native pick) — a
+ *  precise, one-step-fixable mismatch. Translated via `t` — see
  *  unavailableEngineMessage's doc comment above for why this is safe
  *  (never matched by recovery.ts's keyword policies). */
 function modelMismatchMessage(kind: ModelRouteKind, t?: TFunc): string {
-  if (kind === 'managed') {
+  if (kind === 'local') {
     return t
-      ? t('agents.runtime.modelMismatchManaged')
-      : "Modèle managé choisi mais LazyPro est inactif ou les crédits sont épuisés. Active LazyPro ou choisis un modèle de l'abonnement Claude dans Réglages > Modèles.";
-  }
-  if (kind === 'byok') {
-    return t
-      ? t('agents.runtime.modelMismatchByok')
-      : "Modèle BYOK choisi mais aucune clé API n'est configurée pour ce provider. Ajoute ta clé dans Réglages > Modèles, puis clique « Utiliser ».";
+      ? t('agents.runtime.modelMismatchLocal')
+      : 'Local model chosen but Ollama is not reachable. Run `ollama serve` (and `ollama pull <model>`) or pick a CLI model in Settings > Models.';
   }
   if (kind === 'devin') {
     return t
       ? t('agents.runtime.modelMismatchDevin')
-      : "Modèle Devin choisi mais le CLI Devin est introuvable ou non connecté. Installe/connecte Devin (devin auth login) ou choisis un autre modèle dans Réglages > Modèles.";
+      : 'Devin model chosen but the Devin CLI is missing or not logged in. Install/connect Devin (devin auth login) or pick another model in Settings > Models.';
   }
   return t
     ? t('agents.runtime.modelMismatchNative')
-    : 'Modèle Claude choisi mais le CLI Claude est introuvable. Installe/connecte Claude Code (CLI) ou choisis un modèle LazyPro dans Réglages > Modèles.';
+    : 'Claude model chosen but the Claude CLI is missing. Install/connect Claude Code (CLI) or pick a local model in Settings > Models.';
 }
 
 /** Marks every plan step 'done' with an error marker and posts the failure
@@ -801,24 +765,22 @@ async function planAndActMismatch(opts: {
  * (getProviderMode) only when the call carries no classifiable model.
  * Routing table:
  *
- *   model contains '/' (managed/OpenRouter id) + isManagedModelReady()
- *     -> planAndActManaged, model forwarded UNMANGLED (any provider —
- *        anthropic/openai/google/x-ai/deepseek/meta-llama)
- *   model contains '/' but managed NOT ready (Pro inactive/out of credits)
- *     -> planAndActMismatch — fails early with a clear reason, never
- *        silently falls back to native
- *   model has no '/' (native Claude id/label) + isNativeModelReady()
+ *   model starts with 'local/' (local Ollama id)
+ *     -> planAndActManaged with the local turn streamer
+ *   Devin-catalog model id + Devin CLI present
+ *     -> planAndActManaged with the Devin CLI turn streamer
+ *   Devin-catalog model id but Devin CLI missing
+ *     -> planAndActMismatch — fails early with a clear reason
+ *   native model id + CLI ready
  *     -> planAndActLive (native agent_run loop)
- *   model has no '/' but no native CLI detected
+ *   native model id but no CLI detected
  *     -> planAndActMismatch — fails early with a clear reason
  *   no classifiable model on this call (legacy/low-level callers) — falls
- *   back to the PREVIOUS mode-based routing, unchanged:
+ *   back to mode-based routing, unchanged:
  *     'claude-code' | 'codex'        -> planAndActLive
- *     'managed'                      -> planAndActManaged
- *     'pro' | 'live-key' | 'mock'    -> planAndActUnavailable, IF running on
- *                                        the Tauri desktop runtime (no engine
- *                                        wired up — fail explicitly instead
- *                                        of faking success)
+ *     'local'                        -> planAndActManaged, local streamer
+ *     'mock'                         -> planAndActUnavailable on desktop,
+ *                                        planAndActScripted on web
  *     any mode, non-Tauri runtime    -> planAndActScripted (web/browser demo
  *                                        only — no Tauri IPC backend exists
  *                                        there at all)
@@ -944,10 +906,10 @@ export async function planAndAct(opts: {
    * pass in.
    */
   onDurationExceeded?: () => void;
-  /** Reasoning effort forwarded to the managed engine (see
+  /** Reasoning effort forwarded to the loop engine (see
    *  PlanAndActManagedOpts). Ignored by the native engine. Sourced from
    *  MissionContract.effort in runMission. */
-  reasoningEffort?: import('../models/openrouterCatalog.js').ReasoningEffort;
+  reasoningEffort?: import('../models/accessSettings.js').ReasoningEffort;
   /** See {@link TFunc}'s doc comment. Forwarded to whichever engine loop
    *  this call dispatches to (native: planAndActLive/planAndActLiveViaRunner;
    *  scripted: planAndActScripted; managed: planAndActManaged via the
@@ -967,14 +929,12 @@ export async function planAndAct(opts: {
   autonomy?: 'manual' | 'supervised' | 'yolo';
 }): Promise<void> {
   // Route by the mission's CHOSEN model FIRST — see this file's header and
-  // classifyMissionModel's doc comment for why (a user can hold both a
-  // Claude subscription and an active LazyPro plan at once). Gated on
-  // isTauriRuntime() up front so a non-Tauri call (web/browser demo) always
-  // falls through to the unchanged mode-based branch below, which already
-  // resolves correctly to planAndActScripted there.
+  // classifyMissionModel's doc comment for why. Gated on isTauriRuntime()
+  // up front so a non-Tauri call (web/browser demo) always falls through to
+  // the unchanged mode-based branch below, which already resolves correctly
+  // to planAndActScripted there.
   const chosenKind = isTauriRuntime() ? classifyMissionModel(opts.managedModel) : undefined;
-  if (chosenKind === 'managed') return dispatchChosenManaged(opts);
-  if (chosenKind === 'byok') return dispatchChosenByok(opts);
+  if (chosenKind === 'local') return dispatchChosenLocal(opts);
   if (chosenKind === 'devin') return dispatchChosenDevin(opts);
   if (chosenKind === 'native') return dispatchChosenNative(opts);
   return dispatchModeFallback(opts);
@@ -996,36 +956,14 @@ function mismatchArgs(opts: PlanAndActOpts, kind: ModelRouteKind) {
   };
 }
 
-async function dispatchChosenManaged(opts: PlanAndActOpts): Promise<void> {
-  // FREE tier bypass: a mission whose chosen model is a free OpenRouter
-  // model (ox alpha) is ready even with no active Pro plan — the ai-proxy
-  // serves free models to any authenticated user at zero cost (see
-  // entitlement.ts's free short-circuit for the same contract at preflight).
-  if (!isManagedModelReady() && !isOpenRouterFreeModel(opts.managedModel)) {
-    return planAndActMismatch(mismatchArgs(opts, 'managed'));
-  }
-  // opts.managedModel is already a real, valid OpenRouter id (it came from
-  // the combined model picker's managed catalog — see
-  // modelPickerOptions.ts) — forwarded as-is, unmangled. Contrast the
-  // mode-based fallback branch below, which only ever has a coarse tier
-  // hint to work with and must fall back to a saved/default id instead.
-  return planAndActManaged({
-    ...opts,
-    model: opts.managedModel!,
-    pauseSignal: opts.pauseSignal ?? (() => false),
-    drainIntervenes: opts.drainIntervenes ?? (() => []),
-  });
-}
-
-async function dispatchChosenDevin(opts: PlanAndActOpts): Promise<void> {
-  // Devin-catalog model: the mission runs Lazy's own ReAct loop
-  // (planAndActManaged) with the Devin CLI as its brain — createCliAgentTurnStreamer
-  // builds the ACP-backed turn streamer; undefined means the devin CLI
-  // isn't installed on this box (precise mismatch, one-step fix).
-  const streamTurn = createCliAgentTurnStreamer('devin');
-  if (!streamTurn || isCliBackendAvailable('devin') === false) {
-    return planAndActMismatch(mismatchArgs(opts, 'devin'));
-  }
+async function dispatchChosenLocal(opts: PlanAndActOpts): Promise<void> {
+  // Local-engine model (local/<name>): run the full ReAct loop against
+  // Ollama/LM Studio on localhost — no CLI, no account. Reachability is
+  // async, so there is no sync pre-check here: a refused connection throws
+  // inside the first turn and the loop fails the mission honestly (never a
+  // silent fallback onto another engine — that would misrepresent which
+  // model produced the answer).
+  const streamTurn = createLocalAgentTurnStreamer();
   return planAndActManaged({
     ...opts,
     model: opts.managedModel!,
@@ -1035,15 +973,14 @@ async function dispatchChosenDevin(opts: PlanAndActOpts): Promise<void> {
   });
 }
 
-async function dispatchChosenByok(opts: PlanAndActOpts): Promise<void> {
-  // BYOK wave: the mission's model is a BYOK catalog id (deepseek-chat,
-  // ...) — run the full managed ReAct loop against the user's OWN provider
-  // key, no CLI, no Pro credits. resolveByokAgentTurnStreamer returns
-  // undefined when the provider's key is missing (classifyMissionModel
-  // already required it, but double-check defensively).
-  const streamTurn = resolveByokAgentTurnStreamer(opts.managedModel);
-  if (!streamTurn) {
-    return planAndActMismatch(mismatchArgs(opts, 'byok'));
+async function dispatchChosenDevin(opts: PlanAndActOpts): Promise<void> {
+  // Devin-catalog model: the mission runs Forge's own ReAct loop
+  // (planAndActManaged) with the Devin CLI as its brain — createCliAgentTurnStreamer
+  // builds the ACP-backed turn streamer; undefined means the devin CLI
+  // isn't installed on this box (precise mismatch, one-step fix).
+  const streamTurn = createCliAgentTurnStreamer('devin');
+  if (!streamTurn || isCliBackendAvailable('devin') === false) {
+    return planAndActMismatch(mismatchArgs(opts, 'devin'));
   }
   return planAndActManaged({
     ...opts,
@@ -1080,16 +1017,19 @@ async function dispatchModeFallback(opts: PlanAndActOpts): Promise<void> {
   // No classifiable model on this call (opts.managedModel absent/empty) —
   // legacy/low-level callers only; runMission always sets managedModel from
   // mission.model (a required field), so production mission runs reach one
-  // of the chosen-kind branches. Falls back to the PREVIOUS mode-based
-  // routing, unchanged, so this shape keeps behaving exactly as before.
-  if (isManagedAgentAvailable()) {
-    // isManagedAgentAvailable() is now strictly mode === 'managed' (claude-code
-    // no longer matches it), so the per-mission OpenRouter id is always the
-    // right fallback — no claude-code special case needed any more.
-    const managedModel = opts.managedModel ?? (loadAccessSettings().model ?? DEFAULT_OPENROUTER_MODEL_ID);
+  // of the chosen-kind branches. Falls back to mode-based routing:
+  // live CLI first, then the local loop, never a silent fake-success.
+  if (isLiveAgentAvailable()) {
+    return dispatchUnmanagedFallback(opts);
+  }
+  const mode = getProviderMode();
+  if (mode === 'local') {
+    const streamTurn = createLocalAgentTurnStreamer();
+    const localModel = opts.managedModel ?? loadAccessSettings().model ?? DEFAULT_LOCAL_MODEL_ID;
     return planAndActManaged({
       ...opts,
-      model: managedModel,
+      model: localModel,
+      streamTurn,
       pauseSignal: opts.pauseSignal ?? (() => false),
       drainIntervenes: opts.drainIntervenes ?? (() => []),
     });
@@ -1120,10 +1060,9 @@ async function dispatchUnmanagedFallback(opts: PlanAndActOpts): Promise<void> {
     // models/index.ts: "Web demo path continues to use mockProvider").
     return planAndActScripted(opts);
   }
-  // Desktop Tauri runtime with no real engine configured: 'pro' selected but
-  // inactive, 'live-key' (BYOK key without a mission loop — BYOK missions
-  // route by their CHOSEN model above; this branch only fires for a
-  // mode-based fallback with no classifiable model), or 'mock'.
+  // Desktop Tauri runtime with no usable engine: neither a live CLI nor
+  // the local loop was selected (mode 'mock'). Fail explicitly instead of
+  // faking success.
   return planAndActUnavailable({
     mode: getProviderMode(),
     onStep: opts.onStep,
@@ -1238,7 +1177,6 @@ export async function runMission(
     model: mission.model ?? managedModel,
     mode: getProviderMode(),
     cliReady: isNativeModelReady(),
-    proReady: isManagedModelReady(),
   });
   if (!sessionGate.ok) {
     const reason = t

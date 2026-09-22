@@ -11,7 +11,6 @@ mod teams_sidecar;
 mod crash_guard;
 mod updater_service;
 pub mod runner;
-mod solari_cdp_proxy;
 #[cfg(windows)]
 mod webview_recovery;
 #[cfg(windows)]
@@ -439,17 +438,6 @@ pub fn run() {
     // hence the returned report, logged below once the plugin is up.
     let migration_report = migration::run_startup_migration(&context.config().identifier);
 
-    // C72 — local Origin-strip CDP proxy for packaged Tauri (mirrors vite /solari-cdp).
-    // Start before Builder::manage so the port is known; a bind failure yields
-    // port 0 and the frontend falls back to direct wss://api.getsolari.com.
-    let solari_cdp_port = match solari_cdp_proxy::start_solari_cdp_proxy() {
-        Ok(port) => port,
-        Err(err) => {
-            eprintln!("[lazy] solari_cdp_proxy failed to start: {err}");
-            0
-        }
-    };
-
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
@@ -467,10 +455,7 @@ pub fn run() {
         .manage(lsp::LspState::new())
         .manage(teams_sidecar::TeamsSidecarState::new())
         .manage(crash_guard::StartupCrashStateManaged(startup_crash_state))
-        .manage(updater_service::UpdaterRuntimeState::new(boot_update_applied))
-        .manage(std::sync::Arc::new(solari_cdp_proxy::SolariCdpProxyState {
-            port: solari_cdp_port,
-        }));
+        .manage(updater_service::UpdaterRuntimeState::new(boot_update_applied));
 
     // ── Startup-readiness watchdog registration (see startup_watchdog.rs's
     // own module doc comment) ── MUST be attached to the `Builder` itself,
@@ -1194,8 +1179,6 @@ pub fn run() {
             commands::vault::secret_get,
             commands::vault::secret_presence,
             commands::vault::secret_delete,
-            solari_cdp_proxy::solari_cdp_proxy_base,
-            commands::web::solari_replay_fetch,
             commands::shell::run_tests,
             commands::shell::run_shell,
             commands::shell::is_worktree_script_eligible,

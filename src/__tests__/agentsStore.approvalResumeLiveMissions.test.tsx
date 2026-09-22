@@ -24,7 +24,6 @@ import { I18nProvider } from '../i18n';
 import { ToastProvider } from '../components/ui/Toast';
 import { runManagerTurn } from '../lib/agents/managerEngine';
 import { runMission } from '../lib/agents/runtime';
-import { setManagedAvailability } from '../lib/models/index';
 import { _resetCanvasStoreForTests } from '../components/agents/canvas/canvasStore';
 
 const mockInvoke = vi.mocked(invoke);
@@ -76,7 +75,6 @@ beforeEach(() => {
 
 afterEach(() => {
   delete (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'];
-  setManagedAvailability(false);
   localStorage.clear();
 });
 

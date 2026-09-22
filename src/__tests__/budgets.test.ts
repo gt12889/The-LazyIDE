@@ -26,14 +26,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // The global setup.ts already provides a vi.fn() for invoke.
 import { invoke } from '@tauri-apps/api/core';
 
-// ── Mock managedProvider's streamManagedAgentTurn ─────────────────
-vi.mock('../lib/models/managedProvider', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/models/managedProvider')>();
-  return {
-    ...actual,
-    streamManagedAgentTurn: vi.fn(),
-  };
-});
+// ── planAndActManaged loop streamer ─────────────────────────────────
+// The loop has no hosted fallback rail: every test drives it through an
+// explicit stub `streamTurn` (see planAndActManaged's required streamTurn
+// opt and makeOpts below).
 
 // ── Mock platform (brain recall) ──────────────────────────────────
 vi.mock('../lib/platform', () => ({
@@ -73,7 +69,6 @@ import {
   planAndActManaged,
 } from '../lib/agents/managedAgent';
 import type { PlanStep, ActionEvent } from '../lib/agents/types';
-import { streamManagedAgentTurn } from '../lib/models/managedProvider';
 import { listAgents } from '../lib/agents/agentsStorage';
 import { emitBuffered, emitEvent } from '../lib/journal/journal';
 import type { JournalEventInput } from '../lib/journal/eventTypes';
@@ -81,7 +76,7 @@ import { classifyBudget, formatBudgetExceededMessage, formatDurationExceededMess
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-const mockedStream = streamManagedAgentTurn as ReturnType<typeof vi.fn>;
+const mockedStream = vi.fn();
 const mockedInvoke = invoke as ReturnType<typeof vi.fn>;
 const mockedListAgents = listAgents as ReturnType<typeof vi.fn>;
 const mockedEmitBuffered = emitBuffered as ReturnType<typeof vi.fn>;
@@ -118,6 +113,7 @@ function makeOpts(overrides: Partial<Parameters<typeof planAndActManaged>[0]> = 
     onProgress,
     stopSignal,
     model: 'anthropic/claude-sonnet-5',
+    streamTurn: mockedStream,
     ...overrides,
   };
 }

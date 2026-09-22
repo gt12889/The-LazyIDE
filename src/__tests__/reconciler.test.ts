@@ -2375,41 +2375,21 @@ describe('reconcile — LazyBot VM window node (botVm)', () => {
     updatedAt: '2026-01-01T00:00:00.000Z',
   };
 
-  it('emits a botVm node + hierarchy edge only when the bot window is open', () => {
+  it('never emits a botVm node — VM canvas nodes were removed', () => {
     const { nodes, edges } = reconcile(
       baseInputs({
         bots: [
           { bot: botConfig, status: 'idle', activeRuns: 0 },
-          { bot: { ...botConfig, id: 'bot_open', name: 'Open' }, status: 'working', activeRuns: 1, vmOpen: true },
+          { bot: { ...botConfig, id: 'bot_open', name: 'Open' }, status: 'working', activeRuns: 1 },
         ],
       }),
     );
 
-    // Closed bot → no botVm node.
+    // No botVm nodes, ever.
     expect(nodes.some((n) => n.id === makeRef('botVm', 'bot_test1'))).toBe(false);
-    // Open bot → botVm node with window data + the tether edge.
-    const vmNode = findNode(nodes, makeRef('botVm', 'bot_open'));
-    expect(vmNode.type).toBe('botVm');
-    const data = vmNode.data as Record<string, unknown>;
-    expect(data.botId).toBe('bot_open');
-    expect(data.botName).toBe('Open');
-    expect(typeof data.width).toBe('number');
-    const edge = edges.find((e) => e.id === `hierarchy:bot:bot_open:vm`);
-    expect(edge).toBeDefined();
-    expect(edge?.source).toBe(makeRef('bot', 'bot_open'));
-    expect(edge?.target).toBe(makeRef('botVm', 'bot_open'));
-  });
-
-  it('honors a persisted VM window size override', () => {
-    const { nodes } = reconcile(
-      baseInputs({
-        bots: [{ bot: botConfig, status: 'idle', activeRuns: 0, vmOpen: true, vmSize: { width: 500, height: 400 } }],
-      }),
-    );
-    const vmNode = findNode(nodes, makeRef('botVm', 'bot_test1'));
-    const data = vmNode.data as Record<string, unknown>;
-    expect(data.width).toBe(500);
-    expect(data.height).toBe(400);
+    expect(nodes.some((n) => n.id === makeRef('botVm', 'bot_open'))).toBe(false);
+    expect(nodes.some((n) => n.type === 'botVm')).toBe(false);
+    expect(edges.some((e) => e.id === `hierarchy:bot:bot_open:vm`)).toBe(false);
   });
 });
 

@@ -1,19 +1,14 @@
-/* botApprovalScreenshot — C79 producer: attach the live bot VM screenshot
-   to approval page context so BotApprovalPanel can preview the page. */
+/* botApprovalScreenshot — approval page-context enrichment.
+   Forge has no cloud VM to screenshot; the enricher is a pass-through kept
+   so the approval pipeline keeps compiling unchanged. */
 
 import type { PageContext } from '../agents/approval/approvalTypes.js';
-import { botIdForMission } from './botEngine.js';
-import { getLastBotVmState } from '../solari/botVmState.js';
 
-/** Enrich page context with the latest screenshot for this mission's bot. */
+/** Enrich page context — currently a pass-through (no VM screenshots). */
 export function enrichApprovalPageContext(
-  missionId: string,
+  _missionId: string,
   page: PageContext,
 ): PageContext {
-  if (page.screenshotDataUrl) return page;
-  const botId = botIdForMission(missionId);
-  if (!botId) return page;
-  const shot = getLastBotVmState(botId)?.screenshotDataUrl;
-  if (!shot) return page;
-  return { ...page, screenshotDataUrl: shot };
+  void _missionId;
+  return page;
 }

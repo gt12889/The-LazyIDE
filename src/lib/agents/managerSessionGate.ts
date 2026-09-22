@@ -1,31 +1,22 @@
-/* managerSessionGate — unsigned web + free OpenRouter model must not hit the ai-proxy.
-
-   Measured 2026-08-28: LazyManager offered a free OpenRouter id, send failed with
-   `ManagedUnavailableError: Session requise pour le mode géré (agent)`.
-   supabase/functions/ai-proxy/index.ts authenticates via getUser() — free
-   models skip credits, not the JWT. This module is the preflight + the
-   unwrap so the bubble never shows Error: Error: LazyManager error: …
+/* managerSessionGate — Forge: no hosted backend, so no turn ever needs a
+   session. managerTurnNeedsSession/hasManagedSession survive as
+   always-false/always-true call-site-compatible stubs until their last
+   callers are reworked (Phase 3 removes them). The error-format helpers
+   below are still live (chat bubbles, message list).
 */
 
 import type { ProviderMode } from '../models/index.js';
-import { isOpenRouterFreeModel } from '../models/openrouterCatalog.js';
-import { supabase } from '../supabase/client.js';
 
-/** True when this manager turn will call streamManagedAgentTurn. */
-export function managerTurnNeedsSession(model: string, mode: ProviderMode): boolean {
-  if (mode !== 'mock') return false;
-  // Only the free rail hits the unsigned-web ai-proxy. Native ids stay on
-  // mock/scripted paths; paid OpenRouter ids are not offered unsigned.
-  return isOpenRouterFreeModel(model);
+/** No manager turn needs a session — Forge has no accounts. */
+export function managerTurnNeedsSession(_model: string, _mode: ProviderMode): boolean {
+  void _model;
+  void _mode;
+  return false;
 }
 
+/** Always true — there is no session to check. */
 export async function hasManagedSession(): Promise<boolean> {
-  try {
-    const { data } = await supabase.auth.getSession();
-    return Boolean(data.session?.access_token);
-  } catch {
-    return false;
-  }
+  return true;
 }
 
 /** Chat-bubble budget for a formatted manager error. 120 chars (the old
@@ -39,17 +30,14 @@ const STRIP = [
   /^Fehler:\s*/i,
   /^错误[：:]\s*/,
   /^エラー:\s*/i,
+  /^ForgeManager error:\s*/i,
   /^LazyManager error:\s*/i,
   /^ManagedUnavailableError:\s*/i,
 ];
 
-/** Innermost human message — strips nested Error:/LazyManager error: wrappers.
- *  Appends the error's diagnostic `code` (e.g. ManagedUnavailableError's
- *  `upstream_error_429` — the ai-proxy's real upstream status) when it is
- *  informative and not already present in the message text: "Erreur du
- *  fournisseur de modèle" alone hides a 429 rate-limit from a hard-down
- *  upstream, which is exactly the distinction a user needs to pick between
- *  "retry in a minute" and "this rail is dead". */
+/** Innermost human message — strips nested Error:/manager error: wrappers.
+ *  Appends the error's diagnostic `code` when it is informative and not
+ *  already present in the message text. */
 export function formatManagerUserError(err: unknown): string {
   const seen = new Set<unknown>();
   let current: unknown = err;
@@ -72,13 +60,10 @@ export function formatManagerUserError(err: unknown): string {
 }
 
 /** Appends the diagnostic code to the stripped message — with named
- *  translations for codes where the bare string is not actionable.
- *  2026-09-11: "Erreur du fournisseur de modèle (upstream_error_429)" told
- *  the user nothing — a shared-quota rate limit reads exactly like a dead
- *  upstream. Name the actual condition; keep the code for support. */
+ *  translations for codes where the bare string is not actionable. */
 function decorateWithDiagnosticCode(stripped: string, code: string | undefined): string {
   if (code === 'upstream_error_429') {
-    return 'Limite de débit atteinte côté fournisseur (quota partagé) — réessayez dans quelques instants ou changez de modèle (upstream_error_429)';
+    return 'Rate limit reached on the engine side — retry in a bit or switch engine (upstream_error_429)';
   }
   if (code && code !== 'managed_unavailable' && !stripped.includes(code)) {
     return `${stripped} (${code})`;

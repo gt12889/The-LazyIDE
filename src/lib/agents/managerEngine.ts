@@ -14,8 +14,8 @@
 import { getProviderMode, getDefaultModelIdForMode } from '../models/index.js';
 import type { ProviderMode } from '../models/index.js';
 import { ALL_MODELS } from '../models/registry.js';
-import { OPENROUTER_MODELS, DEFAULT_OPENROUTER_MODEL_ID, isOpenRouterFreeModel } from '../models/openrouterCatalog.js';
-import type { ModelTier } from '../models/openrouterCatalog.js';
+import { DEFAULT_LOCAL_MODEL_ID } from '../models/localProvider.js';
+import { devinModelInfos } from '../models/devinCatalog.js';
 import type { ModelEntitlements } from '../models/modelPickerOptions.js';
 import type { ManagerAction, ManagerEngineChoice, ManagerMessage, Mission, Effort } from './types.js';
 import type { StoredAgent } from './agentsStorage.js';
@@ -114,8 +114,6 @@ export type { MissionDetailOptions } from './formatMissionDetail.js';
 export {
   UnknownManagerModelIdError,
   resolveBareRailModelId,
-  findOpenRouterAliasHint,
-  findByokHomeHint,
   findAlternateRailMatches,
   resolveManagerModelId,
   nativeEngineMode,
@@ -123,51 +121,27 @@ export {
 export type { BareRailLookup } from './managerModelResolve.js';
 
 /** Hard cap on buildCompactModelCatalog's output — token efficiency is a
- *  core product value (see this task's own instructions): the full catalog
- *  is ~20 ids across ~11 providers, so a naive per-id listing would run
- *  several thousand characters every single turn. Grouping by ModelTier
- *  instead of provider keeps this well under budget with room for catalog
- *  growth. 2026-09-02: the catalog outgrew the original 600-char cap (the
- *  free tier gained z-ai/glm-5.2:free + nvidia/nemotron-3-ultra-550b-a55b:
- *  free), and a TRUNCATED id is actively harmful (the manager copies one
- *  verbatim into a modelId field), so the cap was raised to keep every id
- *  exact — revisit it the next time the catalog grows past this.
+ *  core product value: the catalog groups ids by rail instead of one line
+ *  per id-with-prose. A TRUNCATED id is actively harmful (the manager
+ *  copies one verbatim into a modelId field), so the cap is a pure safety
+ *  net (never observed to trigger against today's small catalog).
  *  Exported so the tests assert against the real value, never a drifted
  *  hardcoded copy. */
 export const MODEL_CATALOG_MAX_CHARS = 1000;
 
-const TIER_GROUP_LABEL: Record<ModelTier, string> = {
-  fast: 'fast',
-  balanced: 'balanced',
-  max: 'max-reasoning',
-  free: 'free',
-};
-
 /**
- * Build a compact listing of the FULL OpenRouter catalog for the manager's
- * dynamic context (see buildManagerDynamicContext's proModelCatalogBlock) —
- * injected ONLY when the Lazy Pro rail is actually usable this turn
- * (ManagerContext.proRailActive), since the CLI rail can never route to any
- * of these ids anyway (see UnknownManagerModelIdError's 'cli' branch).
- *
- * Grouped by ModelTier rather than one line per id-with-prose: a real,
- * existing catalog field that already doubles as a compact "specialty" —
- * fast = cheap/mechanical, balanced = default workhorse, max-reasoning =
- * hardest problems, free = zero-cost — shared across a whole group instead
- * of repeated per id, which is what keeps this under MODEL_CATALOG_MAX_CHARS
- * without truncating the id list itself (every id is kept EXACT and
- * complete — the manager must copy one verbatim into a `modelId` field, so
- * abbreviating an id here would make the catalog actively harmful). The
- * trailing slice is a pure safety net (never observed to trigger against
- * today's catalog) should the catalog grow before this cap is revisited.
+ * Build a compact listing of every model id the manager may target, for
+ * the manager's dynamic context — grouped by rail (local engine, native
+ * CLI ids, Devin ids). Every id is kept EXACT and complete — the manager
+ * must copy one verbatim into a `modelId` field, so abbreviating an id
+ * here would make the catalog actively harmful. The trailing slice is a
+ * pure safety net should the catalog grow before this cap is revisited.
  */
 export function buildCompactModelCatalog(): string {
-  const groups: Record<ModelTier, string[]> = { fast: [], balanced: [], max: [], free: [] };
-  for (const m of OPENROUTER_MODELS) groups[m.tier].push(m.id);
-  const lines = (Object.keys(TIER_GROUP_LABEL) as ModelTier[])
-    .filter((tier) => groups[tier].length > 0)
-    .map((tier) => `${TIER_GROUP_LABEL[tier]}: ${groups[tier].join(', ')}`);
-  const joined = lines.join('\n');
+  const local = `local: ${DEFAULT_LOCAL_MODEL_ID}`;
+  const native = `cli: ${ALL_MODELS.map((m) => m.id).join(', ')}`;
+  const devin = `devin: ${devinModelInfos().map((m) => m.id).join(', ')}`;
+  const joined = [local, native, devin].join('\n');
   return joined.length > MODEL_CATALOG_MAX_CHARS
     ? `${joined.slice(0, MODEL_CATALOG_MAX_CHARS - 1)}…`
     : joined;
@@ -192,29 +166,22 @@ const MANAGER_NATIVE_MODEL_ID = 'claude-sonnet-5';
  * auto-fix), where Haiku's cost-efficiency is the right call for
  * mechanical/well-specified work.
  *
- * On a fresh profile the manager used to start on Haiku — the catalog's
- * cheapest/weakest tier — which is a direct handicap for a role whose whole
- * job is planning and orchestration. Only the native-id branch's target
- * model changes here; managed/pro/codex are delegated to
- * getDefaultModelIdForMode UNCHANGED:
- *  - managed/pro -> DEFAULT_OPENROUTER_MODEL_ID (already Sonnet — no fix
- *    needed, and no risk of breaking the existing Pro-credits fallback).
+ * Only the native-id branch's target model changes here; every other mode
+ * is delegated to getDefaultModelIdForMode UNCHANGED:
  *  - codex       -> '' sentinel (Codex CLI picks its own default).
- *  - claude-code/live-key -> MANAGER_NATIVE_MODEL_ID (Sonnet) instead
+ *  - local       -> the bundled local default (Hermes 3).
+ *  - mock        -> the local default (an honest desktop handoff pick;
+ *    nothing runs in the browser anyway).
+ *  - claude-code/devin -> MANAGER_NATIVE_MODEL_ID (Sonnet) instead
  *    of DEFAULT_MODEL (Haiku).
- *  - mock (browser) -> first isFree OpenRouter id. Native Sonnet cannot
- *    run outside Tauri (measured 2026-08-28 LazyManager CLI error).
  *
  * Callers must still let a persisted user choice win over this default (see
  * agentsStore.tsx's loadManagerModel, which only falls back here when
  * nothing valid was ever explicitly selected).
  */
 export function getManagerDefaultModelId(mode: ProviderMode): string {
-  if (mode === 'managed' || mode === 'pro' || mode === 'codex' || mode === 'devin') {
+  if (mode === 'codex' || mode === 'devin' || mode === 'local' || mode === 'mock') {
     return getDefaultModelIdForMode(mode);
-  }
-  if (mode === 'mock') {
-    return OPENROUTER_MODELS.find((m) => m.isFree)?.id ?? DEFAULT_OPENROUTER_MODEL_ID;
   }
   return ALL_MODELS.find((m) => m.id === MANAGER_NATIVE_MODEL_ID)?.id ?? getDefaultModelIdForMode(mode);
 }
@@ -246,13 +213,13 @@ function planStepTier(model: string | undefined): PlanModelTier {
   return model === 'opus' ? 'opus' : model === 'sonnet' ? 'sonnet' : 'haiku';
 }
 
-/** True when a plan step targets a FREE OpenRouter model (ox alpha) — its
- *  whole plan contributes ZERO USD to the estimate (it is really free) and
- *  gets a duration hint (execution happens upstream, still wall-clock time),
- *  not a hard-coded paid-tier blank. Kept here so estimatePlanStepCostUsd
- *  and estimatePlanStepDurationMs agree on the free case. */
+/** True when a plan step targets the local engine (`local/…`) — its runs
+ *  contribute ZERO USD to the estimate (they really are free) and get a
+ *  duration hint (execution still takes wall-clock time), not a
+ *  hard-coded paid-tier blank. Kept here so estimatePlanStepCostUsd and
+ *  estimatePlanStepDurationMs agree on the free case. */
 function isFreePlanStep(model: string | undefined): boolean {
-  return isOpenRouterFreeModel(model);
+  return model?.startsWith('local/') ?? false;
 }
 
 const PLAN_TIER_BASE_COST_USD: Record<PlanModelTier, number> = { haiku: 0.5, sonnet: 1.5, opus: 3 };
@@ -505,16 +472,10 @@ export interface ManagerContext {
    */
   locale?: string;
   /**
-   * True when the Lazy Pro rail's managed credits are actually usable this
-   * turn (detectModelEntitlements().pro === 'active', modelPickerOptions.ts
-   * — the SAME primitive every model picker already uses, no new detection).
-   * Gates whether buildManagerDynamicContext injects the compact full
-   * OpenRouter catalog block (buildCompactModelCatalog) — the CLI-only rail
-   * can never route to any of those ids (see UnknownManagerModelIdError's
-   * 'cli' branch), so listing them there would cost tokens for zero benefit.
-   * Distinct from `entitlementsSummary` (a formatted status STRING for both
-   * rails) — this is a plain boolean the caller (agentsStore.tsx) already
-   * has on hand from the SAME detectModelEntitlements() call.
+   * Legacy field — the hosted model catalog is gone, so the engine catalog
+   * block (buildCompactModelCatalog) is now injected unconditionally (see
+   * buildManagerDynamicContext). Kept so older callers keep compiling;
+   * ignored.
    */
   proRailActive?: boolean;
   /**
@@ -608,29 +569,19 @@ export function formatCreditsSummary(snapshot: CreditsSnapshot | undefined): str
 
 /** Format a real ModelEntitlements snapshot (detectModelEntitlements(),
  *  modelPickerOptions.ts — the SAME primitive every model picker already
- *  uses, no new detection) into the compact two-line status embedded in the
+ *  uses, no new detection) into the compact status embedded in the
  *  manager's system prompt (buildManagerDynamicContext's entitlementsBlock).
- *  Deliberately terse (token cost, injected every turn) — the "both rails
- *  can stack, 0 Pro credits never blocks a CLI mission" EXPLANATION lives
- *  once in the static Rules section (buildManagerCorePrompt) instead of
- *  being repeated here per turn. `creditsRemainingCents` mirrors the SAME
- *  figure formatCreditsSummary reports (no second source of truth) — passed
- *  separately because ModelEntitlements itself only carries the tri-state
- *  'active'/'no-credits'/'inactive', not the amount. undefined only when no
- *  snapshot was supplied (a caller that deliberately opts out). */
+ *  Deliberately terse (token cost, injected every turn). */
 export function formatEntitlementsSummary(
   entitlements: ModelEntitlements | undefined,
-  creditsRemainingCents: number | undefined,
+  _creditsRemainingCents: number | undefined,
 ): string | undefined {
   if (!entitlements) return undefined;
-  const claudeLine = `- Claude subscription (CLI/BYOK): ${entitlements.claudeSub ? 'ready' : 'not detected'}`;
-  const proLine =
-    entitlements.pro === 'active'
-      ? `- Lazy Pro (managed credits): active, ${formatCredits(creditsRemainingCents ?? 0)} remaining`
-      : entitlements.pro === 'no-credits'
-        ? '- Lazy Pro (managed credits): active plan, 0 credits left'
-        : '- Lazy Pro (managed credits): no active plan';
-  return `${claudeLine}\n${proLine}`;
+  void _creditsRemainingCents;
+  const lines = [`- Claude subscription (CLI): ${entitlements.claudeSub ? 'ready' : 'not detected'}`];
+  if (entitlements.devin) lines.push('- Devin CLI: ready');
+  lines.push('- Local engine (Ollama): always available — start Ollama if a turn fails to connect');
+  return lines.join('\n');
 }
 
 /** Minimal shape formatBrainStatus needs from a real BrainInfo snapshot
@@ -705,7 +656,7 @@ export function buildManagerDynamicContext(ctx: ManagerContext): string {
   const tail = [
     presentSection(ctx.creditsSummary, (v) => `\n\n### Account & Credits (real, from the user's subscription)\n${v}`),
     presentSection(ctx.entitlementsSummary, (v) => `\n\n### Engines (real, live — both rails below are independent and can be active at once)\n${v}`),
-    presentSection(ctx.proRailActive ? buildCompactModelCatalog() : undefined, (v) => `\n\n### Pro Model Catalog (real, exact ids — set "modelId" on launch_mission/launch_best_of_n/create_loop/create_draft/spawn_submissions/generate_plan steps to target one precisely; plain tier hints still resolve within this same rail otherwise)\n${v}`),
+    presentSection(buildCompactModelCatalog(), (v) => `\n\n### Engine Model Catalog (real, exact ids — set "modelId" on launch_mission/launch_best_of_n/create_loop/create_draft/spawn_submissions/generate_plan steps to target one precisely; plain tier hints still resolve within the same rail otherwise)\n${v}`),
     presentSection(ctx.lazyBots ? formatLazyBotsContext(ctx.lazyBots) : undefined, (v) => `\n\n### LazyBots (real, saved Solari cloud bots — the ONLY valid "botId" values)\n${v}\n\nThis list is already grounded: to run one of these bots, emit run_lazybot with its exact botId (its name is accepted too) IN THE SAME REPLY as your announcement — never emit list_lazybots just to find an id that is already here, and never announce "je lance le bot" without the <lazy_actions> block.`),
     groundedResultBlock('Agent Canvas (real, live board state)', ctx.canvasDigest, 'This is the REAL current state of the Agent Canvas — the cockpit surface the user is looking at. Use real refs (e.g. "mission:M12", "draft:abc-123") from this digest when emitting canvas actions (chain_agents, launch_draft, focus_canvas, move_node, unchain, collapse_project) — never invent a ref that is not listed here. When the user asks "how many nodes/elements are on the canvas", answer with the digest\'s own "Canvas total" line (sums every kind: missions/loops + drafts + notes + routers + joins + terminals/previews + frames) — never the "Nodes (N)" line alone, which counts missions/loops only and will under-report what the user actually sees on the board.'),
     groundedResultBlock('Fleet Runtime (real, all projects)', ctx.fleetContext, 'This is the REAL runtime state across all open projects — use it when the user asks about the fleet, budgets, or cross-project work.'),

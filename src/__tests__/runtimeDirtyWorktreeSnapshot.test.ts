@@ -23,7 +23,6 @@ import type { evaluateMission } from '../lib/agents/evaluator';
 import type { GitFile, Git } from '../lib/platform';
 import { planAndActManaged } from '../lib/agents/managedAgent';
 import type { PlanAndActManagedOpts } from '../lib/agents/managedAgent';
-import { hasManagedCreditsActive } from '../lib/models/index';
 
 let invokeCalls: Array<{ cmd: string; args: Record<string, unknown> }> = [];
 
@@ -102,10 +101,10 @@ vi.mock('../lib/brain/context', () => ({
 }));
 
 vi.mock('../lib/models/index', () => ({
-  getProviderMode: vi.fn(() => 'native'),
-  hasManagedCreditsActive: vi.fn(() => false),
-  getProPlanState: vi.fn(() => ({ active: false, credits: 0 })),
+  getProviderMode: vi.fn(() => 'local'),
   isCliBackendAvailable: vi.fn(() => true),
+  createLocalAgentTurnStreamer: vi.fn(() => async function* () {}),
+  DEFAULT_LOCAL_MODEL_ID: 'local/hermes3',
 }));
 
 vi.mock('../lib/models/systemPrompts', () => ({ RECALL_TEACHING: '' }));
@@ -176,7 +175,6 @@ function setTauriRuntime(active: boolean): void {
 }
 
 const mockedPlanAndActManaged = planAndActManaged as ReturnType<typeof vi.fn>;
-const mockedHasManagedCreditsActive = hasManagedCreditsActive as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   invokeCalls = [];
@@ -190,7 +188,6 @@ beforeEach(() => {
   // existing native-path tests in this file never reach the managed engine,
   // so this only matters for the max-steps-graceful describe block below.
   mockedPlanAndActManaged.mockReset();
-  mockedHasManagedCreditsActive.mockReset().mockReturnValue(false);
   setTauriRuntime(true);
 });
 
@@ -284,12 +281,11 @@ describe('runMission — Step C: dirty worktree auto-commit before diff (M3 fore
   });
 });
 
-// ── Graceful max-steps/consecutive-failures fallthrough (2026-08-05 incident) ─
+// ── Graceful max-steps/consecutive-failures fallthrough ─
 //
-// A DeepSeek mission finished its real work (self-verified at step 58) then
-// hit the managed loop's step cap at step 60 while re-reading its own
-// git_diff. The old code treated ANY managedOutcome.failed (including
-// max_steps_exhausted/consecutive_failures) as an immediate, unconditional
+// A local-loop mission finished its real work then hit the loop's step cap
+// while re-reading its own git_diff. The old code treated ANY
+// managedOutcome.failed (including max_steps_exhausted/consecutive_failures) as an immediate, unconditional
 // cleanupWorktree() + status 'failed' — discarding a complete, reviewable
 // deliverable. runtime.ts now defers that verdict until Step C has computed
 // the real diff: an empty diff still fails and discards exactly as before;
@@ -297,7 +293,6 @@ describe('runMission — Step C: dirty worktree auto-commit before diff (M3 fore
 
 describe('runMission — graceful max-steps fallthrough (2026-08-05 incident)', () => {
   function mockManagedStepCapFailure(reason: string): void {
-    mockedHasManagedCreditsActive.mockReturnValue(true);
     mockedPlanAndActManaged.mockImplementation(async (opts: PlanAndActManagedOpts) => {
       opts.onOutcome?.({ type: 'failed', reason });
     });
@@ -308,7 +303,7 @@ describe('runMission — graceful max-steps fallthrough (2026-08-05 incident)', 
     mockManagedStepCapFailure('max_steps_exhausted');
     const onUpdate = vi.fn();
     const { runMission } = await import('../lib/agents/runtime');
-    const mission = baseMission({ contract: baseContract, model: 'deepseek/deepseek-v4-flash' });
+    const mission = baseMission({ contract: baseContract, model: 'local/hermes3' });
 
     await runMission(mission, '/fake/repo', { onUpdate, stopSignal: () => false });
 
@@ -331,7 +326,7 @@ describe('runMission — graceful max-steps fallthrough (2026-08-05 incident)', 
     mockManagedStepCapFailure('max_steps_exhausted');
     const onUpdate = vi.fn();
     const { runMission } = await import('../lib/agents/runtime');
-    const mission = baseMission({ contract: baseContract, model: 'deepseek/deepseek-v4-flash' });
+    const mission = baseMission({ contract: baseContract, model: 'local/hermes3' });
 
     await runMission(mission, '/fake/repo', { onUpdate, stopSignal: () => false });
 

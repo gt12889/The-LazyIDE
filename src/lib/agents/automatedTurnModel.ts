@@ -1,23 +1,18 @@
 /* automatedTurnModel — which model a BACKGROUND manager turn uses.
 
-   The LazyManager runs synthetic turns on the user's behalf: the resume
-   after an approval queue drains, proactive wake-ups, loop promotion /
-   demotion notices, fleet-hygiene alerts. Those were hard-wired to
-   `resolveManagerModelId('haiku', getProviderMode())` — the cheap tier of
-   the AMBIENT provider mode. On a desktop whose provider mode is "cli"
-   that is the native Claude CLI's haiku, whether or not the user's account
-   is entitled to it: live QA (2026-09-02) saw every approval followed by
-   "Your organization has disabled Claude subscription access for Claude
-   Code" in the chat, while the conversation itself ran fine on a BYOK
-   DeepSeek the user had picked.
+   The manager runs synthetic turns on the user's behalf: the resume after
+   an approval queue drains, proactive wake-ups, loop promotion / demotion
+   notices, fleet-hygiene alerts. Those were hard-wired to the cheap tier
+   of the AMBIENT provider mode — on a desktop whose provider mode is
+   "cli" that is the native CLI's haiku, whether or not the user's account
+   is entitled to it.
 
    Rule: stay cheap, but on the rail the user's OWN chat model actually
    runs on (state.managerModel — the model that just answered). The
-   "haiku" tier hint is applied within that rail's catalog when it has
-   tiers (CLI → claude-haiku-4-5, Pro → anthropic/claude-haiku-4.5) and
-   is a no-op on rails without them (BYOK, free). The old provider-mode
-   default remains the fallback when no chat model is known or its rail is
-   not ready right now. */
+   tier hint is applied within that rail's catalog when it has tiers
+   (CLI → claude-haiku-4-5) and is a no-op on rails without them
+   (local). The old provider-mode default remains the fallback when no
+   chat model is known or its rail is not ready right now. */
 
 import { applyTierHintWithinRail, classifyBotModelRail, isBotRailReady } from '../bots/botRunModel.js';
 import { getProviderMode } from '../models/index.js';

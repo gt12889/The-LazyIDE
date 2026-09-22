@@ -12,7 +12,6 @@ import type { CaptureEvent, InsightPayload } from '../platform/types.js';
 import { isNoisyCapture } from './captureNoise.js';
 import { enqueueCaptureRetry, isConflictError } from './captureQueue.js';
 import { resolveCaptureIdentity, withCaptureAuthor } from './captureAuthor.js';
-import { readActiveBrainConfig } from '../teams/activeBrainConfig.js';
 
 // ── Constants ─────────────────────────────────────────────────────
 
@@ -130,30 +129,14 @@ export async function _routeCapture(
 
 function dispatch(event: CaptureEvent): void {
   void (async () => {
-    const activeConfig = readActiveBrainConfig();
-    if (activeConfig?.role === 'viewer') {
-      console.debug('[brain/capture] capture skipped — viewer role');
-      return;
-    }
-
-    const { author, authorId, dept } = await resolveCaptureIdentity();
-    let stamped = withCaptureAuthor(event, author, authorId);
-
-    if (activeConfig && !stamped.orgId) {
-      stamped = { ...stamped, orgId: activeConfig.orgId };
-    }
-    if (dept && !stamped.dept) {
-      stamped = { ...stamped, dept };
-    }
+    const { author, authorId } = await resolveCaptureIdentity();
+    const stamped = withCaptureAuthor(event, author, authorId);
 
     const platform = getPlatform();
     platform.brain
       .capture(stamped)
       .then(() => {
         scheduleRebuild();
-        void import('../teams/syncDaemon.js').then((mod) => {
-          mod.schedulePostCapturePush();
-        }).catch(() => {});
       })
       .catch((err: unknown) => {
         if (isConflictError(err)) {

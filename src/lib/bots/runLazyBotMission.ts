@@ -1,21 +1,12 @@
-/* runLazyBotMission — the LazyBot runtime.
+/* runLazyBotMission — the bot runtime (Forge).
 
-   Agent ≠ LazyBot. A local code agent runs in a git worktree with the
-   repo's own tools (files, git, tests) through the CLI / Pro / BYOK rails
-   and ends in a diff to review and merge. A LazyBot is a Solari cloud
-   computer (browser / desktop VM / sandbox): its tools are cloud_browser_* /
-   cloud_desktop_* / cloud_sandbox_* (plus the three documented local file
-   tools to save a result), and its deliverable is a REPORT — the FINAL
-   answer — never a branch. So none of the code-agent lifecycle applies:
-   no worktree, no branch, no diff, no review/merge step, no automated
-   evaluation, no `claude -p` process. runMission (runtime.ts) diverts every
-   mission carrying `botId` here before touching any of that machinery.
-
-   What IS shared is planAndActManaged — Lazy's own ReAct loop, the only
-   place the cloud_* tools exist. The LLM behind that loop is whatever rail
-   the bot's model resolves to (botRunModel.ts): BYOK (the user's key), CLI
-   (claude/codex as a text backend — cliAgentTurnStreamer.ts), Pro (ai-proxy)
-   or the free tier. The rail changes the bot's brain, never its runtime.
+   Agent ≠ bot. A local code agent runs in a git worktree with the repo's
+   own tools (files, git, tests) through the CLI / local rails and ends in
+   a diff to review and merge. A bot run shares planAndActManaged — Forge's
+   own ReAct loop. The LLM behind that loop is whatever rail the bot's
+   model resolves to (botRunModel.ts): CLI (claude/codex as a text backend
+   — cliAgentTurnStreamer.ts) or the local Ollama engine. The rail changes
+   the bot's brain, never its runtime.
 */
 
 import type { Mission, ActionEvent, AgentMetrics, PlanStep } from '../agents/types.js';
@@ -35,13 +26,12 @@ import { recordBotCost } from './budgetGuard.js';
 import { finalizeBotRunLearning } from './botLearning.js';
 import { salvageReAct } from './salvageReAct.js';
 import { registerBotToolHandlers } from './botToolHandlers.js';
-import { openBotVmWindow } from '../solari/botVmWindows.js';
 import {
   classifyBotModelRail,
   describeBotRailNotReady,
   firstReadyRailDefault,
   isBotRailReady,
-  resolveBotByokStreamer,
+  resolveBotLocalStreamer,
   type BotModelRail,
 } from './botRunModel.js';
 
@@ -79,9 +69,9 @@ function label(t: TFunc | undefined, key: string, fallback: string, params?: Rec
 
 function initialBotSteps(t: TFunc | undefined): PlanStep[] {
   return [
-    { label: label(t, 'agents.lazybot.stepSession', 'Ordinateur cloud Solari'), state: 'todo' },
-    { label: label(t, 'agents.lazybot.stepRun', 'Exécution de la tâche'), state: 'todo' },
-    { label: label(t, 'agents.lazybot.stepReport', 'Rapport final'), state: 'todo' },
+    { label: label(t, 'agents.lazybot.stepSession', 'Bot session'), state: 'todo' },
+    { label: label(t, 'agents.lazybot.stepRun', 'Running task'), state: 'todo' },
+    { label: label(t, 'agents.lazybot.stepReport', 'Final report'), state: 'todo' },
   ];
 }
 
@@ -90,7 +80,7 @@ function initialBotSteps(t: TFunc | undefined): PlanStep[] {
 interface BotBrain {
   rail: BotModelRail;
   model: string;
-  /** undefined → the ai-proxy (Pro / free tier) inside planAndActManaged. */
+  /** undefined → the loop's default streamer for this rail. */
   streamTurn: AgentTurnStreamer | undefined;
 }
 
@@ -104,10 +94,8 @@ function wrapSalvage(stream: AgentTurnStreamer): AgentTurnStreamer {
 
 function brainForRail(rail: BotModelRail, id: string): BotBrain | { error: string } {
   if (!isBotRailReady(rail)) return { error: describeBotRailNotReady(rail, id) };
-  if (rail === 'byok') {
-    const streamTurn = resolveBotByokStreamer(id);
-    if (!streamTurn) return { error: describeBotRailNotReady('byok', id) };
-    return { rail, model: id, streamTurn: wrapSalvage(streamTurn) };
+  if (rail === 'local') {
+    return { rail, model: id, streamTurn: wrapSalvage(resolveBotLocalStreamer()) };
   }
   if (rail === 'cli') {
     return { rail, model: id, streamTurn: wrapSalvage(createCliAgentTurnStreamer(resolveCliEngineMode())) };
@@ -124,7 +112,7 @@ function chargeBot(mission: Mission, metrics: AgentMetrics | undefined): void {
 export function resolveBotBrain(model: string | undefined): BotBrain | { error: string } {
   const rail = classifyBotModelRail(model);
   if (!rail) {
-    return { error: `Aucun rail de modèle exécutable pour "${model ?? ''}" (clé BYOK, CLI, Lazy Pro ou modèle gratuit).` };
+    return { error: `No runnable engine rail for "${model ?? ''}" (CLI or local Ollama).` };
   }
   return brainForRail(rail, model ?? '');
 }
@@ -181,40 +169,25 @@ export async function runLazyBotMission(
   };
 
   const brainLabel = (b: BotBrain): string =>
-    label(t, 'agents.lazybot.brain', `LazyBot "${botName}" — cerveau ${b.rail} : ${b.model || 'modèle par défaut de la CLI'}`, {
+    label(t, 'agents.lazybot.brain', `Bot "${botName}" — brain ${b.rail}: ${b.model || 'CLI default model'}`, {
       bot: botName, rail: b.rail, model: b.model || 'CLI',
     });
 
   const brain = resolveBotBrain(mission.model);
   pushTimeline(
     'error' in brain
-      ? label(t, 'agents.lazybot.started', `LazyBot "${botName}" — démarrage…`, { bot: botName })
+      ? label(t, 'agents.lazybot.started', `Bot "${botName}" — starting…`, { bot: botName })
       : brainLabel(brain),
     false,
   );
-  pushTimeline(label(t, 'agents.lazybot.openingSolari', 'Ordinateur cloud Solari — ouverture de session…'), true);
-
-  // Solari gate (fail-fast): a LazyBot IS a Solari cloud computer — without
-  // a configured key every cloud_* tool would error one call at a time and
-  // the mission would die mid-run. Fail BEFORE patching 'running' below.
-  const { isSolariConfigured } = await import('../solari/solariClient.js');
-  if (!(await isSolariConfigured().catch(() => false))) {
-    const reason = label(
-      t,
-      'agents.lazybot.solariMissing',
-      'Clé Solari absente — configure-la dans Réglages > Solari puis relance le bot.',
-    );
-    emitEvent({ type: 'mission.failed', tsMs: Date.now(), projectId, missionId: mission.id, actor: 'system', payload: { reason: 'solari_not_configured' } });
-    fail(reason, 'solari_not_configured');
-    return;
-  }
+  pushTimeline(label(t, 'agents.lazybot.starting', 'Starting bot run…'), true);
 
   patch({
     status: 'running',
     progress: 0,
     planSteps: steps.map((s) => ({ ...s })),
     actionTimeline: [...timeline],
-    liveAction: label(t, 'agents.lazybot.openingSolari', 'Ordinateur cloud Solari — ouverture de session…'),
+    liveAction: label(t, 'agents.lazybot.starting', 'Starting bot run…'),
   });
   emitEvent({
     type: 'mission.started',
@@ -230,10 +203,9 @@ export async function runLazyBotMission(
     fail(brain.error, 'bot_rail_unavailable');
     return;
   }
-  if (mission.botId) openBotVmWindow(mission.botId);
   if (!mission.agentSystemPrompt) {
     emitEvent({ type: 'mission.failed', tsMs: Date.now(), projectId, missionId: mission.id, actor: 'system', payload: { reason: 'bot_persona_missing' } });
-    fail(label(t, 'agents.lazybot.personaMissing', 'Persona du LazyBot absente — relance le bot depuis sa fiche.'), 'bot_persona_missing');
+    fail(label(t, 'agents.lazybot.personaMissing', 'Bot persona missing — relaunch the bot from its card.'), 'bot_persona_missing');
     return;
   }
   if (stopSignal()) {
@@ -302,8 +274,8 @@ export async function runLazyBotMission(
 
   await runAttempt(brain);
 
-  // Brain failover chain (C85): walk every other READY rail until one works
-  // or none remain. Solari runtime/tools stay the same — only the brain changes.
+  // Brain failover chain: walk every other READY rail until one works
+  // or none remain. Only the brain changes.
   const interrupted = (): boolean => stopSignal() || signal?.aborted === true || budgetExceeded || durationExceeded;
   const failedRails = new Set<BotModelRail>([brain.rail]);
   while (!interrupted() && isBrainFailure(managedOutcome.failed, finalMetrics)) {

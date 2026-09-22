@@ -54,11 +54,6 @@ import type { FleetMission, FleetProject } from '../../../lib/agents/fleetMissio
 import type { Mission } from '../../../lib/agents/types';
 import { projectIdFromRoot } from '../../../lib/journal/projectId';
 import { emit, on } from '../../../lib/bus';
-import { PresenceOverlay } from '../../../lib/collab/PresenceOverlay';
-import { CanvasLiveSync } from '../../../lib/collab/CanvasLiveSync';
-import { CollabProvider, useCollab } from '../../../lib/collab/CollabContext';
-import { mergeRemoteFleet } from '../../../lib/collab/mergeRemoteFleet';
-import { buildSyntheticFleet } from '../../../lib/collab/syntheticFleet';
 import { bumpRenderCount } from '../../../lib/perf/renderCounters';
 import { generateCanvasId } from './canvasIds';
 import { validateChain } from './chainValidation';
@@ -286,11 +281,7 @@ export interface CanvasViewProps {
 // useFleetMissions' ~2.5s poll) gets a genuinely new array reference on
 // every poll tick regardless of memo.
 function CanvasViewImpl(props: CanvasViewProps) {
-  return (
-    <CollabProvider enabled>
-      <CanvasViewTree {...props} />
-    </CollabProvider>
-  );
+  return <CanvasViewTree {...props} />;
 }
 
 function CanvasViewTree({
@@ -310,14 +301,8 @@ function CanvasViewTree({
   const { toast } = useToast();
   const { openProjects, activeProjectId, openProject, projectsHydrated, platform } = useAppContext();
   const activeMissions = useAgentsStoreMissionsOptional() ?? EMPTY_MISSIONS;
-  const collab = useCollab();
-  const fleetProjects = useMemo(() => {
-    // Spectator mode: no local projects but remote deltas exist → synthetic fleet
-    if (projects.length === 0 && collab.remoteDeltasByMission.size > 0) {
-      return buildSyntheticFleet(collab.remoteDeltasByMission, collab.self?.userId ?? null);
-    }
-    return mergeRemoteFleet(projects, collab.remoteDeltasByMission, { selfUserId: collab.self?.userId ?? null });
-  }, [projects, collab.remoteDeltasByMission, collab.self?.userId]);
+  // Forge is single-user: the fleet is exactly the local projects.
+  const fleetProjects = projects;
 
   const activeRoot = useMemo(
     () => openProjects.find((p) => p.id === activeProjectId)?.root ?? null,
@@ -587,10 +572,9 @@ function CanvasViewTree({
         replay.selectMission(parsed?.kind === 'mission' ? parsed.id : null);
         return;
       }
-      collab.reportFocus(node.id);
       editing.handleNodeClick(event, node);
     },
-    [replay, editing, collab],
+    [replay, editing],
   );
 
   /**
@@ -1839,13 +1823,6 @@ function CanvasViewTree({
               labels at any dezoom (see lod.ts's header). Renders nothing;
               broadcasts the live zoom as CSS vars onto canvasContainerRef. */}
           <CanvasLodBroadcaster containerRef={canvasContainerRef} />
-          {/* Multiplayer presence (spec 2c) — self-contained, no props;
-              renders nothing solo/no-org (PresenceOverlay.tsx's own doc
-              comment + PresenceOverlay.test.tsx). */}
-          <PresenceOverlay />
-          {/* Live co-editing (canvas ops over the same Realtime channel) —
-              renders nothing, no-op for solo/no-org. */}
-          <CanvasLiveSync />
           {/* Controls hidden — CanvasToolbar replaces the default RF
               zoom/fit control cluster (spec §5). */}
           <CanvasToolbar

@@ -1,81 +1,32 @@
-/* SettingsSpace — Modèles + Réglages (tabs).
-   BYOK keys persisted to localStorage only, never sent anywhere.
+/* SettingsSpace — Models + Settings (tabs).
+   Forge: local-first. Models tab offers the local Ollama engine + CLI
+   tools; there are no keys, accounts, or hosted rails.
 */
 
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useI18n } from '../i18n';
 import { useUpdateStore } from '../lib/updateStore';
-import { DEFAULT_MODEL } from '../lib/models/registry';
-import {
-  BYOK_PROVIDER_DEFS,
-  saveByokKey,
-  saveByokBaseUrl,
-  saveByokModel,
-  loadByokBaseUrl,
-  loadByokModel,
-  loadByokKey,
-} from '../lib/models/byokProviders';
-import type { ByokProviderDef } from '../lib/models/byokProviders';
-import type { ByokProvider } from '../lib/models/byokProviders';
-import type { ModelInfo } from '../lib/models/types';
 import { getProviderMode, loadAccessSettings, saveAccessSettings } from '../lib/models';
 import type { AccessSettings, AccessMode, CliTool } from '../lib/models';
-import { loadVersionTelemetryEnabled, saveVersionTelemetryEnabled } from '../lib/billing/telemetryPrefs';
 import { useToastSafe } from '../components/ui/Toast';
-import { classifyMissionModel } from '../lib/agents/runtime';
 
 import { HealthPanel } from '../components/settings/HealthPanel';
 import { MemoryPanel } from '../components/settings/MemoryPanel';
 import { AgentsPanel } from '../components/settings/AgentsPanel';
-import { SolariPanel } from '../components/settings/SolariPanel';
 import { useAgentsStoreMissionsOptional } from '../components/agents/agentsStore';
 import { ModelsAssistantPanel } from '../components/settings/ModelsAssistantPanel';
 import { ProvidersPanel } from '../components/settings/ProvidersPanel';
 import { resetOnboarding } from '../components/onboarding/useOnboarding';
-import { AccountTab } from '../components/settings/AccountTab';
 import { ACCENT_PRESETS, loadStoredAccent, setAccent } from '../lib/theme/accentTheme';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type SettingsTab = 'models' | 'account' | 'appearance' | 'general' | 'memory' | 'agents' | 'health' | 'solari';
+export type SettingsTab = 'models' | 'appearance' | 'general' | 'memory' | 'agents' | 'health';
 
 interface SettingsSpaceProps {
   initialTab?: SettingsTab;
-  /** Deep-link into AuthScreen's Sign in / Create account control. */
-  initialAuthMode?: 'signin' | 'signup';
 }
-
-interface ProviderSectionProps {
-  def: ByokProviderDef;
-  models: ModelInfo[];
-  defaultModelId: string;
-  onSelectDefault: (id: string) => void;
-  apiKey: string;
-  onApiKeyChange: (key: string) => void;
-  /** Effective base URL (override or provider default). */
-  baseUrl: string;
-  onBaseUrlChange: (url: string) => void;
-  /** Model override ('' = provider default). */
-  modelOverride: string;
-  onModelOverrideChange: (model: string) => void;
-  /** True when this provider is the ACTIVE BYOK engine. */
-  active: boolean;
-  onActivate: () => void;
-}
-
-// ── Constants ──────────────────────────────────────────────────────
-
-const PROVIDER_COLOR: Record<string, string> = {
-  anthropic: '#A78BFF',
-  openai:    '#74C0FC',
-  google:    '#F6A945',
-  deepseek:  '#4D6BFE',
-  openrouter: '#F6A945',
-  xai:       '#111111',
-  groq:      '#F55036',
-  mistral:   '#F7A600',
-};
 
 // ── Sub-components ──────────────────────────────────────────────────
 
@@ -83,13 +34,11 @@ function TabBar({ active, onChange }: { active: SettingsTab; onChange: (t: Setti
   const { t } = useI18n();
   const TABS: Array<{ id: SettingsTab; labelKey: string }> = [
     { id: 'models',     labelKey: 'settings.tab.models' },
-    { id: 'account',    labelKey: 'settings.tab.account' },
     { id: 'memory',     labelKey: 'settings.tab.memory' },
     { id: 'agents',     labelKey: 'settings.tab.agents' },
     { id: 'appearance', labelKey: 'settings.tab.appearance' },
     { id: 'general',    labelKey: 'settings.tab.general' },
     { id: 'health',     labelKey: 'settings.tab.health' },
-    { id: 'solari',     labelKey: 'settings.tab.solari' },
   ];
   return (
     <div style={{
@@ -129,225 +78,8 @@ function TabBar({ active, onChange }: { active: SettingsTab; onChange: (t: Setti
   );
 }
 
-function ProviderSection({ def, models, defaultModelId, onSelectDefault, apiKey, onApiKeyChange, baseUrl, onBaseUrlChange, modelOverride, onModelOverrideChange, active, onActivate }: ProviderSectionProps) {
-  const { t } = useI18n();
-  const [showKey, setShowKey] = useState(false);
 
-  return (
-    <div style={{
-      background: 'var(--color-panel-2)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 10,
-      overflow: 'hidden',
-      marginBottom: 16,
-    }}>
-      {/* Provider header */}
-      <div style={{
-        padding: '12px 16px',
-        borderBottom: '1px solid var(--color-border)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-      }}>
-        <span style={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: PROVIDER_COLOR[def.id] ?? '#888',
-          flexShrink: 0,
-        }} />
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>
-          {def.label}
-        </span>
-        {active && (
-          <span style={{
-            fontSize: 9,
-            fontWeight: 700,
-            color: '#4ADE80',
-            background: 'rgba(74,222,128,0.12)',
-            border: '1px solid rgba(74,222,128,0.28)',
-            borderRadius: 3,
-            padding: '1px 6px',
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-          }}>
-            {t('settings.providers.activeBadge')}
-          </span>
-        )}
-        <button
-          onClick={onActivate}
-          data-testid={`byok-activate-${def.id}`}
-          style={{
-            marginLeft: 'auto',
-            padding: '4px 10px',
-            borderRadius: 6,
-            border: active
-              ? '1px solid rgba(74,222,128,0.35)'
-              : '1px solid var(--color-accent-border)',
-            background: active ? 'rgba(74,222,128,0.1)' : 'var(--color-accent-soft)',
-            color: active ? '#4ADE80' : 'var(--color-accent-light)',
-            fontSize: 11,
-            fontWeight: 600,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
-          {active ? t('settings.provider.activeLabel') : t('settings.provider.useLabel')}
-        </button>
-      </div>
-
-      <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {/* Model list */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {models.map(model => (
-            <label
-              key={model.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                cursor: 'pointer',
-                padding: '6px 8px',
-                borderRadius: 6,
-                background: defaultModelId === model.id ? 'var(--color-accent-soft)' : 'transparent',
-                border: `1px solid ${defaultModelId === model.id ? 'var(--color-accent-border)' : 'transparent'}`,
-              }}
-            >
-              <input
-                type="radio"
-                name="default-model"
-                value={model.id}
-                checked={defaultModelId === model.id}
-                onChange={() => onSelectDefault(model.id)}
-                style={{ accentColor: 'var(--color-accent)', cursor: 'pointer' }}
-              />
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text)' }}>{model.label}</div>
-                {model.description && (
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{model.description}</div>
-                )}
-              </div>
-              {defaultModelId === model.id && (
-                <span style={{
-                  marginLeft: 'auto',
-                  fontSize: 10,
-                  color: 'var(--color-accent-light)',
-                  background: 'var(--color-accent-soft)',
-                  borderRadius: 4,
-                  padding: '2px 7px',
-                  fontWeight: 600,
-                }}>
-                  {t('settings.default')}
-                </span>
-              )}
-            </label>
-          ))}
-        </div>
-
-        {/* BYOK key input */}
-        <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10 }}>
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 6 }}>
-            {t('settings.provider.apiKeyLabel')}
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={e => onApiKeyChange(e.target.value)}
-              placeholder={t('settings.provider.apiKeyPlaceholder', { provider: def.label })}
-              style={{
-                flex: 1,
-                background: 'var(--color-panel)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 6,
-                padding: '7px 10px',
-                fontSize: 12,
-                color: 'var(--color-text)',
-                fontFamily: 'var(--font-mono)',
-                outline: 'none',
-              }}
-              onFocus={e => { (e.target as HTMLInputElement).style.borderColor = 'var(--color-accent-border)'; }}
-              onBlur={e => {
-                (e.target as HTMLInputElement).style.borderColor = 'var(--color-border)';
-                saveByokKey(def.id, apiKey);
-              }}
-            />
-            <button
-              onClick={() => setShowKey(s => !s)}
-              style={{
-                padding: '7px 10px',
-                background: 'var(--color-panel)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 6,
-                color: 'var(--color-text-muted)',
-                cursor: 'pointer',
-                fontSize: 12,
-                fontFamily: 'inherit',
-              }}
-            >
-              {showKey ? t('settings.provider.hideKey') : t('settings.provider.showKey')}
-            </button>
-          </div>
-        </div>
-
-        {/* Base URL — pre-filled with the provider default; override for
-            gateways/proxies (e.g. an Anthropic-compatible DeepSeek endpoint). */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-            {t('settings.provider.baseUrlLabel')}
-          </div>
-          <input
-            type="text"
-            value={baseUrl}
-            onChange={e => onBaseUrlChange(e.target.value)}
-            onBlur={e => saveByokBaseUrl(def.id, e.target.value)}
-            placeholder={def.defaultBaseUrl}
-            style={{
-              background: 'var(--color-panel)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 6,
-              padding: '7px 10px',
-              fontSize: 12,
-              color: 'var(--color-text)',
-              fontFamily: 'var(--font-mono)',
-              outline: 'none',
-            }}
-          />
-        </div>
-
-        {/* Model override — empty = provider default (deepseek-chat, ...). */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-            {t('settings.provider.modelLabel')}
-          </div>
-          <input
-            type="text"
-            list={`byok-models-${def.id}`}
-            value={modelOverride}
-            onChange={e => onModelOverrideChange(e.target.value)}
-            onBlur={e => saveByokModel(def.id, e.target.value)}
-            placeholder={def.defaultModel}
-            style={{
-              background: 'var(--color-panel)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 6,
-              padding: '7px 10px',
-              fontSize: 12,
-              color: 'var(--color-text)',
-              fontFamily: 'var(--font-mono)',
-              outline: 'none',
-            }}
-          />
-          <datalist id={`byok-models-${def.id}`}>
-            {def.models.map(m => <option key={m.id} value={m.id} />)}
-          </datalist>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Access Mode Section (3-mode selector) ──────────────────────────
+// ── Access Mode Section (2-mode selector: local / CLI) ─────────────
 
 interface CliStatus {
   claude: boolean | null;
@@ -379,48 +111,29 @@ function AccessModeSection({ settings, onChange }: {
   const { t } = useI18n();
   const [cliStatus, setCliStatus] = useState<CliStatus>({ claude: null, codex: null, devin: null, devinAuthed: null });
   const cliTool = settings.cliTool ?? 'claude';
-  // Money incident (2026-08-14) — switching AWAY from the Pro rail here only
-  // ever affects the manager's own next turn and any NEW mission launched
-  // after this click: a mission whose loop is already running has its model
-  // id resolved once, at launch, into a closure (managedAgent.ts/runtime.ts)
-  // that never re-reads settings mid-run — see runMission's own doc comment.
-  // That is defensible (an in-flight run cannot be silently re-pointed at a
-  // different provider without losing its conversation state), but it must
-  // never be SILENT: the "Abonnement (CLI d'agent)" card's own copy promises
-  // "aucun coût Lazy" the instant it reads ACTIF, which is only true for
-  // missions started AFTER this click. agentsStoreOptional/toastSafe degrade
-  // to "nothing to warn about"/no-op outside their providers (defensive only
-  // — the real app always wraps SettingsSpace in both, see
-  // useRunningAgentCount's own doc comment for the identical pattern).
+  // Switching rails here only ever affects NEW missions launched after
+  // this click: a mission whose loop is already running has its model id
+  // resolved once, at launch, into a closure (managedAgent.ts/runtime.ts)
+  // that never re-reads settings mid-run — see runMission's own doc
+  // comment. Warn instead of silently stranding in-flight runs.
   const railSwitchMissions = useAgentsStoreMissionsOptional();
   const warnOnRailSwitch = useToastSafe();
-  function runningManagedMissionCount(): number {
-    if (!railSwitchMissions) return 0;
-    return railSwitchMissions.filter(
-      (m) => m.status === 'running' && classifyMissionModel(m.model) === 'managed',
-    ).length;
-  }
-  function warnIfMissionsStayOnProRail(nextMode: AccessMode): void {
-    if (nextMode === 'pro') return; // switching TO Pro never strands anything
-    const n = runningManagedMissionCount();
+  function warnIfMissionsStayOnOldRail(): void {
+    const n = railSwitchMissions?.filter((m) => m.status === 'running').length ?? 0;
     if (n > 0) warnOnRailSwitch(t('settings.access.inFlightContinueWarning', { count: n }), 'warning');
   }
 
   // When the user has never explicitly picked a backend (settings.accessMode
-  // is undefined), getProviderMode() still auto-routes to managed/Pro
-  // whenever a subscription is active (see index.ts's getProviderMode doc
-  // comment: "Auto-detect: managed subscription takes priority"). Without
-  // this, the three cards below would all render unselected even while Pro
-  // is the engine actually running — the owner's exact complaint ("is there
-  // a button to turn Pro off?" starts with "can I even SEE it's on?"). This
-  // only affects which card is highlighted; an explicit click still persists
-  // a real accessMode via onChange/saveAccessSettings same as before.
+  // is undefined), getProviderMode() still auto-routes (CLI first, then
+  // local — see index.ts's getProviderMode doc comment). Without this, both
+  // cards below would render unselected even while an engine is actually
+  // running. This only affects which card is highlighted; an explicit click
+  // still persists a real accessMode via onChange/saveAccessSettings.
   const isAuto = settings.accessMode == null;
   const autoEquivalent: AccessMode | null = (() => {
     if (!isAuto) return null;
     const live = getProviderMode();
-    if (live === 'managed' || live === 'pro') return 'pro';
-    if (live === 'live-key') return 'byok';
+    if (live === 'local') return 'local';
     if (live === 'claude-code' || live === 'codex' || live === 'devin') return 'cli';
     return null;
   })();
@@ -460,12 +173,12 @@ function AccessModeSection({ settings, onChange }: {
   };
 
   function selectMode(m: AccessMode) {
-    warnIfMissionsStayOnProRail(m);
+    warnIfMissionsStayOnOldRail();
     onChange({ ...settings, accessMode: m });
   }
 
   function selectCliTool(tool: CliTool) {
-    warnIfMissionsStayOnProRail('cli');
+    warnIfMissionsStayOnOldRail();
     onChange({ ...settings, accessMode: 'cli', cliTool: tool });
   }
 
@@ -614,11 +327,11 @@ function AccessModeSection({ settings, onChange }: {
         </div>
       </div>
 
-      {/* ── Mode 2: BYOK ── */}
+      {/* ── Mode 2: Local engine (Ollama / LM Studio) ── */}
       <div
-        onClick={() => selectMode('byok')}
+        onClick={() => selectMode('local')}
         style={{
-          ...(mode === 'byok' ? activeStyle : inactiveStyle),
+          ...(mode === 'local' ? activeStyle : inactiveStyle),
           borderRadius: 10,
           padding: '12px 16px',
           cursor: 'pointer',
@@ -629,21 +342,21 @@ function AccessModeSection({ settings, onChange }: {
           <input
             type="radio"
             name="access-mode"
-            checked={mode === 'byok'}
-            onChange={() => selectMode('byok')}
+            checked={mode === 'local'}
+            onChange={() => selectMode('local')}
             style={{ accentColor: 'var(--color-accent)', cursor: 'pointer' }}
           />
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>
-            {t('settings.access.byok.title')}
+            {t('settings.access.local.title')}
           </span>
-          {mode === 'byok' && (
+          {mode === 'local' && (
             <span style={{
               marginLeft: 'auto',
               fontSize: 10,
               fontWeight: 600,
-              color: '#74C0FC',
-              background: 'rgba(116,192,252,0.1)',
-              border: '1px solid rgba(116,192,252,0.25)',
+              color: '#66E27A',
+              background: 'rgba(102,226,122,0.1)',
+              border: '1px solid rgba(102,226,122,0.25)',
               borderRadius: 4,
               padding: '1px 7px',
               textTransform: 'uppercase',
@@ -652,49 +365,7 @@ function AccessModeSection({ settings, onChange }: {
           )}
         </div>
         <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6, paddingLeft: 26 }}>
-          {t('settings.access.byok.desc')}
-        </div>
-      </div>
-
-      {/* ── Mode 3: Pro (placeholder) ── */}
-      <div
-        onClick={() => selectMode('pro')}
-        style={{
-          ...(mode === 'pro' ? activeStyle : inactiveStyle),
-          borderRadius: 10,
-          padding: '12px 16px',
-          cursor: 'pointer',
-          transition: 'background 0.12s',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <input
-            type="radio"
-            name="access-mode"
-            checked={mode === 'pro'}
-            onChange={() => selectMode('pro')}
-            style={{ accentColor: 'var(--color-accent)', cursor: 'pointer' }}
-          />
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>
-            {t('settings.access.pro.title')}
-          </span>
-          {mode === 'pro' && (
-            <span style={{
-              marginLeft: 'auto',
-              fontSize: 10,
-              fontWeight: 600,
-              color: '#A78BFF',
-              background: 'rgba(167,139,255,0.1)',
-              border: '1px solid rgba(167,139,255,0.25)',
-              borderRadius: 4,
-              padding: '1px 7px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-            }}>{activeLabel}</span>
-          )}
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6, paddingLeft: 26 }}>
-          {t('settings.access.pro.desc')}
+          {t('settings.access.local.desc')}
         </div>
       </div>
     </div>
@@ -722,20 +393,10 @@ function ActiveEngineInfo() {
       detail: t('settings.engine.devin.detail'),
       color:  '#2DD4BF',
     },
-    'live-key': {
-      label:  t('settings.engine.liveKey'),
-      detail: t('settings.engine.liveKey.detail'),
-      color:  '#74C0FC',
-    },
-    'managed': {
-      label:  t('settings.engine.managed'),
-      detail: t('settings.engine.managed.detail'),
-      color:  '#A78BFF',
-    },
-    'pro': {
-      label:  t('settings.engine.pro'),
-      detail: t('settings.engine.pro.detail'),
-      color:  '#F6A945',
+    'local': {
+      label:  t('settings.engine.local'),
+      detail: t('settings.engine.local.detail'),
+      color:  '#66E27A',
     },
     'mock': {
       label:  t('settings.engine.mock'),
@@ -767,44 +428,11 @@ function ActiveEngineInfo() {
 
 function ModelsTab() {
   const { t } = useI18n();
-  const [defaultModelId, setDefaultModelId] = useState<string>(DEFAULT_MODEL.id);
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    for (const def of BYOK_PROVIDER_DEFS) init[def.id] = loadByokKey(def.id);
-    return init;
-  });
-  const [baseUrls, setBaseUrls] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    for (const def of BYOK_PROVIDER_DEFS) init[def.id] = loadByokBaseUrl(def.id);
-    return init;
-  });
-  const [modelOverrides, setModelOverrides] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    for (const def of BYOK_PROVIDER_DEFS) init[def.id] = loadByokModel(def.id);
-    return init;
-  });
   const [accessSettings, setAccessSettings] = useState<AccessSettings>(() => loadAccessSettings());
-
-  function handleApiKeyChange(provider: ByokProvider, key: string) {
-    setApiKeys(prev => ({ ...prev, [provider]: key }));
-    saveByokKey(provider, key);
-  }
-
-  function handleBaseUrlChange(provider: ByokProvider, url: string) {
-    setBaseUrls(prev => ({ ...prev, [provider]: url }));
-  }
-
-  function handleModelOverrideChange(provider: ByokProvider, model: string) {
-    setModelOverrides(prev => ({ ...prev, [provider]: model }));
-  }
 
   function handleAccessChange(next: AccessSettings) {
     setAccessSettings(next);
     saveAccessSettings(next);
-  }
-
-  function activateByokProvider(provider: ByokProvider) {
-    handleAccessChange({ ...accessSettings, accessMode: 'byok', byokProvider: provider });
   }
 
   return (
@@ -812,7 +440,7 @@ function ModelsTab() {
       {/* Active engine summary */}
       <ActiveEngineInfo />
 
-      {/* 3-mode access selector */}
+      {/* 2-mode access selector */}
       <AccessModeSection settings={accessSettings} onChange={handleAccessChange} />
 
       {/* Per-backend readiness */}
@@ -828,11 +456,11 @@ function ModelsTab() {
         <ModelsAssistantPanel />
       </div>
 
-      {/* BYOK note */}
+      {/* Local-first note */}
       <div style={{
         padding: '10px 14px',
-        background: 'rgba(124,92,255,0.06)',
-        border: '1px solid rgba(124,92,255,0.2)',
+        background: 'rgba(102,226,122,0.06)',
+        border: '1px solid rgba(102,226,122,0.2)',
         borderRadius: 8,
         fontSize: 12,
         color: 'var(--color-accent-pale)',
@@ -842,32 +470,8 @@ function ModelsTab() {
         gap: 8,
       }}>
         <span style={{ fontSize: 14 }}>&#128274;</span>
-        {t('settings.models.byokLocalNote')}
+        {t('settings.models.localNote')}
       </div>
-
-      {/* One section per BYOK provider — key + base URL + model + activate */}
-      {BYOK_PROVIDER_DEFS.map(def => (
-        <ProviderSection
-          key={def.id}
-          def={def}
-          models={def.models.map(m => ({
-            id: m.id,
-            label: m.label,
-            provider: def.id,
-            description: def.label,
-          }))}
-          defaultModelId={defaultModelId}
-          onSelectDefault={setDefaultModelId}
-          apiKey={apiKeys[def.id] ?? ''}
-          onApiKeyChange={key => handleApiKeyChange(def.id, key)}
-          baseUrl={baseUrls[def.id] ?? ''}
-          onBaseUrlChange={url => handleBaseUrlChange(def.id, url)}
-          modelOverride={modelOverrides[def.id] ?? ''}
-          onModelOverrideChange={model => handleModelOverrideChange(def.id, model)}
-          active={accessSettings.accessMode === 'byok' && accessSettings.byokProvider === def.id}
-          onActivate={() => activateByokProvider(def.id)}
-        />
-      ))}
     </div>
   );
 }
@@ -1255,12 +859,22 @@ function UpdateSection() {
 
 function TelemetrySection() {
   const { t } = useI18n();
-  const [enabled, setEnabled] = useState<boolean>(loadVersionTelemetryEnabled);
+  const [enabled, setEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('forge.versionTelemetry') !== '0';
+    } catch {
+      return true;
+    }
+  });
 
   function toggle() {
     const next = !enabled;
     setEnabled(next);
-    saveVersionTelemetryEnabled(next);
+    try {
+      localStorage.setItem('forge.versionTelemetry', next ? '1' : '0');
+    } catch {
+      // ignore
+    }
   }
 
   return (
@@ -1528,7 +1142,7 @@ function GeneralTab() {
 
 // ── SettingsSpace ──────────────────────────────────────────────────
 
-export function SettingsSpace({ initialTab = 'general', initialAuthMode }: SettingsSpaceProps) {
+export function SettingsSpace({ initialTab = 'general' }: SettingsSpaceProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const { t } = useI18n();
 
@@ -1539,13 +1153,11 @@ export function SettingsSpace({ initialTab = 'general', initialAuthMode }: Setti
   function renderTab() {
     switch (activeTab) {
       case 'models':     return <ModelsTab />;
-      case 'account':    return <AccountTab initialAuthMode={initialAuthMode} />;
       case 'memory':     return <MemoryPanel />;
       case 'agents':     return <AgentsPanel />;
       case 'appearance': return <AppearanceTab />;
       case 'general':    return <GeneralTab />;
       case 'health':     return <HealthPanel />;
-      case 'solari':     return <SolariPanel />;
     }
   }
 

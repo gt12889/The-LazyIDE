@@ -1346,6 +1346,8 @@ export const de: TranslationDict = {
   'settings.access.cli.devinDesc': 'Cognition — SWE-2 und der Modellkatalog deines Kontos via ACP',
   'settings.access.cli.devinNotLoggedIn': 'Erkannt, aber nicht angemeldet — führe "devin auth login" in einem Terminal aus und starte neu.',
   'settings.access.cli.desc': 'Verwende dein eigenes CLI-Abonnement — kein API-Schlüssel erforderlich, keine Lazy-Kosten.',
+  'settings.access.local.title': 'Lokale Engine (Ollama / LM Studio)',
+  'settings.access.local.desc': 'Null Kosten, kein Konto — Hermes 3 läuft auf deinem eigenen Rechner.',
   'settings.access.cli.claudeDesc': 'Anthropic — Standardmodell: Haiku',
   'settings.access.cli.codexDesc': 'OpenAI codex-cli — benötigt ein OpenAI-Konto',
   'settings.access.byok.title': 'API-Schlüssel (BYOK)',
@@ -1358,11 +1360,16 @@ export const de: TranslationDict = {
   'settings.engine.pro': 'Pro (von Lazy verwaltet) — Abonnement erforderlich',
   'settings.engine.pro.detail': 'Abonniere im Reiter Konto, um den verwalteten Zugang zu aktivieren.',
   'settings.engine.mock': 'Kein Anbieter erkannt',
+  'settings.engine.local': 'Lokale Engine (Ollama)',
+  'settings.engine.local.detail': 'Hermes 3 läuft auf deinem eigenen Rechner — null Kosten, kein Konto.',
   'settings.engine.mock.detail': 'Füge einen API-Schlüssel hinzu oder melde dich über Claude Code an.',
 
   // ── Settings — models by mode ─────────────────────────────────
   'settings.models.byMode': 'Modelle nach Modus',
   'settings.models.byokLocalNote': 'BYOK-Schlüssel werden lokal gespeichert und nirgendwo hingsendet.',
+  'settings.models.localNote': 'Local-first: Ollama auf localhost liefert {default} — ohne Kosten und ohne Konten.',
+  'settings.models.localModel': 'Ollama-Modell',
+  'settings.models.useLocal': 'Verwenden',
 
   // ── Settings — billing extras ─────────────────────────────────
   'settings.billing.creditsManaged': 'Verwaltete Credits (Pro)',
@@ -1382,6 +1389,7 @@ export const de: TranslationDict = {
 
   // ── Omnibar — account chip & popover ──────────────────────────
   'account.chip.label': 'Konto und Abonnement',
+  'account.chip.models': 'Modelle',
   'account.chip.pro': 'Pro',
   'account.chip.free': 'Kostenlos',
   'account.chip.goPro': 'Pro holen',
@@ -1469,7 +1477,7 @@ export const de: TranslationDict = {
   'settings.providers.notAvailable': 'Nicht verfügbar',
   'settings.providers.activeBadge': 'AKTIV',
   'settings.providers.title': 'Verfügbare Engines',
-  'settings.providers.cliDetectionNote': 'CLI-Erkennung erfolgt beim Start. Starte Lazy neu, nachdem du ein Tool installiert hast.',
+  'settings.providers.cliDetectionNote': 'CLI-Erkennung erfolgt beim Start. Starte Forge neu, nachdem du ein Tool installiert hast.',
   'settings.readiness.claudeCode.label': 'Claude Code (Abonnement)',
   'settings.readiness.claudeCode.notFound': 'claude-Binärdatei nicht im PATH gefunden.',
   'settings.readiness.claudeCode.howToEnable': 'Installiere Claude Code: https://claude.ai/download, dann Lazy neu starten.',
@@ -1477,6 +1485,8 @@ export const de: TranslationDict = {
   'settings.readiness.codex.notFound': 'codex-Binärdatei nicht im PATH gefunden.',
   'settings.readiness.codex.howToEnable': 'Installiere OpenAI Codex CLI (npm i -g @openai/codex), dann Lazy neu starten.',
   'settings.readiness.detectingCli': 'CLI-Erkennung läuft...',
+  'settings.readiness.local.label': 'Lokales LLM (Ollama / LM Studio)',
+  'settings.readiness.local.howToEnable': 'Starte Ollama (ollama serve) � Hermes 3 liegt Forge bei.',
   'settings.readiness.byok.label': 'API-Schlüssel {provider} (BYOK)',
   'settings.readiness.byok.noKey': 'Kein {provider}-API-Schlüssel konfiguriert.',
   'settings.readiness.byok.howToEnable': 'Füge deinen Schlüssel unter Einstellungen > Modelle hinzu und klicke auf „{provider} verwenden“.',
@@ -1756,6 +1766,7 @@ export const de: TranslationDict = {
   'assistant.engine.managed': 'Pro · verwaltet',
   'assistant.engine.pro': 'Pro · nicht konfiguriert',
   'assistant.engine.mock': 'Kein Anbieter',
+  'assistant.engine.local': 'Lokal',
   'assistant.brainUnavailable': 'Speicher nicht verfügbar',
   'assistant.timeoutError': 'Das Modell hat nicht rechtzeitig geantwortet. Wiederholen oder Motor in Einstellungen prüfen.',
   'assistant.generationError': 'Fehler bei der Generierung.',

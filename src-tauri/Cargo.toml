@@ -1,13 +1,13 @@
 [package]
-name = "lazy-ide"
+name = "forge"
 version = "0.1.19"
-description = "Lazy IDE — AI-native code editor with LazyBrain"
+description = "Forge - local-first AI IDE (Ollama + CLI engines, no cloud)"
 authors = ["David"]
 license = "MIT"
-repository = "https://github.com/david/lazy-ide"
+repository = "https://github.com/gt12889/The-LazyIDE"
 edition = "2021"
 rust-version = "1.77.2"
-default-run = "lazy-ide"  # second bin lazy_runnerd requires an explicit default
+default-run = "forge"  # second bin lazy_runnerd requires an explicit default
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

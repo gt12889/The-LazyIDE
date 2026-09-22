@@ -8,11 +8,10 @@
    current/last action.
 */
 
-import { memo, useEffect, useState } from 'react';
+import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { BotNodeData, BotNodeStatus } from '../canvasTypes';
 import { listPendingApprovals, resolveApproval } from '../../../../lib/agents/approval/approvalGate';
-import { isBotVmWindowOpen, toggleBotVmWindow, subscribeBotVmWindows } from '../../../../lib/solari/botVmWindows';
 
 export type { BotNodeData } from '../canvasTypes';
 
@@ -63,16 +62,6 @@ export const LazyBotNodeCard = memo(function LazyBotNodeCard({
     bot.capabilities.sandbox && 'Sandbox',
   ].filter(Boolean).join(' · ');
 
-  // Connected VM window (canvas node) — reflect + toggle its open state.
-  const [vmOpen, setVmOpen] = useState(() => isBotVmWindowOpen(bot.id));
-  useEffect(
-    () =>
-      subscribeBotVmWindows(({ botId, open }) => {
-        if (botId === bot.id) setVmOpen(open);
-      }),
-    [bot.id],
-  );
-
   // Inline approval (Auto Review): when waiting, resolve this bot's pending
   // gate requests by mission id and let the user approve/deny right here.
   const pending = status === 'waiting'
@@ -117,15 +106,6 @@ export const LazyBotNodeCard = memo(function LazyBotNodeCard({
         </span>
         {activeRuns > 0 && <span style={S.runsChip}>{activeRuns} run{activeRuns > 1 ? 's' : ''}</span>}
         {caps && <span style={S.capsChip}>{caps}</span>}
-        <button
-          className="nodrag"
-          data-testid={`bot-vm-open-${bot.id}`}
-          onClick={(e) => { e.stopPropagation(); toggleBotVmWindow(bot.id); }}
-          style={vmOpen ? S.vmBtnActive : S.vmBtn}
-          title={vmOpen ? 'Fermer la fenêtre VM' : 'Ouvrir la fenêtre VM'}
-        >
-          {vmOpen ? '✕ VM' : '▶ VM'}
-        </button>
       </div>
       <div style={S.actionLine} title={lastAction}>
         {lastAction || 'Ready'}

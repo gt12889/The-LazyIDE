@@ -4,13 +4,8 @@ import { useCallback, useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { Platform } from '../../lib/platform';
 import { ALL_MODELS } from '../../lib/models';
-import { getProviderMode } from '../../lib/models/index';
 import { loadAccessSettings, saveAccessSettings } from '../../lib/models/accessSettings';
 import { isDevinModel, findDevinModel } from '../../lib/models/devinCatalog';
-import {
-  DEFAULT_OPENROUTER_MODEL_ID,
-  findOpenRouterModel,
-} from '../../lib/models/openrouterCatalog';
 import { getModelPickerOptions, noModelFallbackMessage, modelManagedByCodexMessage } from '../../lib/models/modelPickerOptions';
 import { getEngineReadiness, engineReasonKey } from '../../lib/models/entitlement';
 import type { EngineReadiness } from '../../lib/models/entitlement';
@@ -40,14 +35,18 @@ interface ComposerProps {
   quickActions?: AssistantQuickAction[];
 }
 
-/** Derive the current model id/label to display in managed/pro mode.
- *  Reads the persisted accessSettings.model (an OpenRouter id), falls back
- *  to the catalog default. Returns { id, label }. */
-function getManagedModelDisplay(): { id: string; label: string } {
+/** Derive the current model id/label to display.
+ *  Reads the persisted accessSettings.model, falls back to the store's
+ *  selection. Returns { id, label }. */
+function getActiveModelDisplay(fallback: { id: string; label: string }): { id: string; label: string } {
   const settings = loadAccessSettings();
-  const id = settings.model ?? DEFAULT_OPENROUTER_MODEL_ID;
-  const entry = findOpenRouterModel(id);
-  return { id, label: entry?.label ?? id };
+  const id = settings.model ?? fallback.id;
+  if (id.startsWith('local/')) return { id, label: id.slice('local/'.length) };
+  const native = ALL_MODELS.find(m => m.id === id);
+  if (native) return { id: native.id, label: native.label };
+  const devin = findDevinModel(id);
+  if (devin) return { id: devin.id, label: devin.label };
+  return fallback;
 }
 
 const MAX_CONTEXT_CHARS = 6000;
@@ -169,26 +168,16 @@ function ComposerReady({
   const [preflightBlock, setPreflightBlock] = useState<EngineReadiness | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Determine provider mode once per render (synchronous, no side effects) —
-  // still needed below for "what's the currently ACTIVE model"
-  // (getManagedModelDisplay), a different question from "what CAN be
-  // picked" just below, which now comes from the same entitlement helper
-  // NewMissionModal/LazyManager use (modelPickerOptions.ts): a user with
-  // both a Claude subscription (CLI/BYOK) and a Lazy Pro subscription sees
-  // both catalogs, independent of which one accessMode currently privileges
-  // for routing (see that module's header for the full rationale).
-  const providerMode = getProviderMode();
-  const isManagedMode = providerMode === 'managed' || providerMode === 'pro';
-
+  // "What CAN be picked" comes from the same entitlement helper
+  // NewMissionModal/the manager use (modelPickerOptions.ts).
   const pickerOptions = getModelPickerOptions(t);
   // (No more per-catalog show* flags — ModelPickerDropdown renders
-  // pickerOptions.groups directly, which already covers free/claude-sub/
-  // devin/byok/pro plus the locked upsell group.)
+  // pickerOptions.groups directly.)
 
-  // In managed/pro mode the displayed model comes from accessSettings, not the store
-  const managedDisplay = isManagedMode ? getManagedModelDisplay() : null;
-  const displayModelLabel = managedDisplay ? managedDisplay.label : selectedModel.label;
-  const displayModelId = managedDisplay ? managedDisplay.id : selectedModel.id;
+  // The displayed model comes from persisted settings, falling back to the store
+  const activeDisplay = getActiveModelDisplay(selectedModel);
+  const displayModelLabel = activeDisplay.label;
+  const displayModelId = activeDisplay.id;
 
   // Listen for editor:selectionToChat events (Ctrl+L from editor)
   useEffect(() => {
@@ -262,17 +251,12 @@ function ComposerReady({
   const handleModelSelect = useCallback((id: string) => {
     const current = loadAccessSettings();
 
-    // OpenRouter ids contain a '/' (e.g. 'anthropic/claude-sonnet-5'),
-    // native Anthropic ids don't (e.g. 'claude-sonnet-5').
-    const isOpenRouter = id.includes('/');
-
-    if (isOpenRouter) {
-      // Switch to Pro mode and persist the chosen OpenRouter model id
-      saveAccessSettings({ ...current, accessMode: 'pro', model: id });
-      const orEntry = findOpenRouterModel(id);
-      if (orEntry) {
-        setModel({ id: orEntry.id, label: orEntry.label, provider: orEntry.provider });
-      }
+    // `local/…` ids run the local Ollama engine; Devin-catalog ids pin the
+    // devin tool; native ids run the ambient CLI tool.
+    if (id.startsWith('local/')) {
+      // Switch to local mode and persist the chosen local model id
+      saveAccessSettings({ ...current, accessMode: 'local', model: id });
+      setModel({ id, label: id.slice('local/'.length), provider: 'local' });
     } else if (isDevinModel(id)) {
       // Devin catalog id — CLI mode pinned to the devin tool, not the
       // ambient cliTool (a devin id sent to the claude/codex binary would
@@ -288,12 +272,13 @@ function ComposerReady({
     }
   }, [setModel]);
 
-  /** /model <id> support — resolves the id against BOTH catalogs (same
+  /** /model <id> support — resolves the id against the live catalogs (same
    *  namespace check as handleModelSelect above) before switching, so an
    *  unrecognized id reports failure instead of silently no-op-ing. */
   const applyModelById = useCallback((id: string): { applied: boolean; label?: string } => {
-    const isOpenRouter = id.includes('/');
-    const found = isOpenRouter ? findOpenRouterModel(id) : (ALL_MODELS.find(m => m.id === id) ?? findDevinModel(id));
+    const found = id.startsWith('local/')
+      ? { id, label: id.slice('local/'.length) }
+      : (ALL_MODELS.find(m => m.id === id) ?? findDevinModel(id));
     if (!found) return { applied: false };
     handleModelSelect(id);
     return { applied: true, label: found.label };
@@ -365,7 +350,7 @@ function ComposerReady({
       const resolved = await resolveContextItem(item, platform, projectRoot);
       enriched = enriched.split(item.ref).join(resolved);
     }
-    try { localStorage.setItem('lazy.firstAssistantSend', '1'); } catch { /* ignore */ } // W3.2 getting-started signal
+    try { localStorage.setItem('forge.firstAssistantSend', '1'); } catch { /* ignore */ } // W3.2 getting-started signal
     send(enriched);
   }, [text, send, contextItems, platform, projectRoot, clearConversation, compactConversation, chatSessions, loadChatSession, applyModelById, openModelPicker, toast, t]);
 
@@ -378,7 +363,7 @@ function ComposerReady({
     }
     setText('');
     void (async () => {
-      try { localStorage.setItem('lazy.firstAssistantSend', '1'); } catch { /* ignore */ }
+      try { localStorage.setItem('forge.firstAssistantSend', '1'); } catch { /* ignore */ }
       send(builtText);
     })();
   }, [text, send, toast, t]);
@@ -421,13 +406,10 @@ function ComposerReady({
   }, []);
 
   // Same navigation mechanism as the mission preflight (W2.2): 'models'
-  // deep-links Settings > Models; Pro entitlement reasons go to Settings >
-  // Account where the plan/credits live.
+  // deep-links Settings > Models.
   const goConfigureEngine = useCallback(() => {
-    const proReason =
-      preflightBlock?.reason === 'pro-inactive' || preflightBlock?.reason === 'pro-no-credits';
-    emit('nav:navigateSpace', proReason ? 'account' : 'models');
-  }, [preflightBlock]);
+    emit('nav:navigateSpace', 'models');
+  }, []);
 
   return (
     <div
@@ -627,7 +609,6 @@ function ComposerReady({
           {showModels && (
             <ModelPickerDropdown
               groups={pickerOptions.groups}
-              lockedGroup={pickerOptions.lockedProGroup}
               currentId={displayModelId}
               emptyMessage={
                 pickerOptions.emptyReadiness?.reason

@@ -41,17 +41,15 @@ async function getProjectRoot(): Promise<string> {
 // ── Engine readiness banner ─────────────────────────────────────────
 //
 // Shown at the top of Mission Control whenever the selected engine cannot
-// run right now (CLI not detected, no BYOK key, Pro inactive, or Pro
-// credits exhausted). Reuses getEngineReadiness() — the same synchronous
-// readiness check every other launch surface (mission modal, composer,
-// model picker) already calls — so the cockpit surfaces a clear,
-// non-broken "no-credit / not-configured" state instead of a Kanban board
-// that silently never fills up. Display only: no entitlement logic lives
-// here.
+// run right now (CLI not detected, local engine unreachable). Reuses
+// getEngineReadiness() — the same synchronous readiness check every other
+// launch surface (mission modal, composer, model picker) already calls —
+// so the cockpit surfaces a clear, non-broken "not-configured" state
+// instead of a Kanban board that silently never fills up. Display only:
+// no entitlement logic lives here.
 
 function EngineNotReadyBanner({ reason }: { reason: EngineReadinessReason }) {
   const { t } = useI18n();
-  const isProReason = reason === 'pro-inactive' || reason === 'pro-no-credits';
 
   return (
     <div
@@ -72,18 +70,17 @@ function EngineNotReadyBanner({ reason }: { reason: EngineReadinessReason }) {
         {t(engineReasonKey(reason))}
       </span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        {/* LazyPro is ALWAYS offered when nothing can run — a key/CLI gap is
-            fixed in Models, but Pro is the zero-setup path (plan + credits or
-            a top-up). Real-user feedback 2026-08-03. */}
+        {/* The engine gap is fixed in Models — the zero-setup path is the
+            local Ollama engine. */}
         <button
-          onClick={() => emit('nav:navigateSpace', 'account')}
+          onClick={() => emit('nav:navigateSpace', 'models')}
           style={{
             flexShrink: 0,
             padding: '4px 12px',
             borderRadius: 6,
-            border: '1px solid rgba(246,169,69,0.45)',
-            background: 'rgba(246,169,69,0.12)',
-            color: '#F6A945',
+            border: '1px solid rgba(124,92,255,0.4)',
+            background: 'rgba(124,92,255,0.12)',
+            color: '#C4B5FD',
             fontSize: 11,
             fontWeight: 600,
             fontFamily: 'inherit',
@@ -91,28 +88,8 @@ function EngineNotReadyBanner({ reason }: { reason: EngineReadinessReason }) {
             whiteSpace: 'nowrap',
           }}
         >
-          {t(isProReason ? 'engine.preflight.goPro' : 'engine.preflight.proFallback')}
+          {t('engine.preflight.configure')}
         </button>
-        {!isProReason && (
-          <button
-            onClick={() => emit('nav:navigateSpace', 'models')}
-            style={{
-              flexShrink: 0,
-              padding: '4px 12px',
-              borderRadius: 6,
-              border: '1px solid rgba(124,92,255,0.4)',
-              background: 'rgba(124,92,255,0.12)',
-              color: '#C4B5FD',
-              fontSize: 11,
-              fontWeight: 600,
-              fontFamily: 'inherit',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {t('engine.preflight.configure')}
-          </button>
-        )}
       </div>
     </div>
   );

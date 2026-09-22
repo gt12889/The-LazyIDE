@@ -25,7 +25,6 @@ import { AgentsStoreProvider } from './agents/agentsStore';
 import { BotsStoreProvider } from './agents/botsStore';
 import { BotBootService } from './agents/BotBootService';
 import { BotApprovalPanel } from './agents/BotApprovalPanel';
-import { BotVmHost } from './agents/BotVmHost';
 import { AssistantStoreProvider } from './assistant/assistantStore';
 import { ToastProvider } from './ui/Toast';
 import { UpdaterService } from './updater/UpdaterService';
@@ -36,30 +35,23 @@ import { OnboardingModal } from './onboarding/OnboardingModal';
 import { BrainEnrichmentPrompt } from './onboarding/BrainEnrichmentPrompt';
 import { useOnboarding } from './onboarding/useOnboarding';
 import { Spinner, useToast } from './ui';
-import { useAuth } from '../lib/auth';
 import { SubscriptionProvider } from '../lib/billing';
-import { setActiveTeamSnapshot } from '../lib/features';
-import { ActiveTeamProvider, useActiveTeamContext } from '../lib/teams/ActiveTeamContext';
 import { shortcutRegistry, useShortcut, SHORTCUT_PRIORITY } from '../lib/shortcuts';
 import { ManagerHost } from './lazyManager/ManagerHost';
 import { ManagerHostRegistryProvider, type ManagerHostId } from './lazyManager/managerHostRegistry';
 import { scheduleLazySpacePrefetch } from './prefetchLazySpaces';
 
-// Space switching table: Mod+1-6 and Mod+Shift+E/B/A. Registered directly
+// Space switching table: Mod+1-5 and Mod+Shift+E/B/A. Registered directly
 // on the shortcut registry (not via useShortcut) since it's a fixed table of
 // combos and React hooks cannot be called from a loop — see AppShellInner.
 //
-// D2 redesign: Cockpit (agents) is now the home/first-paint space and the
-// top nav's segmented pills are Cockpit/Code/Brain/Team/Settings, so
-// Mod+1..5 mirror that order. Review left the nav/shortcuts entirely (it's
-// absorbed into Cockpit decision cards + Code's diff drawer in a later
-// wave) — 'review' stays in the SpaceId union and SpaceContent's switch so
-// it's still reachable programmatically, just not bound to a shortcut.
-// Terminals keeps its own slot (Mod+6) — reachable via palette + shortcut
-// only, no header pill (per D2).
+// Cockpit (agents) is the home/first-paint space and the top nav's segmented
+// pills are Cockpit/Code/Brain/Settings, so Mod+1..4 mirror that order.
+// Terminals keeps its own slot (Mod+5) — reachable via palette + shortcut
+// only, no header pill.
 const SPACE_DIGIT_MAP: Record<string, SpaceId> = {
   '1': 'agents', '2': 'code', '3': 'brain',
-  '4': 'team', '5': 'settings', '6': 'terminals',
+  '4': 'settings', '5': 'terminals',
 };
 const SPACE_SHIFT_MAP: Record<string, SpaceId> = {
   e: 'code', b: 'brain', a: 'agents',
@@ -84,7 +76,6 @@ const BrainSpace    = lazy(() => import('../spaces/BrainSpace').then((m) => ({ d
 const ReviewSpace   = lazy(() => import('../spaces/ReviewSpace').then((m) => ({ default: m.ReviewSpace })));
 const TerminalsSpace = lazy(() => import('../spaces/TerminalsSpace').then((m) => ({ default: m.TerminalsSpace })));
 const SettingsSpace = lazy(() => import('../spaces/SettingsSpace').then((m) => ({ default: m.SettingsSpace })));
-const TeamSpace     = lazy(() => import('../spaces/TeamSpace').then((m) => ({ default: m.TeamSpace })));
 
 // Shared fallback for space-level Suspense boundaries.
 function SpaceFallback() {
@@ -129,6 +120,8 @@ function SpaceFallback() {
 
 interface SpaceContentProps {
   space: SpaceId;
+  /** Kept for call-site compatibility (SpacesLayer tests) — the Team space
+   *  no longer exists, so this is always false in production. */
   showTeamTab: boolean;
   /** QA fix (B5): the Settings sub-tab requested by the last navigation
    *  (set by setActiveSpace's `tab` param or a nav:navigateSpace bus event
@@ -142,12 +135,7 @@ interface SpaceContentProps {
   settingsInitialTab: string | null;
 }
 
-function accountAuthMode(tab?: string | null): 'signin' | 'signup' | undefined {
-  if (tab === 'signin' || tab === 'signup') return tab;
-  return undefined;
-}
-
-function SpaceContent({ space, showTeamTab, settingsInitialTab }: SpaceContentProps) {
+function SpaceContent({ space, settingsInitialTab }: SpaceContentProps) {
   switch (space) {
     case 'code':      return <SpaceErrorBoundary name="Code"><CodeSpace /></SpaceErrorBoundary>;
     case 'agents':    return <SpaceErrorBoundary name="Agents"><AgentsSpace /></SpaceErrorBoundary>;
@@ -157,16 +145,17 @@ function SpaceContent({ space, showTeamTab, settingsInitialTab }: SpaceContentPr
     case 'models':    return <SpaceErrorBoundary name="Models"><SettingsSpace initialTab={(settingsInitialTab as SettingsTab) ?? 'models'} /></SpaceErrorBoundary>;
     case 'settings':  return <SpaceErrorBoundary name="Settings"><SettingsSpace initialTab={(settingsInitialTab as SettingsTab) ?? 'general'} /></SpaceErrorBoundary>;
     case 'account': {
-      const authMode = accountAuthMode(settingsInitialTab);
-      const tab: SettingsTab = authMode ? 'account' : ((settingsInitialTab as SettingsTab | undefined) ?? 'account');
-      return <SpaceErrorBoundary name="Account"><SettingsSpace initialTab={tab} initialAuthMode={authMode} /></SpaceErrorBoundary>;
+      const tab: SettingsTab = ((settingsInitialTab as SettingsTab | undefined) ?? 'general');
+      return <SpaceErrorBoundary name="Account"><SettingsSpace initialTab={tab} /></SpaceErrorBoundary>;
     }
     case 'terminals': return <SpaceErrorBoundary name="Terminals"><TerminalsSpace /></SpaceErrorBoundary>;
-    case 'team':      return showTeamTab ? <SpaceErrorBoundary name="Team"><TeamSpace /></SpaceErrorBoundary> : null;
+    // 'team' stays in the SpaceId union for persisted-session compat, but
+    // the Team space is gone — render nothing.
+    case 'team':      return null;
     // 'bots' stays in the SpaceId union for persisted-session compat, but
-    // BotsSpace itself was retired (bots live on the canvas via BotVmHost +
-    // the manager's create_lazybot/run_lazybot actions) — redirect to the
-    // agents surface instead of a blank screen.
+    // BotsSpace itself was retired (bots live on the canvas via the
+    // manager's create_bot/run_bot actions) — redirect to the agents
+    // surface instead of a blank screen.
     case 'bots':      return <SpaceErrorBoundary name="Agents"><AgentsSpace /></SpaceErrorBoundary>;
     default:          return null;
   }
@@ -175,6 +164,7 @@ function SpaceContent({ space, showTeamTab, settingsInitialTab }: SpaceContentPr
 interface SpaceSlotProps {
   space: SpaceId;
   isActive: boolean;
+  /** Kept for call-site compatibility — the Team space no longer exists. */
   showTeamTab: boolean;
   /** QA fix (B5) — see SpaceContentProps. Optional so existing callers
    *  (AppShell.test.tsx's direct SpacesLayer render) keep compiling
@@ -185,7 +175,7 @@ interface SpaceSlotProps {
   skipEnterAnimation: boolean;
 }
 
-function SpaceSlot({ space, isActive, showTeamTab, settingsInitialTab, skipEnterAnimation }: SpaceSlotProps) {
+function SpaceSlot({ space, isActive, settingsInitialTab, skipEnterAnimation }: SpaceSlotProps) {
   // No key here: this div is created ONCE (when the space is first added
   // to SpacesLayer's mounted list, see below) and never recreated while
   // switching between spaces, so a plain unconditional className is
@@ -205,7 +195,7 @@ function SpaceSlot({ space, isActive, showTeamTab, settingsInitialTab, skipEnter
         minHeight: 0,
       }}
     >
-      <SpaceContent space={space} showTeamTab={showTeamTab} settingsInitialTab={settingsInitialTab ?? null} />
+      <SpaceContent space={space} showTeamTab={false} settingsInitialTab={settingsInitialTab ?? null} />
     </div>
   );
 }
@@ -294,7 +284,6 @@ export function watchScheduledAgentRuns(
 function AppShellInner() {
   const { activeSpace, setActiveSpace, settingsInitialTab } = useAppContext();
   const { isOpen, openPalette, closePalette } = usePaletteContext();
-  const { hasActiveTeam } = useActiveTeamContext();
   const { toast } = useToast();
   const { t } = useI18n();
 
@@ -310,42 +299,6 @@ function AppShellInner() {
   // pill exists. See memoryPressureReservedHeight.ts's own doc comment for
   // the reserved-height math.
   const reservedBottomPadding = useMemoryPressureReservedHeight();
-
-  // Teams are LIVE (real git transport + GitHub OAuth device flow + shared
-  // canvas). The Team tab always shows: a user with no org yet lands on
-  // SoloView (create/join/invite), a member lands on their role-derived
-  // Lead/Member view. Team capture/search dispatch stays gated on the
-  // runtime teamsActive() entitlement, never on this visibility flag.
-  const showTeamTab = true;
-
-  // Publish the live org-entitlement signal into the module-level runtime
-  // snapshot (src/lib/features.ts) so non-React consumers — capture.ts's
-  // dispatch() and unifiedEntitlement.ts's isTeamContext — can read the
-  // SAME entitlement synchronously, without duplicating the Supabase
-  // active/trialing + membership check. hasActiveTeam is already
-  // fail-closed (false while loading or on error, see useActiveTeam.ts),
-  // so mirroring it verbatim keeps that guarantee. Same push-on-settle
-  // pattern as useSubscription.ts's setPlanTier effect.
-  useEffect(() => {
-    setActiveTeamSnapshot(hasActiveTeam);
-  }, [hasActiveTeam]);
-
-  // Start the team brain sync daemon (pull/push/outbox) once the user has
-  // an active team; stop it when they don't. The daemon itself is
-  // best-effort and fail-closed on teamsActive() — see syncDaemon.ts.
-  useEffect(() => {
-    if (!hasActiveTeam) return;
-    let stop: (() => void) | null = null;
-    let cancelled = false;
-    void import('../lib/teams/syncDaemon').then((mod) => {
-      if (cancelled) return;
-      stop = mod.startSyncDaemon();
-    });
-    return () => {
-      cancelled = true;
-      stop?.();
-    };
-  }, [hasActiveTeam]);
 
   // Global Mod+K / Mod+P — toggle the command palette.
   //
@@ -448,7 +401,7 @@ function AppShellInner() {
             transition: 'padding-bottom 0.2s ease',
           }}
         >
-          <SpacesLayer activeSpace={activeSpace} showTeamTab={showTeamTab} settingsInitialTab={settingsInitialTab} />
+          <SpacesLayer activeSpace={activeSpace} showTeamTab={false} settingsInitialTab={settingsInitialTab} />
         </main>
         <ManagerHost activeHostId={managerHostIdForSpace(activeSpace)} />
       </ManagerHostRegistryProvider>
@@ -459,24 +412,16 @@ function AppShellInner() {
   );
 }
 
-// ── BillingSync — provides the live subscription to the whole shell.
+// ── BillingSync — provides the (stub) subscription to the whole shell.
 //
-// Mounts at app root (inside AuthGate) so useSubscription() runs once and
-// setManagedAvailability() is called immediately after sign-in — before the user
-// ever opens Settings. Without this the hook only ran inside SettingsSpace
-// (lazy-loaded, never mounted on startup), so _managedActive stayed false and the
-// assistant badge showed 'Pro · non configuré'.
-//
-// It also exposes the subscription state via SubscriptionProvider so consumers
-// (e.g. the Omnibar AccountChip) read the same fetch instead of duplicating it.
+// Mounts at app root so consumers (chips, tiles) read one shared,
+// always-"no plan" state instead of duplicating it. Forge has no billing;
+// the stub keeps every consumer compiling with honest values.
 
 function BillingSync({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
   return (
-    <SubscriptionProvider user={user}>
-      <ActiveTeamProvider user={user}>
-        {children}
-      </ActiveTeamProvider>
+    <SubscriptionProvider>
+      {children}
     </SubscriptionProvider>
   );
 }
@@ -511,7 +456,6 @@ export function AppShell() {
               <UpdaterService />
               <StartupRecoveryCheck />
               <BotApprovalPanel />
-              <BotVmHost />
               <MemoryPressureIndicator />
               <AgentsStoreProvider>
                 {/* BotBootService moved INSIDE the provider: it now threads

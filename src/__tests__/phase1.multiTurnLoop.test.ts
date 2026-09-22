@@ -24,14 +24,6 @@ vi.mock('../lib/models/claudeCodeProvider', async (importOriginal) => {
   };
 });
 
-vi.mock('../lib/models/managedProvider', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/models/managedProvider')>();
-  return {
-    ...actual,
-    streamManagedAgentTurn: vi.fn(),
-  };
-});
-
 vi.mock('../lib/models/cliBackendProvider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/models/cliBackendProvider')>();
   return {
@@ -44,7 +36,6 @@ vi.mock('../lib/agents/runtime', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/agents/runtime')>();
   return {
     ...actual,
-    isManagedModelReady: vi.fn(actual.isManagedModelReady),
     isNativeModelReady: vi.fn(actual.isNativeModelReady),
   };
 });

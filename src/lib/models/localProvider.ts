@@ -10,7 +10,7 @@
 
    The provider is zero-cost (local), supports no web search, and does NOT
    support tool loops (the local models don't reliably follow ReAct directives).
-   It streams raw SSE text like webAnthropicProvider.
+   It streams raw SSE text.
 
    Detection: isLocalAvailable() pings the base URL's /v1/models endpoint
    with a short timeout. Used by the model gateway to decide whether to
@@ -19,12 +19,14 @@
 
 import type { ModelProvider, ModelInfo, StreamChatRequest } from './types.js';
 import { buildSystemPrompt } from './systemPrompts.js';
-import { sseLines } from './byokProviders.js';
 
 const DEFAULT_OLLAMA_URL = 'http://localhost:11434/v1';
 const DEFAULT_LM_STUDIO_URL = 'http://localhost:1234/v1';
-const DEFAULT_MODEL = 'llama4';
+const DEFAULT_MODEL = 'hermes3';
 const DETECT_TIMEOUT_MS = 2000;
+
+/** Model id the picker and router use when nothing is persisted yet. */
+export const DEFAULT_LOCAL_MODEL_ID = `local/${DEFAULT_MODEL}`;
 
 function loadBaseUrl(): string {
   try {
@@ -32,6 +34,12 @@ function loadBaseUrl(): string {
   } catch {
     return DEFAULT_OLLAMA_URL;
   }
+}
+
+/** Model name configured by the user (`lazy.local.model`), defaulting to the
+ *  bundled Hermes 3. Exported for pickers/routers that need the id. */
+export function loadLocalModelName(): string {
+  return loadModel();
 }
 
 function loadModel(): string {
@@ -92,6 +100,28 @@ export async function listLocalModels(): Promise<ModelInfo[]> {
   }
 }
 
+/** Splits a fetch ReadableStream into decoded `data: ` SSE payloads,
+ *  buffering partial lines across chunks and skipping the `[DONE]`
+ *  sentinel. */
+export function sseLines(reader: ReadableStreamDefaultReader<Uint8Array>, decoder: TextDecoder): AsyncGenerator<string> {
+  let buffer = '';
+  return (async function* () {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (!data || data === '[DONE]') continue;
+        yield data;
+      }
+    }
+  })();
+}
+
 async function* streamChatImpl(req: StreamChatRequest): AsyncIterable<string> {
   const baseUrl = loadBaseUrl();
   const model = loadModel();
@@ -146,11 +176,9 @@ async function* streamChatImpl(req: StreamChatRequest): AsyncIterable<string> {
     }
   }
 }
-
 export const localProvider: ModelProvider = {
   id: 'local',
   label: 'Local LLM (Ollama / LM Studio)',
-
   listModels(): ModelInfo[] {
     // Synchronous — returns the configured model. The actual list of
     // available models can be fetched asynchronously via listLocalModels()
@@ -168,3 +196,64 @@ export const localProvider: ModelProvider = {
     return streamChatImpl(req);
   },
 };
+
+// ── Agent-turn streamer (mission ReAct loop) ─────────────────────
+
+/** Options shape for one ReAct-loop turn — mirrors the streamTurn contract
+ *  planAndActManaged requires (see managedAgent.ts). Structural (not
+ *  imported) so this module stays dependency-free of the agent loop. */
+export interface LocalAgentTurnOpts {
+  messages: Array<{ role: string; content: string }>;
+  system: string;
+  model: string;
+  signal?: AbortSignal;
+  cacheableSystem?: { core: string; dynamic: string };
+  maxTokens?: number;
+  onNativeAction?: () => void;
+  worktreePath?: string;
+}
+
+/** Strips the picker's `local/` prefix to the raw Ollama model name. */
+export function toLocalModelName(modelId: string): string {
+  return modelId.startsWith('local/') ? modelId.slice('local/'.length) : modelId;
+}
+
+/** Builds a planAndActManaged `streamTurn` backed by the local engine: one
+ *  OpenAI-compatible chat-completions call per turn, no CLI, no account.
+ *  HTTP errors (Ollama down → fetch throws; unknown model → 404) propagate
+ *  as thrown Errors so the loop's classifier (managedAgentTurnError.ts)
+ *  records a turn failure and retries/fails over instead of parsing an
+ *  error banner as a THOUGHT/ACTION block. */
+export function createLocalAgentTurnStreamer() {
+  return async function* localTurn(opts: LocalAgentTurnOpts): AsyncGenerator<string> {
+    const baseUrl = loadBaseUrl();
+    const model = toLocalModelName(opts.model || loadModel());
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'system', content: opts.system }, ...opts.messages],
+        stream: true,
+        max_tokens: opts.maxTokens ?? 8192,
+      }),
+      signal: opts.signal,
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => res.statusText);
+      throw new Error(`Local engine error ${res.status}: ${errText.slice(0, 200)}`);
+    }
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Local engine returned no response body');
+    const decoder = new TextDecoder();
+    for await (const data of sseLines(reader, decoder)) {
+      try {
+        const event = JSON.parse(data);
+        const delta = event.choices?.[0]?.delta?.content;
+        if (typeof delta === 'string' && delta) yield delta;
+      } catch {
+        // skip malformed JSON
+      }
+    }
+  };
+}

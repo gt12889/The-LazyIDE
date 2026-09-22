@@ -10,25 +10,27 @@ export interface UsageRecord {
   inputTokens: number;
   outputTokens: number;
   model: string;
-  /** Anthropic prompt-cache breakdown for this record — present only when
-   *  the caller (managedProvider.ts's RealUsage, forwarded from ai-proxy's
-   *  settled `\x1b[usage]` marker) actually reported real cache usage for
-   *  this turn. Absent for BYOK/CLI providers, chars/4-estimated turns, and
-   *  any older ai-proxy deployment that doesn't emit the fields yet. Purely
-   *  observational — never fed into totalCostUsd below, which already
-   *  reflects the real charge (or estimateUsageUsd for BYOK/CLI). */
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
   /** Estimated USD this record saved (or, on a cache-priming call, spent
    *  extra) vs. no caching — see ai-proxy's CostBreakdown.cacheSavingsUsd. */
   cacheSavingsUsd?: number;
   /** REAL settled USD cost for this call, when the backend reported it.
-   *  Managed (managedProvider.ts, forwarding ai-proxy's settled `\x1b[usage]`
-   *  marker) supplies it; the marker's costUsd is the authoritative price the
-   *  user was actually charged — 0 for free models (ox alpha). BYOK/CLI
-   *  providers and chars/4-estimated turns omit it, so addUsage falls back to
-   *  catalog rates (Haiku 0.80/4.00 only when the id is unknown). */
+   *  CLI backends that settle real token counts supply it; local Ollama
+   *  turns and chars/4-estimated turns omit it, so addUsage falls back to
+   *  estimateUsageUsd (0 for local runs). */
   costUsd?: number;
+}
+
+/** Settled usage for one model turn — reported by streamers that know real
+ *  token counts. Local Ollama turns omit it (chars/4 estimate instead). */
+export interface RealUsage {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  cacheSavingsUsd?: number;
 }
 
 export interface CostState {
@@ -66,10 +68,9 @@ function notify(): void {
 }
 
 export function addUsage(record: UsageRecord): void {
-  // Real settled cost wins when the backend reported it (managed provider,
-  // forwarding ai-proxy's `\x1b[usage]` marker). Free models settle at 0 —
-  // the catalog/fallback estimate would otherwise invent a charge.
-  // BYOK/CLI and chars/4-estimated turns omit costUsd and keep the estimate.
+  // Real settled cost wins when the backend reported it. Local runs settle
+  // at 0 — the estimate would otherwise invent a charge. CLI and
+  // chars/4-estimated turns omit costUsd and keep the estimate.
   const cost =
     record.costUsd !== undefined
       ? Math.max(0, record.costUsd)

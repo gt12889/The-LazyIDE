@@ -757,7 +757,7 @@ function EstimateCard({ estimate, rails, railId, onSelectRail, onConfirm, onLate
         </div>
       </div>
 
-      {llmActive && !selectedRail?.free && estimate.estTokens > 0 && (
+      {llmActive && estimate.estTokens > 0 && (
         <div style={{
           padding: '10px 12px',
           background: 'rgba(251,191,36,0.06)',

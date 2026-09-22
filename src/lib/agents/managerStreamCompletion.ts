@@ -1,30 +1,15 @@
-/* managerStreamCompletion — per-rail LLM dispatch for LazyManager.
+/* managerStreamCompletion — per-rail LLM dispatch for the ForgeManager.
 
    Measured 2026-08-28: streamManagerCompletion cyclomatic complexity was 21
    (ESLint ratchet ceiling 12). Lives here so managerEngine.ts stays the
-   turn/retry loop, not a four-way streamer.
+   turn/retry loop, not a three-way streamer.
 */
 
-import { streamManagedAgentTurn } from '../models/managedProvider.js';
-import type { AgentTurnOpts } from '../models/managedProvider.js';
 import { streamClaudeCodeTurn } from '../models/claudeCodeProvider.js';
 import { cliBackendProvider } from '../models/cliBackendProvider.js';
-import { loadAccessSettings } from '../models/index.js';
-import {
-  resolveByokDef,
-  loadByokKey,
-  loadByokModel,
-  effectiveByokModel,
-  effectiveByokBaseUrl,
-  streamOpenAICompatRaw,
-  streamAnthropicCompatRaw,
-  BYOK_PROVIDER_DEFS,
-  hasByokKey,
-} from '../models/byokProviders.js';
-import type { ByokProviderDef } from '../models/byokProviders.js';
+import { createLocalAgentTurnStreamer, toLocalModelName } from '../models/localProvider.js';
 import type { ProviderMode, ChatMessage, ModelInfo, StreamChatRequest } from '../models/index.js';
 import { ALL_MODELS } from '../models/registry.js';
-import { OPENROUTER_MODELS, DEFAULT_OPENROUTER_MODEL_ID, findOpenRouterModel, isOpenRouterFreeModel, migrateRetiredOpenRouterId, nextFreeOpenRouterModelId } from '../models/openrouterCatalog.js';
 import { isDevinModel } from '../models/devinCatalog.js';
 import { RECALL_TEACHING } from '../models/systemPrompts.js';
 import {
@@ -38,17 +23,11 @@ import type { ManagerMessage } from './types.js';
 
 const TIER_WORD = /haiku|sonnet|opus/;
 
-function managedAnthropicModels(): readonly { id: string }[] {
-  return OPENROUTER_MODELS.filter((m) => m.provider === 'Anthropic');
-}
-
 /**
- * Normalize a manager model value — a tier word ("haiku"/"sonnet"/"opus"), an
- * OpenRouter id ("anthropic/claude-sonnet-5"), or an already-native id — to
- * the native Anthropic-family id consumed by the CLI backends. Both
- * claude-code and codex provider modes accept this same id family (see the
- * id-family note above resolveManagerModelId). Shared by both CLI branches
- * in runManagerTurn.
+ * Normalize a manager model value — a tier word ("haiku"/"sonnet"/"opus")
+ * or an already-native id — to the native id consumed by the CLI backends.
+ * `local/` ids pass through to toLocalModelName on the local rail instead
+ * (see streamLocalRail) and never reach here with a local pick as primary.
  */
 function toNativeModelId(model: string): string {
   const lower = model.toLowerCase();
@@ -60,39 +39,6 @@ function toNativeModelId(model: string): string {
   if (ALL_MODELS.some((m) => m.id === model)) return model;
   if (model.includes('/')) return model.split('/')[1].replace(/\./g, '-');
   return model;
-}
-
-/**
- * Normalize a manager model value to an id the managed/Pro ai-proxy actually
- * accepts (OpenRouter format only — see managedProvider.ts's streamProxyBody/
- * streamManagedAgentTurn, which forward the model string to the proxy AS-IS,
- * with no translation).
- *
- * The counterpart to toNativeModelId above, needed for the exact same
- * reason: every picker offering a model for the manager's OWN planning turn
- * (LazyManagerRail's manager-model-select, AnalysisDesk's analysis-model
- * select) builds its option list from buildModelPickerOptions, which can
- * offer BOTH a native-id group (claude-sub entitlement) and an OpenRouter-id
- * group (Pro entitlement) AT THE SAME TIME — see modelPickerOptions.ts's
- * module doc comment: a user can hold both entitlements simultaneously even
- * though getProviderMode() only ever resolves to ONE active backend. Picking
- * a native-id option (e.g. 'claude-haiku-4-5') while the resolved mode is
- * 'managed'/'pro' used to forward that native id straight to the ai-proxy
- * unmodified, which rejects it as an unrecognized model — the
- * "ManagedUnavailableError: Modèle non supporté" failure this fixes.
- *
- * Accepts (in priority order): an already-valid OpenRouter id (returned
- * as-is — covers every non-Anthropic managed model too, e.g. 'openai/gpt-5.4'
- * or 'deepseek/deepseek-v4-flash'), a native Anthropic id or bare tier word
- * ('haiku'/'sonnet'/'opus' — mapped to the matching Anthropic OpenRouter
- * entry), else the catalog default.
- */
-function toManagedModelId(model: string): string {
-  const migrated = migrateRetiredOpenRouterId(model);
-  if (findOpenRouterModel(migrated)) return migrated;
-  const word = model.toLowerCase().match(TIER_WORD)?.[0];
-  if (!word) return DEFAULT_OPENROUTER_MODEL_ID;
-  return managedAnthropicModels().find((m) => m.id.toLowerCase().includes(word))?.id ?? DEFAULT_OPENROUTER_MODEL_ID;
 }
 
 /**
@@ -143,12 +89,12 @@ export const ACTION_FORMAT_REMINDER =
 
 /**
  * Dispatch ONE streamed LLM completion through whichever backend matches
- * `mode` (claude-code CLI, codex CLI, BYOK live-key, or the managed/Pro
- * ai-proxy) and return the fully concatenated raw text. Extracted from
+ * `mode` (claude-code CLI, codex CLI, devin CLI, or the local Ollama
+ * engine) and return the fully concatenated raw text. Extracted from
  * runManagerTurn's main retry loop so attemptActionExtractionRepair below
  * can issue its OWN short completion through the exact same routing — same
  * engine/model path the turn already used — without duplicating the
- * four-way branch. `appendRecallTeaching` defaults to true so the main
+ * three-way branch. `appendRecallTeaching` defaults to true so the main
  * planning loop's own behavior is byte-for-byte unchanged by this
  * extraction; the repair call passes false (see its own doc comment).
  */
@@ -335,148 +281,30 @@ export function accumulateManagerChunks(chunks: readonly string[]): string {
   return result;
 }
 
-/**
- * Resolves the (non-Anthropic) BYOK provider whose OWN catalog contains
- * `modelId` and whose key is actually configured — e.g. 'deepseek-chat' /
- * 'deepseek-reasoner' (byokProviders.ts's DeepSeek def). Mirrors
- * byokProviders.ts's own resolveByokAgentTurnStreamer (used by the mission
- * ReAct loop for the exact same "does this modelId belong to a keyed BYOK
- * provider" question) as a small LOCAL lookup here — kept local rather than
- * importing that streamer because its ByokAgentTurnOpts contract doesn't
- * match streamManagerCompletion's own raw streamOpenAICompatRaw/
- * streamAnthropicCompatRaw call shape, and because byokProviders.ts itself
- * must stay untouched (its vault/key-storage code was just fixed and
- * verified live).
- *
- * Real bug this closes (DeepSeek-always-fails, 2026-08-12): the picker
- * (modelPickerOptions.ts) computes "is a BYOK model selectable" INDEPENDENTLY
- * of getProviderMode() on purpose — see that module's own header doc comment,
- * "a user can genuinely hold BOTH entitlements at once". But
- * streamManagerCompletion's dispatch below used to key PURELY off the
- * ambient `mode` (getProviderMode()) — so a user with a Claude
- * subscription/Pro plan active (mode resolves 'claude-code'/'managed') who
- * explicitly picked a keyed BYOK model from that SAME independent picker had
- * it silently forwarded to the wrong rail (toNativeModelId('deepseek-chat')
- * sent straight to the Claude CLI, which of course rejects an id it has
- * never heard of — modelsIndex.test.ts documents that exact rejection
- * wording). Checked BEFORE the mode branches below so an explicit,
- * keyed BYOK-catalog selection always wins over the ambient mode, matching
- * what the picker already promised the user it would do.
- *
- * Anthropic is excluded (its native ids are served by the claude-code/
- * live-key branches already, never by this raw-BYOK path) — same exclusion
- * resolveByokAgentTurnStreamer applies for the same reason.
- */
-function resolveByokDefForModel(modelId: string): ByokProviderDef | undefined {
-  const def = BYOK_PROVIDER_DEFS.find(
-    (d) => d.id !== 'anthropic' && d.models.some((m) => m.id === modelId),
-  );
-  return def && hasByokKey(def.id) ? def : undefined;
-}
-
 type IngestChunk = (chunk: string) => void;
 
 async function drainChunks(stream: AsyncIterable<string>, ingest: IngestChunk): Promise<void> {
   for await (const chunk of stream) ingest(chunk);
 }
 
-async function streamKeyedByokRail(
-  def: ByokProviderDef,
+/** Local-engine rail — streams the manager turn through Ollama/LM Studio.
+ *  One request per turn (no retry: a refused connection means Ollama is
+ *  down, and retrying the identical request cannot fix that — the failover
+ *  loop moves to the next rail instead). */
+async function streamLocalRail(
   model: string,
   systemFinal: string,
   apiMessages: ManagerMessage[],
   signal: AbortSignal | undefined,
   ingest: IngestChunk,
 ): Promise<void> {
-  const byokStream = def.apiFormat === 'anthropic' ? streamAnthropicCompatRaw : streamOpenAICompatRaw;
-  await drainChunks(byokStream({
-    baseUrl: effectiveByokBaseUrl(def),
-    apiKey: loadByokKey(def.id),
-    model,
-    system: systemFinal,
+  const streamTurn = createLocalAgentTurnStreamer();
+  await drainChunks(streamTurn({
     messages: apiMessages,
+    system: systemFinal,
+    model: toLocalModelName(model),
     signal,
   }), ingest);
-}
-
-async function streamLiveKeyRail(
-  model: string,
-  systemFinal: string,
-  apiMessages: ManagerMessage[],
-  signal: AbortSignal | undefined,
-  ingest: IngestChunk,
-): Promise<void> {
-  const byokDef = resolveByokDef(loadAccessSettings().byokProvider);
-  if (!byokDef) {
-    throw new Error('LazyManager error: aucun provider BYOK sélectionné — choisis-en un dans Réglages > Modèles.');
-  }
-  const byokApiKey = loadByokKey(byokDef.id);
-  if (!byokApiKey) {
-    throw new Error(`LazyManager error: aucune clé API ${byokDef.label} configurée — ajoute-la dans Réglages > Modèles.`);
-  }
-  const byokModel =
-    byokDef.models.some((m) => m.id === model) || loadByokModel(byokDef.id) === model
-      ? model
-      : effectiveByokModel(byokDef);
-  const byokStream = byokDef.apiFormat === 'anthropic' ? streamAnthropicCompatRaw : streamOpenAICompatRaw;
-  await drainChunks(byokStream({
-    baseUrl: effectiveByokBaseUrl(byokDef),
-    apiKey: byokApiKey,
-    model: byokModel,
-    system: systemFinal,
-    messages: apiMessages,
-    signal,
-  }), ingest);
-}
-
-/** Managed (Pro/ai-proxy) rail — streams the manager turn through the proxy
- *  and retries transient provider errors. Extracted from dispatchAmbientRail
- *  so that dispatcher stays under the ESLint complexity ratchet.
- *
- *  Free-rail fallthrough (2026-09-11, live-verified): retrying the SAME free
- *  model on upstream_error_429 was useless — the shared :free quota stays
- *  saturated for minutes, so all 3 attempts hit the same wall and the turn
- *  still failed. A :free model that 429s or 404s now rotates to the NEXT
- *  free catalog entry (nextFreeOpenRouterModelId) — different upstream
- *  provider, different quota bucket — before giving up. */
-async function streamManagedRailWithRetry(
-  model: string,
-  systemFinal: string,
-  cacheableSystemFinal: { core: string; dynamic: string } | undefined,
-  apiMessages: ManagerMessage[],
-  signal: AbortSignal | undefined,
-  ingest: IngestChunk,
-): Promise<void> {
-  const free = isOpenRouterFreeModel(model);
-  const attempts = free ? 4 : 1;
-  let currentModel = model;
-  let lastErr: unknown;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      await drainChunks(streamManagedAgentTurn({
-        messages: apiMessages,
-        system: systemFinal,
-        cacheableSystem: cacheableSystemFinal,
-        model: toManagedModelId(currentModel),
-        signal,
-      } satisfies AgentTurnOpts), ingest);
-      return;
-    } catch (err) {
-      lastErr = err;
-      const msg = err instanceof Error ? err.message : String(err);
-      const retryable = /fournisseur de modèle|upstream_error|502|503|504|Provider returned error/i.test(msg);
-      if (!retryable || attempt === attempts || signal?.aborted) throw err;
-      // On an upstream 429/404 the SAME free model will keep failing for a
-      // while — rotate to the next free catalog entry (a different provider
-      // with its own quota) instead of pointlessly re-hitting it.
-      if (free && /upstream_error_(429|404)/i.test(msg)) {
-        const next = nextFreeOpenRouterModelId(toManagedModelId(currentModel));
-        if (next) currentModel = next;
-      }
-      await new Promise((r) => setTimeout(r, 400 * attempt));
-    }
-  }
-  throw lastErr;
 }
 
 /** Devin CLI rail (ACP backend, tool 'devin'). Model ids pass through
@@ -532,7 +360,6 @@ async function dispatchAmbientRail(
   model: string,
   systemFinal: string,
   codexSystemFinal: string,
-  cacheableSystemFinal: { core: string; dynamic: string } | undefined,
   apiMessages: ManagerMessage[],
   signal: AbortSignal | undefined,
   ingest: IngestChunk,
@@ -560,40 +387,30 @@ async function dispatchAmbientRail(
     await streamDevinRail(model, codexSystemFinal, apiMessages, signal, ingest);
     return;
   }
-  if (mode === 'live-key') {
-    await streamLiveKeyRail(model, systemFinal, apiMessages, signal, ingest);
+  if (mode === 'local') {
+    await streamLocalRail(model, systemFinal, apiMessages, signal, ingest);
     return;
   }
-  if (mode === 'mock' && !model.includes('/')) {
-    throw new Error(
-      "Claude CLI n'est pas disponible dans le navigateur. Connecte-toi et choisis GLM 5.2, ou ouvre l'app desktop.",
-    );
-  }
-  await streamManagedRailWithRetry(model, systemFinal, cacheableSystemFinal, apiMessages, signal, ingest);
+  throw new Error(
+    'ForgeManager error: no engine available in this browser session. Open the desktop app with Ollama running or a CLI tool installed.',
+  );
 }
 
 export async function streamManagerCompletion(opts: StreamManagerCompletionOpts): Promise<string> {
   const {
-    mode, model, system, cacheableSystem, apiMessages, signal, onChunk, onPartial,
+    mode, model, system, apiMessages, signal, onChunk, onPartial,
     appendRecallTeaching = true,
   } = opts;
   const systemWithTeaching = appendRecallTeaching ? `${system}\n\n${RECALL_TEACHING}` : system;
   // FIX 1 — ACTION_FORMAT_REMINDER appended as the true last content of
   // whatever each rail actually dispatches. `systemFinal` covers
-  // claude-code/live-key/managed (all three send `systemWithTeaching`
-  // as-is); codex deliberately does NOT read `systemWithTeaching` (see the
-  // comment on that branch below), so it gets its own `codexSystemFinal`
-  // built from the raw `system` instead — RECALL_TEACHING placement for
-  // codex stays exactly as before, untouched by this fix. `cacheableSystemFinal`
-  // mirrors the same suffix onto the cache-split `dynamic` half so
-  // `core + dynamic` keeps reconstructing `systemFinal` exactly (existing
-  // invariant — see runManagerTurn's own cacheableSystem doc comment);
-  // `core` itself is never touched.
+  // claude-code/local (both send `systemWithTeaching` as-is); codex
+  // deliberately does NOT read `systemWithTeaching` (see the comment on
+  // that branch below), so it gets its own `codexSystemFinal` built from
+  // the raw `system` instead — RECALL_TEACHING placement for codex stays
+  // exactly as before, untouched by this fix.
   const systemFinal = `${systemWithTeaching}\n\n${ACTION_FORMAT_REMINDER}`;
   const codexSystemFinal = `${system}\n\n${ACTION_FORMAT_REMINDER}`;
-  const cacheableSystemFinal = cacheableSystem
-    ? { core: cacheableSystem.core, dynamic: `${cacheableSystem.dynamic}\n\n${ACTION_FORMAT_REMINDER}` }
-    : undefined;
   // accumulateManagerChunks' own doc comment above explains the guard this
   // replaces plain `rawResponse += chunk` with — every branch below folds
   // its chunks through the SAME appendManagerChunk step function.
@@ -604,31 +421,28 @@ export async function streamManagerCompletion(opts: StreamManagerCompletionOpts)
     onPartial?.(acc.text);
   };
 
-  // Checked BEFORE the ambient-mode branches below — see
-  // resolveByokDefForModel's own doc comment for the real bug this fixes
-  // (a keyed BYOK-catalog model picked from the picker used to be silently
-  // forwarded to whatever rail the ambient mode happened to resolve to,
-  // e.g. the Claude CLI, which rejects an id it has never heard of).
-  const modelByokDef = resolveByokDefForModel(model);
-  const primary: ManagerRailAttempt = modelByokDef
-    ? { kind: 'keyed-byok', def: modelByokDef, model }
+  // Checked BEFORE the ambient-mode branches below — an explicit local
+  // (`local/…`) or Devin-catalog model pick always wins over the ambient
+  // mode, matching what the picker already promised the user it would do.
+  const primary: ManagerRailAttempt = model.startsWith('local/')
+    ? { kind: 'local-model', model }
     : isDevinModel(model)
       // Devin-catalog id picked explicitly — same model-driven short-circuit
-      // as the BYOK check above: rides the devin ACP rail no matter which
-      // ambient mode resolved (getProvider()'s isDevinModel check is the
-      // provider-level twin of this branch).
+      // as above: rides the devin ACP rail no matter which ambient mode
+      // resolved (getProvider()'s isDevinModel check is the provider-level
+      // twin of this branch).
       ? { kind: 'devin-model', model }
       : { kind: 'mode', mode, model };
 
   const dispatchAttempt = (attempt: ManagerRailAttempt): Promise<void> => {
-    if (attempt.kind === 'keyed-byok') {
-      return streamKeyedByokRail(attempt.def, attempt.model, systemFinal, apiMessages, signal, ingest);
+    if (attempt.kind === 'local-model') {
+      return streamLocalRail(attempt.model, systemFinal, apiMessages, signal, ingest);
     }
     if (attempt.kind === 'devin-model') {
       return streamDevinRail(attempt.model, codexSystemFinal, apiMessages, signal, ingest);
     }
     return dispatchAmbientRail(
-      attempt.mode, attempt.model, systemFinal, codexSystemFinal, cacheableSystemFinal, apiMessages, signal, ingest,
+      attempt.mode, attempt.model, systemFinal, codexSystemFinal, apiMessages, signal, ingest,
     );
   };
 

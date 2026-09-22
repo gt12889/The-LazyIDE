@@ -16,8 +16,8 @@ vi.mock('../app/AppContext', () => {
 });
 
 vi.mock('../lib/agents/runtime', () => ({
-  isManagedAgentAvailable: () => false,
   isLiveAgentAvailable: () => false,
+  isLocalLoopAvailable: () => false,
 }));
 
 afterEach(() => {

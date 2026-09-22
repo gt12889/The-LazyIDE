@@ -46,10 +46,10 @@ describe.skipIf(!LIVE)('rails eval LIVE (C86)', () => {
       () => {
         expect(resolveEvalRail(row.snap)).toBe(row.rail);
         if (row.rail === 'cli') {
-          expect(resolveManagerTurnMode('managed', 'cli', 'claude-code')).toBe('claude-code');
+          expect(resolveManagerTurnMode('local', 'cli', 'claude-code')).toBe('claude-code');
         }
         if (row.rail === 'pro') {
-          expect(resolveManagerTurnMode('claude-code', 'pro', 'claude-code')).toBe('managed');
+          expect(resolveManagerTurnMode('claude-code', 'local', 'claude-code')).toBe('local');
         }
       },
     );

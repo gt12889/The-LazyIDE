@@ -8,24 +8,24 @@ import { resolveEvalRail } from '../lib/brain/e2e/railsEvalHarness';
 import { resolveManagerTurnMode } from '../lib/agents/managerTurnRetry';
 
 describe('rails eval harness', () => {
-  it('CLI override wins over a managed ambient mode', () => {
+  it('CLI override wins over a local ambient mode', () => {
     expect(resolveEvalRail({
       ambientMode: 'managed',
       engineOverride: 'cli',
       hasProCredits: true,
       hasAnthropicKey: true,
     })).toBe('cli');
-    expect(resolveManagerTurnMode('managed', 'cli', 'claude-code')).toBe('claude-code');
+    expect(resolveManagerTurnMode('local', 'cli', 'claude-code')).toBe('claude-code');
   });
 
-  it('Pro override routes to managed when credits are live', () => {
+  it('local override routes to local', () => {
     expect(resolveEvalRail({
       ambientMode: 'claude-code',
-      engineOverride: 'pro',
+      engineOverride: 'cli',
       hasProCredits: true,
       hasAnthropicKey: false,
-    })).toBe('pro');
-    expect(resolveManagerTurnMode('claude-code', 'pro', 'claude-code')).toBe('managed');
+    })).toBe('cli');
+    expect(resolveManagerTurnMode('claude-code', 'local', 'claude-code')).toBe('local');
   });
 
   it('empty Pro wallet does not serve the Pro rail', () => {

@@ -87,10 +87,8 @@ export const SAFE_ACTIONS = new Set<string>([
   'create_lazybot',
   'update_lazybot',
   'list_lazybots',
-  // lazybot_runs reads run history; toggle_bot_vm only shows/hides a canvas
-  // window — both display-tier.
+  // lazybot_runs reads run history — display-tier.
   'lazybot_runs',
-  'toggle_bot_vm',
 ]);
 
 /** Mutative actions that consume budget or touch real running execution.
@@ -139,14 +137,12 @@ export const SENSITIVE_ACTIONS = new Set<string>([
   // non-final buttons) even though `validateOnly` keeps the actual publish
   // step from firing — touches real execution, same tier as start_preview.
   'run_browser_recipe',
-  // LazyBots (A3) — run_lazybot launches a real managed mission (spends
-  // budget, touches real execution) like launch_mission; stop_lazybot halts
-  // running execution like stop_mission. sweep_solari kills real cloud
-  // sessions (orphaned ones, but still remote resources); resolving a bot's
-  // intervention gate unblocks a parked run — both touch live execution.
+  // Bots — run_lazybot launches a real mission (touches real execution)
+  // like launch_mission; stop_lazybot halts running execution like
+  // stop_mission; resolving a bot's intervention gate unblocks a parked
+  // run — all touch live execution.
   'run_lazybot',
   'stop_lazybot',
-  'sweep_solari',
   'resolve_bot_intervention',
   // teach_lazybot opens a canvas window and, on stop, rewrites the bot's
   // systemPrompt — a live config mutation, not display-only.

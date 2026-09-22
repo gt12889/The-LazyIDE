@@ -22,11 +22,11 @@ interface MissionDetailControlsProps {
   onBack: () => void;
   onSaveAsAgent: () => void;
   /** Whether this mission's engine is the managed (Pro) loop — see
-   *  MissionDetail's single isManagedAgentAvailable() call site. */
-  isManagedEngine: boolean;
+   *  MissionDetail's single isLocalLoopAvailable() call site. */
+  isLoopEngine: boolean;
 }
 
-export function MissionDetailControls({ mission, onBack, onSaveAsAgent, isManagedEngine }: MissionDetailControlsProps) {
+export function MissionDetailControls({ mission, onBack, onSaveAsAgent, isLoopEngine }: MissionDetailControlsProps) {
   const {
     stopMission,
     pauseMission,
@@ -55,7 +55,7 @@ export function MissionDetailControls({ mission, onBack, onSaveAsAgent, isManage
   // plain Mission structurally satisfies RevertableMission too (both
   // extra fields are optional).
   const revertInfo = mission as RevertableMission;
-  const nativePauseOk = !isManagedEngine && isLiveAgentAvailable() && canNativePause(mission);
+  const nativePauseOk = !isLoopEngine && isLiveAgentAvailable() && canNativePause(mission);
 
   const handleStop = useCallback(() => {
     stopMission(mission.id);
@@ -298,7 +298,7 @@ export function MissionDetailControls({ mission, onBack, onSaveAsAgent, isManage
             >
               {t('agents.detail.resume')}
             </button>
-          ) : (isManagedEngine || nativePauseOk) ? (
+          ) : (isLoopEngine || nativePauseOk) ? (
             <button
               data-testid="pause-btn"
               onClick={handlePause}

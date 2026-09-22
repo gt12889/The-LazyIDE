@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -37,9 +37,7 @@ const LAZY_SPACE_VENDOR_CHUNKS = [VENDOR_CODEMIRROR_CHUNK, VENDOR_THREE_CHUNK, '
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
-  const anthropicKey = env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || ''
-
+  void mode;
   return {
   define: {
     'import.meta.env.__APP_VERSION__': JSON.stringify(pkgVersion),
@@ -97,52 +95,6 @@ export default defineConfig(({ mode }) => {
         changeOrigin: true,
         timeout: 2000,
         proxyTimeout: 2000,
-      },
-      '/anthropic-api': {
-        target: 'https://api.anthropic.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/anthropic-api/, ''),
-        headers: {
-          'x-api-key': anthropicKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-      },
-      // Solari cloud (browsers / VM desktops / sandboxes). The browser view is
-      // same-origin here, so CORS never applies; Vite forwards to the gateway
-      // server-side. The SDK's control/stream URLs stay absolute (wss://) and
-      // are unaffected by this proxy.
-      '/solari-api': {
-        target: 'https://api.getsolari.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/solari-api/, ''),
-      },
-      // Session replay downloads: the presigned URL lives on
-      // storage.googleapis.com — a webview fetch there is CORS-blocked, so
-      // dev forwards the bytes same-origin (packaged Tauri uses the Rust
-      // solari_replay_download command instead). Path+query are passed
-      // through untouched — the signature is in the query string.
-      '/solari-replay': {
-        target: 'https://storage.googleapis.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/solari-replay/, ''),
-      },
-      // Solari CDP/ws browser sessions. The gateway 403s any WebSocket handshake
-      // carrying an Origin header (verified: no-origin opens, any Origin 403s),
-      // and a browser WebSocket always sends Origin. So the app dials a
-      // same-origin ws:// URL here and Vite strips the Origin before forwarding
-      // upstream — mirrors what the SDK's local proxy does in Node.
-      '/solari-cdp': {
-        target: 'wss://api.getsolari.com',
-        ws: true,
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/solari-cdp/, ''),
-        configure: (proxy) => {
-          proxy.on('proxyReqWs', (proxyReq) => {
-            proxyReq.removeHeader('origin');
-            proxyReq.setHeader('host', 'api.getsolari.com');
-          });
-        },
       },
     },
   },

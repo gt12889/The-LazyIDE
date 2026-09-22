@@ -105,7 +105,7 @@ describe('Composer — engine preflight', () => {
   });
 
   it('never stacks: two blocked attempts still render exactly one notice', () => {
-    mockedReadiness.mockReturnValue({ mode: 'byok', ready: false, reason: 'byok-no-key' });
+    mockedReadiness.mockReturnValue({ mode: 'local', ready: false, reason: 'local-unreachable' });
     renderComposer();
 
     typeAndSend('Premier essai');
@@ -125,14 +125,14 @@ describe('Composer — engine preflight', () => {
     expect(mockedEmit).toHaveBeenCalledWith('nav:navigateSpace', 'models');
   });
 
-  it('"Configurer" navigates to Settings > Account for Pro entitlement reasons', () => {
-    mockedReadiness.mockReturnValue({ mode: 'pro', ready: false, reason: 'pro-no-credits' });
+  it('"Configurer" navigates to Settings > Models for local reasons too', () => {
+    mockedReadiness.mockReturnValue({ mode: 'local', ready: false, reason: 'local-unreachable' });
     renderComposer();
 
     typeAndSend();
     fireEvent.click(screen.getByTestId('composer-preflight-configure'));
 
-    expect(mockedEmit).toHaveBeenCalledWith('nav:navigateSpace', 'account');
+    expect(mockedEmit).toHaveBeenCalledWith('nav:navigateSpace', 'models');
   });
 
   it('ready: sending proceeds and the notice disappears after a previously blocked attempt', () => {

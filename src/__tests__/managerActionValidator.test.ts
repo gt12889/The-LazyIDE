@@ -406,22 +406,11 @@ describe('validateManagerAction', () => {
     expect(validateManagerAction({ type: 'resolve_bot_intervention' }).ok).toBe(false);
   });
 
-  it('accepts sweep_solari with no fields', () => {
-    expect(validateManagerAction({ type: 'sweep_solari' }).ok).toBe(true);
-  });
-
   it('accepts lazybot_runs with botId and optional limit, rejects non-number limit', () => {
     expect(validateManagerAction({ type: 'lazybot_runs', botId: 'bot_1' }).ok).toBe(true);
     expect(validateManagerAction({ type: 'lazybot_runs', botId: 'bot_1', limit: 5 }).ok).toBe(true);
     expect(validateManagerAction({ type: 'lazybot_runs', botId: 'bot_1', limit: 'five' }).ok).toBe(false);
     expect(validateManagerAction({ type: 'lazybot_runs' }).ok).toBe(false);
-  });
-
-  it('accepts toggle_bot_vm with botId and optional open, rejects non-boolean open', () => {
-    expect(validateManagerAction({ type: 'toggle_bot_vm', botId: 'bot_1' }).ok).toBe(true);
-    expect(validateManagerAction({ type: 'toggle_bot_vm', botId: 'bot_1', open: true }).ok).toBe(true);
-    expect(validateManagerAction({ type: 'toggle_bot_vm', botId: 'bot_1', open: 'yes' }).ok).toBe(false);
-    expect(validateManagerAction({ type: 'toggle_bot_vm' }).ok).toBe(false);
   });
 
   it('accepts teach_lazybot with botId + mode, optional skillName; rejects missing fields', () => {

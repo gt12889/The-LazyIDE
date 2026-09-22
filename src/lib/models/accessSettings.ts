@@ -1,18 +1,17 @@
 /* accessSettings — persistence of the user's provider/model preferences.
 
-   Extracted into its own module so that managedProvider.ts can import it
-   without creating a circular dependency with index.ts.
-
-   index.ts re-exports everything here, so existing callers are unaffected.
+   Forge: local-first IDE. Access modes are 'cli' (claude/codex/devin CLIs
+   on PATH) and 'local' (Ollama / LM Studio on localhost). There is no
+   hosted backend, no BYOK, no subscription — see models/index.ts.
 */
 
-import type { ReasoningEffort } from './openrouterCatalog.js';
 import type { CavemanIntensity } from '../compression/types.js';
 import type { OutputStyleSelectionEntry } from '../assistant/outputStyles.js';
-import type { ByokProvider } from './byokProviders.js';
+import type { ReasoningEffort } from './registry.js';
 
-export type { ByokProvider } from './byokProviders.js';
-export type AccessMode = 'cli' | 'byok' | 'pro' | 'local';
+export type { ReasoningEffort } from './registry.js';
+
+export type AccessMode = 'cli' | 'local';
 export type CliTool = 'claude' | 'codex' | 'devin';
 
 export interface AccessSettings {
@@ -21,14 +20,11 @@ export interface AccessSettings {
   /** Which CLI tool to use when accessMode === 'cli'. Default: 'claude'. */
   cliTool?: CliTool;
   /** Preferred model id (used across all modes when set).
-      When accessMode === 'pro', this must be an OpenRouter catalog id
-      (e.g. 'anthropic/claude-sonnet-5'). For other modes it is a native
-      provider id (e.g. 'claude-sonnet-5'). */
+      CLI modes use a native provider id (e.g. 'claude-sonnet-5');
+      local mode uses a 'local/<name>' id (e.g. 'local/hermes3'). */
   model?: string;
-  /** Which BYOK provider when accessMode === 'byok'. Default: 'anthropic'. */
-  byokProvider?: ByokProvider;
-  /** Reasoning effort sent to the OpenRouter proxy when accessMode === 'pro'
-      and the selected model supports reasoning. Default: 'medium'. */
+  /** Reasoning effort sent to the CLI tool when the selected model supports
+      reasoning. Default: 'medium'. */
   reasoningEffort?: ReasoningEffort;
   /** Enable web search plugin for requests when the model supports it. */
   webSearch?: boolean;
@@ -42,7 +38,40 @@ export interface AccessSettings {
   outputStyles?: OutputStyleSelectionEntry[];
 }
 
-const LS_ACCESS_KEY = 'lazy.accessSettings';
+const LS_ACCESS_KEY = 'forge.accessSettings';
+
+/** Legacy key from the Lazy IDE this was forked from — migrated once, then
+    removed, so existing installs keep their cliTool/model choices. */
+const LEGACY_LS_ACCESS_KEY = 'lazy.accessSettings';
+
+function migrateLegacy(): AccessSettings {
+  try {
+    const raw = localStorage.getItem(LEGACY_LS_ACCESS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const next: AccessSettings = {};
+    // Only carry over fields that still exist. 'byok'/'pro' modes collapse
+    // to auto-detect (undefined) — the router re-resolves to cli/local.
+    if (parsed.accessMode === 'cli' || parsed.accessMode === 'local') {
+      next.accessMode = parsed.accessMode;
+    }
+    if (parsed.cliTool === 'claude' || parsed.cliTool === 'codex' || parsed.cliTool === 'devin') {
+      next.cliTool = parsed.cliTool;
+    }
+    if (typeof parsed.model === 'string' && parsed.model) {
+      next.model = parsed.model;
+    }
+    try {
+      localStorage.setItem(LS_ACCESS_KEY, JSON.stringify(next));
+      localStorage.removeItem(LEGACY_LS_ACCESS_KEY);
+    } catch {
+      // storage unavailable — ignore
+    }
+    return next;
+  } catch {
+    return {};
+  }
+}
 
 export function loadAccessSettings(): AccessSettings {
   try {
@@ -51,7 +80,7 @@ export function loadAccessSettings(): AccessSettings {
   } catch {
     // localStorage unavailable or invalid JSON — fall through
   }
-  return {};
+  return migrateLegacy();
 }
 
 export function saveAccessSettings(settings: AccessSettings): void {

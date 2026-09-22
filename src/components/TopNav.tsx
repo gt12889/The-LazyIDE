@@ -38,13 +38,12 @@ interface NavPillItem {
   labelKey: string;
 }
 
-// Team pill is live — the Team space ships role-derived Solo/Lead/Member
-// views plus GitHub-backed brain + canvas sharing (see AppShell.tsx).
+// Top nav pills: Cockpit / Code / Brain. (The Team pill is gone with the
+// Team space — see AppShell.tsx.)
 const NAV_PILL_ITEMS: NavPillItem[] = [
   { id: 'agents', labelKey: 'nav.cockpit' },
   { id: 'code', labelKey: 'nav.code' },
   { id: 'brain', labelKey: 'nav.brain' },
-  { id: 'team', labelKey: 'nav.team' },
 ];
 
 // The wordmark's " / <Space>" suffix and the segmented pill labels share
@@ -87,7 +86,7 @@ function Logo() {
         flexShrink: 0,
       }}
     >
-      <span style={{ fontWeight: 700, fontSize: 17, color: '#fff', fontFamily: 'var(--font-ui)' }}>L</span>
+      <span style={{ fontWeight: 700, fontSize: 17, color: '#fff', fontFamily: 'var(--font-ui)' }}>F</span>
     </div>
   );
 }

@@ -1,271 +1,37 @@
-/* ModelPicker — Pro model selector shown when accessMode === 'pro'.
-   Renders a native <select> grouped by provider (Anthropic, OpenAI, Google,
-   xAI, DeepSeek, Meta). Each option shows the model label, a tier badge
-   (fast / balanced / max), and a price badge ($ / $$ / $$$).
-   When the selected model supports reasoning, a Thinking effort selector
-   appears with Off / Low / Medium / High options.
-   Persists selection to AccessSettings via saveAccessSettings.
+/* ModelPicker — Forge model selector (Settings > Models).
+   Renders the live picker groups (local engine, CLI subscription, Devin)
+   as radio rows. Selecting a model persists accessMode + model through the
+   same saveAccessSettings() path every other picker uses. A reasoning
+   effort selector appears for native CLI models; a free-text field lets
+   the user point the local rail at any pulled Ollama model.
 */
 
 import { useState } from 'react';
-import {
-  OPENROUTER_MODELS_BY_PROVIDER,
-  DEFAULT_OPENROUTER_MODEL_ID,
-  findOpenRouterModel,
-  priceBadge,
-} from '../../lib/models/openrouterCatalog';
-import type { OpenRouterModel, ReasoningEffort } from '../../lib/models/openrouterCatalog';
+import { ALL_MODELS } from '../../lib/models/registry';
+import { devinModelInfos } from '../../lib/models/devinCatalog';
 import { loadAccessSettings, saveAccessSettings } from '../../lib/models/accessSettings';
+import type { ReasoningEffort } from '../../lib/models/accessSettings';
+import { loadLocalModelName, DEFAULT_LOCAL_MODEL_ID } from '../../lib/models/localProvider';
+import { getModelPickerOptions } from '../../lib/models/modelPickerOptions';
 import { getEngineReadiness, engineReasonKey } from '../../lib/models/entitlement';
 import { emit } from '../../lib/bus';
 import { useI18n } from '../../i18n';
-import { FreeModelPrivacyNotice } from './FreeModelPrivacyNotice';
-
-const GOLD = '#F6A945';
-
-// ── Lock glyph (inline SVG — no emoji) ──────────────────────────────
-
-function LockIcon({ color }: { color: string }) {
-  return (
-    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
-      <rect x="3.2" y="7" width="9.6" height="6.4" rx="1.6" stroke={color} strokeWidth="1.5" />
-      <path d="M5.4 7V5.2a2.6 2.6 0 0 1 5.2 0V7" stroke={color} strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-// ── Provider ordering ───────────────────────────────────────────────
-
-const PROVIDER_ORDER = ['Anthropic', 'OpenAI', 'Google', 'xAI', 'DeepSeek', 'Meta', 'Free'] as const;
-
-// ── Tier label ──────────────────────────────────────────────────────
-
-function tierLabel(model: OpenRouterModel, t: (key: string) => string): string {
-  switch (model.tier) {
-    case 'fast':     return t('settings.pro.tier.fast');
-    case 'balanced': return t('settings.pro.tier.balanced');
-    case 'max':      return t('settings.pro.tier.max');
-    case 'free':     return t('settings.pro.tier.free');
-  }
-}
-
-// ── Tier badge colors ───────────────────────────────────────────────
-
-const TIER_COLOR: Record<string, string> = {
-  fast:     '#4ADE80',
-  balanced: '#74C0FC',
-  max:      '#F6A945',
-  free:     '#22D3EE',
-};
-
-// ── Pill badge ──────────────────────────────────────────────────────
-
-interface BadgeProps {
-  text: string;
-  color: string;
-}
-
-function Badge({ text, color }: BadgeProps) {
-  return (
-    <span
-      style={{
-        fontSize: 9,
-        fontWeight: 700,
-        color,
-        background: `${color}18`,
-        border: `1px solid ${color}44`,
-        borderRadius: 3,
-        padding: '1px 5px',
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-        flexShrink: 0,
-        lineHeight: 1.6,
-      }}
-    >
-      {text}
-    </span>
-  );
-}
-
-// ── Model row (label rendered inside the model list) ────────────────
-
-interface ModelRowProps {
-  model: OpenRouterModel;
-  selected: boolean;
-  /** True when the managed catalog is locked (no Pro entitlement, W2.8):
-      the row stays visible but is disabled, with a lock glyph + Pro chip. */
-  locked: boolean;
-  onSelect: () => void;
-  t: (key: string) => string;
-}
-
-function ModelRow({ model, selected, locked, onSelect, t }: ModelRowProps) {
-  const price = priceBadge(model);
-  const tierColor = TIER_COLOR[model.tier] ?? '#888';
-
-  return (
-    <label
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 9,
-        padding: '6px 8px',
-        borderRadius: 6,
-        cursor: locked ? 'not-allowed' : 'pointer',
-        opacity: locked ? 0.55 : 1,
-        background: !locked && selected ? 'var(--color-accent-soft)' : 'transparent',
-        border: `1px solid ${!locked && selected ? 'var(--color-accent-border)' : 'transparent'}`,
-        transition: 'background 0.1s',
-      }}
-    >
-      <input
-        type="radio"
-        name="pro-model"
-        value={model.id}
-        checked={!locked && selected}
-        disabled={locked}
-        onChange={onSelect}
-        style={{ accentColor: 'var(--color-accent)', cursor: locked ? 'not-allowed' : 'pointer', flexShrink: 0 }}
-      />
-      {locked && <LockIcon color={GOLD} />}
-      <span
-        style={{
-          fontSize: 12,
-          fontWeight: 500,
-          color: 'var(--color-text)',
-          flex: 1,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        {model.label}
-      </span>
-      {locked && <Badge text="Pro" color={GOLD} />}
-      <Badge text={tierLabel(model, t)} color={tierColor} />
-      <Badge text={price} color="rgba(255,255,255,0.45)" />
-    </label>
-  );
-}
-
-// ── Provider group heading ──────────────────────────────────────────
-
-const PROVIDER_COLOR: Record<string, string> = {
-  Anthropic: '#A78BFF',
-  OpenAI:    '#74C0FC',
-  Google:    '#F6A945',
-  xAI:       '#4ADE80',
-  DeepSeek:  '#60A5FA',
-  Meta:      '#F87171',
-  Free:      '#22D3EE',
-};
-
-interface ProviderGroupProps {
-  name: string;
-  models: OpenRouterModel[];
-  selectedId: string;
-  locked: boolean;
-  onSelect: (id: string) => void;
-  t: (key: string) => string;
-  collapsed: boolean;
-  onToggle: () => void;
-}
-
-function ProviderGroup({ name, models, selectedId, locked, onSelect, t, collapsed, onToggle }: ProviderGroupProps) {
-  const color = PROVIDER_COLOR[name] ?? '#888';
-  return (
-    <div style={{ marginBottom: 8 }}>
-      {/* Provider header — collapsible: a full Pro catalog expanded by
-          default was a wall of ~40 rows (real founder feedback: "ça scroll
-          bcp"). Only the group holding the current selection starts open. */}
-      <button
-        type="button"
-        onClick={onToggle}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 7,
-          padding: '4px 8px',
-          marginBottom: 3,
-          width: '100%',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-          textAlign: 'left',
-        }}
-      >
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: color,
-            flexShrink: 0,
-          }}
-        />
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            color,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            flex: 1,
-          }}
-        >
-          {name}
-        </span>
-        <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
-          {models.length} {collapsed ? '▸' : '▾'}
-        </span>
-      </button>
-
-      {/* Model rows */}
-      {!collapsed && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 8 }}>
-          {models.map(model => (
-            <ModelRow
-              key={model.id}
-              model={model}
-              selected={selectedId === model.id}
-              locked={locked}
-              onSelect={() => onSelect(model.id)}
-              t={t}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Thinking effort selector ────────────────────────────────────────
 
 type EffortOption = 'off' | ReasoningEffort;
 
-function getEffortOptions(t: (key: string) => string, supportsMax?: boolean): Array<{ value: EffortOption; label: string }> {
-  const opts: Array<{ value: EffortOption; label: string }> = [
-    { value: 'off',    label: t('settings.pro.thinking.off') },
-    { value: 'low',    label: t('settings.pro.thinking.low') },
-    { value: 'medium', label: t('settings.pro.thinking.medium') },
-    { value: 'high',   label: t('settings.pro.thinking.high') },
-  ];
-  if (supportsMax) {
-    opts.push({ value: 'max', label: t('settings.pro.thinking.max') });
-  }
-  return opts;
-}
-
-interface ThinkingSelectorProps {
+function ThinkingSelector({ effort, onChange, t }: {
   effort: EffortOption;
   onChange: (v: EffortOption) => void;
   t: (key: string) => string;
-  supportsMax?: boolean;
-}
-
-function ThinkingSelector({ effort, onChange, t, supportsMax }: ThinkingSelectorProps) {
-  const EFFORT_OPTIONS = getEffortOptions(t, supportsMax);
+}) {
+  const opts: Array<{ value: EffortOption; label: string }> = [
+    { value: 'off', label: t('settings.pro.thinking.off') },
+    { value: 'low', label: t('settings.pro.thinking.low') },
+    { value: 'medium', label: t('settings.pro.thinking.medium') },
+    { value: 'high', label: t('settings.pro.thinking.high') },
+  ];
   return (
     <div
       style={{
@@ -279,18 +45,11 @@ function ThinkingSelector({ effort, onChange, t, supportsMax }: ThinkingSelector
         marginTop: 6,
       }}
     >
-      <span
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: '#A78BFF',
-          flexShrink: 0,
-        }}
-      >
+      <span style={{ fontSize: 11, fontWeight: 600, color: '#A78BFF', flexShrink: 0 }}>
         {t('settings.pro.thinking')}
       </span>
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        {EFFORT_OPTIONS.map(opt => (
+        {opts.map(opt => (
           <button
             key={opt.value}
             onClick={() => onChange(opt.value)}
@@ -321,237 +80,229 @@ function ThinkingSelector({ effort, onChange, t, supportsMax }: ThinkingSelector
   );
 }
 
+// ── Group ───────────────────────────────────────────────────────────
+
+interface GroupProps {
+  name: string;
+  color: string;
+  models: Array<{ id: string; label: string }>;
+  selectedId: string;
+  onSelect: (id: string) => void;
+  collapsed: boolean;
+  onToggle: () => void;
+}
+
+function Group({ name, color, models, selectedId, onSelect, collapsed, onToggle }: GroupProps) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 7, padding: '4px 8px',
+          marginBottom: 3, width: '100%', background: 'transparent',
+          border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+        <span style={{ fontSize: 10, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.08em', flex: 1 }}>
+          {name}
+        </span>
+        <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
+          {models.length} {collapsed ? '▸' : '▾'}
+        </span>
+      </button>
+      {!collapsed && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 8 }}>
+          {models.map(model => (
+            <label
+              key={model.id}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 9, padding: '6px 8px',
+                borderRadius: 6, cursor: 'pointer',
+                background: selectedId === model.id ? 'var(--color-accent-soft)' : 'transparent',
+                border: `1px solid ${selectedId === model.id ? 'var(--color-accent-border)' : 'transparent'}`,
+                transition: 'background 0.1s',
+              }}
+            >
+              <input
+                type="radio"
+                name="forge-model"
+                value={model.id}
+                checked={selectedId === model.id}
+                onChange={() => onSelect(model.id)}
+                style={{ accentColor: 'var(--color-accent)', cursor: 'pointer', flexShrink: 0 }}
+              />
+              <span style={{
+                fontSize: 12, fontWeight: 500, color: 'var(--color-text)', flex: 1,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {model.label}
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── ModelPicker ─────────────────────────────────────────────────────
+
+const GROUP_COLOR: Record<string, string> = {
+  local: '#66E27A',
+  'claude-sub': '#A78BFF',
+  devin: '#2DD4BF',
+};
 
 export function ModelPicker() {
   const { t } = useI18n();
   const initial = loadAccessSettings();
-  const resolvedId = findOpenRouterModel(initial.model ?? '')
-    ? (initial.model as string)
-    : DEFAULT_OPENROUTER_MODEL_ID;
+  const pickerOptions = getModelPickerOptions(t);
 
-  const [selectedId, setSelectedId] = useState<string>(resolvedId);
-  const [effort, setEffort] = useState<EffortOption>(
-    initial.reasoningEffort ?? 'medium',
+  const [selectedId, setSelectedId] = useState<string>(
+    initial.model ?? pickerOptions.defaultModelId,
   );
-  const [webSearch, setWebSearch] = useState<boolean>(initial.webSearch ?? false);
+  const [effort, setEffort] = useState<EffortOption>(initial.reasoningEffort ?? 'medium');
+  const [localName, setLocalName] = useState<string>(loadLocalModelName());
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
-  // Honest lock (v0.1.5 W2.8): evaluate the Pro engine SPECIFICALLY —
-  // choosing the Pro radio is allowed so users can browse the offer, but
-  // nothing becomes selectable without an active plan + credits.
-  const proReadiness = getEngineReadiness('pro');
-  const locked = !proReadiness.ready;
+  const readiness = getEngineReadiness();
+  const supportsReasoning = ALL_MODELS.some((m) => m.id === selectedId);
 
-  const selectedModel = findOpenRouterModel(selectedId);
-  const supportsReasoning = !locked && selectedModel?.reasoning === true;
-  const supportsWebSearch = !locked && selectedModel?.webSearch === true;
+  function persist(model: string, nextEffort: EffortOption) {
+    const current = loadAccessSettings();
+    if (model.startsWith('local/')) {
+      saveAccessSettings({ ...current, accessMode: 'local', model });
+    } else if (devinModelInfos().some((m) => m.id === model)) {
+      saveAccessSettings({ ...current, accessMode: 'cli', cliTool: 'devin', model });
+    } else {
+      saveAccessSettings({ ...current, accessMode: 'cli', model });
+    }
+    void nextEffort;
+  }
 
   function handleSelectModel(id: string) {
-    if (locked) return; // defense in depth — inputs are already disabled
-    const model = findOpenRouterModel(id);
-    if (!model) return;
-
     setSelectedId(id);
-
-    // When switching to a non-reasoning model, clear effort from storage
-    const nextEffort: EffortOption = model.reasoning ? effort : 'off';
-
     const current = loadAccessSettings();
-    saveAccessSettings({
-      ...current,
-      model: id,
-      reasoningEffort: nextEffort === 'off' ? undefined : nextEffort,
-    });
+    if (id.startsWith('local/')) {
+      try { localStorage.setItem('lazy.local.model', id.slice('local/'.length)); } catch { /* ignore */ }
+      setLocalName(id.slice('local/'.length));
+      saveAccessSettings({ ...current, accessMode: 'local', model: id });
+      return;
+    }
+    persist(id, effort);
+  }
+
+  function handleLocalNameApply() {
+    const name = localName.trim() || 'hermes3';
+    try { localStorage.setItem('lazy.local.model', name); } catch { /* ignore */ }
+    const id = `local/${name}`;
+    setSelectedId(id);
+    const current = loadAccessSettings();
+    saveAccessSettings({ ...current, accessMode: 'local', model: id });
   }
 
   function handleEffortChange(v: EffortOption) {
     setEffort(v);
     const current = loadAccessSettings();
-    saveAccessSettings({
-      ...current,
-      reasoningEffort: v === 'off' ? undefined : v,
-    });
-  }
-
-  function handleWebSearchToggle() {
-    const next = !webSearch;
-    setWebSearch(next);
-    const current = loadAccessSettings();
-    saveAccessSettings({
-      ...current,
-      webSearch: next,
-    });
+    saveAccessSettings({ ...current, reasoningEffort: v === 'off' ? undefined : v });
   }
 
   return (
     <div
       data-testid="model-picker"
       style={{
-        padding: '12px 14px',
-        background: 'var(--color-panel-2)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 8,
-        marginTop: 10,
+        padding: '12px 14px', background: 'var(--color-panel-2)',
+        border: '1px solid var(--color-border)', borderRadius: 8, marginTop: 10,
       }}
     >
-      {/* Section title */}
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          color: 'var(--color-text-muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          marginBottom: 10,
-        }}
-      >
+      <div style={{
+        fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)',
+        textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10,
+      }}>
         {t('settings.pro.modelPicker')}
       </div>
 
-      {/* Locked callout — single instance, above the list (W2.8) */}
-      {locked && proReadiness.reason && (
+      {!readiness.ready && readiness.reason && (
         <div
-          data-testid="managed-locked-callout"
           role="note"
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            marginBottom: 10,
-            padding: '8px 10px',
-            borderRadius: 7,
-            background: 'rgba(246,169,69,0.08)',
-            border: '1px solid rgba(246,169,69,0.3)',
+            display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10,
+            padding: '8px 10px', borderRadius: 7,
+            background: 'rgba(246,169,69,0.08)', border: '1px solid rgba(246,169,69,0.3)',
           }}
         >
-          <LockIcon color={GOLD} />
-          <span style={{ flex: 1, fontSize: 11, lineHeight: 1.45, color: GOLD }}>
-            {t(engineReasonKey(proReadiness.reason))}
+          <span style={{ flex: 1, fontSize: 11, lineHeight: 1.45, color: '#F6A945' }}>
+            {t(engineReasonKey(readiness.reason))}
           </span>
           <button
             type="button"
-            onClick={() => emit('nav:navigateSpace', 'account')}
+            onClick={() => emit('nav:navigateSpace', 'models')}
             style={{
-              padding: '5px 12px',
-              borderRadius: 6,
-              border: 'none',
-              background: 'var(--color-accent)',
-              color: '#fff',
-              fontSize: 11,
-              fontWeight: 600,
-              fontFamily: 'inherit',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
+              padding: '5px 12px', borderRadius: 6, border: 'none',
+              background: 'var(--color-accent)', color: '#fff', fontSize: 11,
+              fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
             }}
           >
-            {t('engine.preflight.goPro')}
+            {t('engine.preflight.configure')}
           </button>
         </div>
       )}
 
-      {/* Provider groups — collapsed by default except the group holding
-          the current selection (see ProviderGroup's own comment). */}
-      {PROVIDER_ORDER.map(providerName => {
-        const models = OPENROUTER_MODELS_BY_PROVIDER[providerName];
-        if (!models || models.length === 0) return null;
-        return (
-          <ProviderGroup
-            key={providerName}
-            name={providerName}
-            models={models}
-            selectedId={selectedId}
-            locked={locked}
-            onSelect={handleSelectModel}
-            t={t}
-            collapsed={collapsedGroups[providerName] ?? !models.some((m) => m.id === selectedId)}
-            onToggle={() => setCollapsedGroups((c) => ({ ...c, [providerName]: !(c[providerName] ?? !models.some((m) => m.id === selectedId)) }))}
+      {pickerOptions.groups.map((group) => (
+        <Group
+          key={group.id}
+          name={group.label}
+          color={GROUP_COLOR[group.id] ?? '#888'}
+          models={group.models}
+          selectedId={selectedId}
+          onSelect={handleSelectModel}
+          collapsed={collapsedGroups[group.id] ?? !group.models.some((m) => m.id === selectedId)}
+          onToggle={() => setCollapsedGroups((c) => ({
+            ...c,
+            [group.id]: !(c[group.id] ?? !group.models.some((m) => m.id === selectedId)),
+          }))}
+        />
+      ))}
+
+      {/* Local model name — point the local rail at any pulled Ollama model */}
+      <div style={{ marginTop: 6, padding: '8px 10px', background: 'rgba(102,226,122,0.06)', border: '1px solid rgba(102,226,122,0.2)', borderRadius: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: '#66E27A' }}>
+          {t('settings.models.localModel')}
+        </span>
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <input
+            value={localName}
+            onChange={(e) => setLocalName(e.target.value)}
+            placeholder="hermes3"
+            spellCheck={false}
+            style={{
+              flex: 1, background: 'var(--color-panel)', border: '1px solid var(--color-border)',
+              borderRadius: 5, color: 'var(--color-text)', fontSize: 12, padding: '5px 9px',
+              fontFamily: 'var(--font-mono)', outline: 'none', minWidth: 0,
+            }}
           />
-        );
-      })}
-
-      {/* Free-model privacy notice — persistent while a free model is
-          selected, placed right below the picker so it's seen at the
-          point of selection, before any message is sent. */}
-      {!locked && <FreeModelPrivacyNotice isFree={selectedModel?.isFree === true} />}
-
-      {/* Thinking effort — only for reasoning-capable models */}
-      {supportsReasoning && (
-        <ThinkingSelector effort={effort} onChange={handleEffortChange} t={t} supportsMax={selectedModel?.maxEffort === true} />
-      )}
-
-      {/* Web search toggle — only for models that support it */}
-      {supportsWebSearch && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '8px 10px',
-            background: 'rgba(34,211,238,0.06)',
-            border: '1px solid rgba(34,211,238,0.2)',
-            borderRadius: 8,
-            marginTop: 6,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: '#22D3EE',
-              flexShrink: 0,
-            }}
-          >
-            {t('settings.pro.webSearch')}
-          </span>
           <button
-            onClick={handleWebSearchToggle}
+            type="button"
+            onClick={handleLocalNameApply}
             style={{
-              padding: '3px 10px',
-              borderRadius: 5,
-              border: webSearch
-                ? '1px solid rgba(34,211,238,0.55)'
-                : '1px solid var(--color-border)',
-              background: webSearch
-                ? 'rgba(34,211,238,0.15)'
-                : 'var(--color-panel)',
-              color: webSearch ? '#22D3EE' : 'var(--color-text-muted)',
-              fontSize: 11,
-              fontWeight: webSearch ? 600 : 400,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              transition: 'background 0.1s',
+              padding: '5px 12px', borderRadius: 5, border: '1px solid rgba(102,226,122,0.45)',
+              background: 'rgba(102,226,122,0.15)', color: '#66E27A', fontSize: 11,
+              fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
             }}
           >
-            {webSearch ? 'ON' : 'OFF'}
+            {t('settings.models.useLocal')}
           </button>
         </div>
+      </div>
+
+      {supportsReasoning && (
+        <ThinkingSelector effort={effort} onChange={handleEffortChange} t={t} />
       )}
 
-      {/* Max tokens info */}
-      {selectedModel && (
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 10,
-            color: 'var(--color-text-muted)',
-            padding: '4px 10px',
-          }}
-        >
-          {t('settings.pro.maxTokens')}: {selectedModel.maxTokens.toLocaleString()}
-        </div>
-      )}
-
-      {/* Price legend */}
-      <div
-        style={{
-          marginTop: 10,
-          fontSize: 10,
-          color: 'var(--color-text-muted)',
-          lineHeight: 1.5,
-        }}
-      >
-        {t('settings.pro.modelPicker.legend')}
+      <div style={{ marginTop: 10, fontSize: 10, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+        {t('settings.models.localNote', { default: DEFAULT_LOCAL_MODEL_ID })}
       </div>
     </div>
   );

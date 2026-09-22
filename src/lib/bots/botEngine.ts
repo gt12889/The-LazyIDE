@@ -1,26 +1,19 @@
-/* botEngine — orchestrates LazyBot runs.
+/* botEngine — orchestrates bot runs.
 
    Bridges between a BotConfig and the REAL mission machinery: builds the bot
    system prompt and tool policy, delegates mission creation to the agents
    store's addMission (via the caller-provided createMission callback — the
    mission is visible on the canvas, journaled, engine-routed, and stoppable
    exactly like any other mission), and tracks runtime state keyed by the
-   REAL mission id so the canvas bot node, the LazyManager's query/stop
+   REAL mission id so the canvas bot node, the manager's query/stop
    actions, and the inline approval gate all resolve against it.
 
-   The original design called planAndActManaged directly with no-op
-   callbacks — the run existed only in this module's memory: no mission card,
-   no canvas node, invisible to the manager's mission digest (query_mission
-   honestly reported "nothing matches"), and unstoppable except through this
-   module's private abort map. Delegating to addMission fixes the whole chain.
-
-   Solari session cleanup (releaseAll) is called on finish/stop to avoid
-   orphaned cloud sessions.
+   Bots run on LOCAL tools only (files, shell-free reads, web_search /
+   web_fetch, local browser tools) — there is no cloud computer backend.
 */
 
 import type { BotConfig, BotRun, BotRunLaunchOpts, BotRuntimeState, BotMissionInput } from './botTypes.js';
 import { emit } from '../bus.js';
-import { releaseAll, takeBrowserArtifacts, registerRunArtifactStamper } from '../solari/solariSessions.js';
 import { checkBotBudgetExceeded, checkBotBudgetWarning, setBotBudgetCap } from './budgetGuard.js';
 import {
   appendBotRunHistory,
@@ -31,33 +24,18 @@ import {
   removePersistedRuns,
 } from './botRuntimeStore.js';
 
-// ── Cloud tool name constants ──────────────────────────────────────
+// ── Tool name constants ──────────────────────────────────────────
+// Forge has no cloud computer backend: the capability families below are
+// kept in BotConfig (the Bots UI still stores them) but they no longer
+// gate any tools — every bot runs on the local tool set. The lists stay
+// so capability copy in the UI keeps rendering real tool names.
 
-const CLOUD_BROWSER_TOOLS = [
-  'cloud_browser_open', 'cloud_browser_close', 'cloud_browser_navigate',
-  'cloud_browser_read_page', 'cloud_browser_click', 'cloud_browser_type',
-  'cloud_browser_screenshot', 'cloud_browser_scroll', 'cloud_browser_wait',
-  'cloud_browser_replay_url', 'cloud_browser_profiles_list', 'cloud_browser_profile_save',
-  'cloud_browser_press_key', 'cloud_browser_profile_create',
+const BROWSER_TOOLS = [
+  'browser_open', 'browser_navigate', 'browser_click', 'browser_fill',
+  'browser_screenshot', 'browser_snapshot', 'browser_close',
 ] as const;
 
-const CLOUD_DESKTOP_TOOLS = [
-  'cloud_desktop_open', 'cloud_desktop_close', 'cloud_desktop_screenshot',
-  'cloud_desktop_stream_url', 'cloud_desktop_mouse_click', 'cloud_desktop_mouse_move',
-  'cloud_desktop_mouse_scroll', 'cloud_desktop_app_open', 'cloud_desktop_process_list',
-  'cloud_desktop_keyboard_type', 'cloud_desktop_keyboard_hotkey', 'cloud_desktop_keyboard_press',
-  'cloud_desktop_exec', 'cloud_desktop_clipboard_get', 'cloud_desktop_clipboard_set',
-  'cloud_desktop_file_write', 'cloud_desktop_file_read', 'cloud_desktop_file_list',
-  'cloud_desktop_snapshot', 'cloud_desktop_revert',
-] as const;
-
-const CLOUD_SANDBOX_TOOLS = [
-  'cloud_sandbox_open', 'cloud_sandbox_close', 'cloud_sandbox_read_file',
-  'cloud_sandbox_file_list', 'cloud_sandbox_write_file', 'cloud_sandbox_exec',
-  'cloud_sandbox_preview_url', 'cloud_sandbox_run_code', 'cloud_sandbox_file_search',
-  'cloud_sandbox_download', 'cloud_sandbox_upload',
-  'cloud_sandbox_command_start', 'cloud_sandbox_command_poll',
-] as const;
+const WEB_TOOLS = ['web_search', 'web_fetch'] as const;
 
 // ── System prompt builder ──────────────────────────────────────────
 
@@ -68,7 +46,7 @@ const AUTONOMY_DESCRIPTIONS: Record<BotConfig['autonomy'], string> = {
 };
 
 /** Builds the system prompt for a bot run. Composes the bot's persona with a
- *  BOT_POLICY_BLOCK and a CLOUD_TOOL_INDEX listing available cloud_* tools. */
+ *  BOT_POLICY_BLOCK and a LOCAL_TOOL_INDEX listing available local tools. */
 export function buildBotSystemPrompt(bot: BotConfig, lastTimeNote?: string): string {
   const lines: string[] = [];
 
@@ -81,61 +59,17 @@ export function buildBotSystemPrompt(bot: BotConfig, lastTimeNote?: string): str
   lines.push(`Autonomy mode: ${bot.autonomy.toUpperCase()}`);
   lines.push(AUTONOMY_DESCRIPTIONS[bot.autonomy]);
   lines.push('');
-  lines.push('You have access to cloud computer tools (Solari). Use them to browse the web, control a desktop VM, or run code in sandboxes.');
-  if (bot.capabilities.browser) {
-    lines.push('- Use cloud_browser_open to start a browser session, then cloud_browser_navigate to go to a URL.');
-  }
-  if (bot.capabilities.desktop) {
-    lines.push('- Use cloud_desktop_open to acquire the shared Agent Computer (desktop VM), then cloud_desktop_* tools to interact.');
-  }
-  if (bot.capabilities.sandbox) {
-    lines.push('- Use cloud_sandbox_open to start a code sandbox, then cloud_sandbox_* tools to run code.');
-  }
-  const closeTools: string[] = [];
-  if (bot.capabilities.browser) closeTools.push('cloud_browser_close');
-  if (bot.capabilities.desktop) closeTools.push('cloud_desktop_close');
-  if (bot.capabilities.sandbox) closeTools.push('cloud_sandbox_close');
-  lines.push(`- Sessions are per-mission and managed automatically — you do not need to manage session lifecycle, but you SHOULD close sessions when done (${closeTools.join(', ')}).`);
-  if (bot.capabilities.browser && bot.profileIds.length > 0) {
-    lines.push(`- You have persistent logins via Solari profiles: ${bot.profileIds.join(', ')}. Pass profile_id to cloud_browser_open to attach a profile.`);
-  }
+  lines.push('You run on LOCAL tools on the machine hosting Forge. Use web_search/web_fetch to research, the browser_* tools to open pages, and write_file to save results.');
   lines.push('- The approval gate will intercept consequential actions and may block until the user approves. If blocked, wait for the outcome — do not retry the same action.');
   lines.push('- Login, 2FA, captcha, payment, or anything only a human can complete: ACTION: bot_wait_for_human with {"reason":"login|2fa|captcha|payment","detail":"what the human must do"} — it PAUSES your run until the human resolves it, then resumes you automatically. Use bot_request_intervention instead only when you can keep working without the answer. Never guess passwords or 2FA codes.');
-  lines.push('- To delegate to another LazyBot: ACTION: bot_handoff {"to":"bot_id_or_name","task":"...","context":"optional","blocking":true} — with blocking:true you get the child bot\'s report back; without it the handoff is fire-and-forget.');
-  if (bot.capabilities.desktop) {
-    lines.push('- Desktop pro tips: cloud_desktop_mouse_click/move accept {"humanize":true} for natural motion (less bot-detectable); cloud_desktop_snapshot checkpoints the VM before a risky step, cloud_desktop_revert restores it.');
-  }
-  if (bot.capabilities.sandbox) {
-    lines.push('- Sandbox pro tips: cloud_sandbox_run_code keeps a stateful kernel (variables persist across calls) and renders charts; cloud_sandbox_command_start launches a long-running process you poll with cloud_sandbox_command_poll.');
-  }
-  if (bot.capabilities.browser) {
-    lines.push('- Browser pro tips: cloud_browser_open accepts profile_id OR profile_name (auto-created), proxy_country/proxy_tier (residential|static|mobile|smart), proxy_session (sticky IP), captcha:true, recording:true. cloud_browser_profile_save persists your logins into the attached profile — call it AFTER a successful login so next run stays logged in.');
-  }
+  lines.push('- To delegate to another bot: ACTION: bot_handoff {"to":"bot_id_or_name","task":"...","context":"optional","blocking":true} — with blocking:true you get the child bot\'s report back; without it the handoff is fire-and-forget.');
   lines.push('- write_file saves under .lazy/bot-deliverables/<botId>/ (local project silo).');
-  const cloudWriters = [
-    bot.capabilities.desktop ? 'cloud_desktop_file_write' : null,
-    bot.capabilities.sandbox ? 'cloud_sandbox_write_file' : null,
-  ].filter(Boolean).join(' / ');
-  if (cloudWriters) {
-    lines.push(`- ${cloudWriters} save under /workspace/bot-deliverables/<botId>/ (same relative suffix as local).`);
-  }
-  lines.push('- Cloud files live on the Solari Agent Computer /workspace volume — NOT the same disk as write_file. Copy results deliberately (local write_file vs cloud_*_file_write).');
   lines.push('');
 
-  // 3. Cloud tool index
-  lines.push('=== AVAILABLE CLOUD TOOLS ===');
-  if (bot.capabilities.browser) {
-    lines.push('Browser: ' + CLOUD_BROWSER_TOOLS.join(', '));
-  }
-  if (bot.capabilities.desktop) {
-    lines.push('Desktop: ' + CLOUD_DESKTOP_TOOLS.join(', '));
-  }
-  if (bot.capabilities.sandbox) {
-    lines.push('Sandbox: ' + CLOUD_SANDBOX_TOOLS.join(', '));
-  }
-  if (!bot.capabilities.browser && !bot.capabilities.desktop && !bot.capabilities.sandbox) {
-    lines.push('(no cloud capabilities enabled for this bot)');
-  }
+  // 3. Local tool index
+  lines.push('=== AVAILABLE LOCAL TOOLS ===');
+  lines.push('Web: ' + WEB_TOOLS.join(', '));
+  lines.push('Browser: ' + BROWSER_TOOLS.join(', '));
   lines.push('');
   lines.push('- You ALSO have LOCAL file tools on the project where the bot runs:');
   lines.push('  write_file ({"path": "relative/path.txt", "content": "..."}) — create/overwrite a text file');
@@ -144,19 +78,10 @@ export function buildBotSystemPrompt(bot: BotConfig, lastTimeNote?: string): str
   lines.push('');
 
   // 4. ReAct action format — the mission loop parses these exact blocks, so
-  //    spell them out per-tool for the model (deepseek-class models need it).
-  // The demo tool name must track the bot's capabilities — a disabled
-  // family's tool must not appear anywhere in the prompt.
-  const demoTool = bot.capabilities.browser
-    ? 'cloud_browser_open'
-    : bot.capabilities.sandbox
-      ? 'cloud_sandbox_open'
-      : bot.capabilities.desktop
-        ? 'cloud_desktop_open'
-        : 'read_dir';
+  //    spell them out per-tool for the model (small local models need it).
   lines.push('=== ACTION FORMAT ===');
-  lines.push(`How you act: you drive a remote computer by WRITING commands — emitting \`ACTION: ${demoTool}\` in your reply text makes the host execute it for real and its result returns as \`Observation:\`. Every tool listed above is live and yours to call this way — whether or not your own runtime exposes an identically-named builtin is irrelevant here; if it is listed above, writing the ACTION runs it. Conversely, never claim you fetched, visited, read or ran anything without an ACTION+Observation pair to back it — a FINAL reporting work no ACTION performed is a lie and will be rejected.`);
-  lines.push('NEVER inspect your own environment to decide availability — do NOT call mcp_list_servers, do NOT enumerate your functions, do NOT run a local check "just to verify". Those probes answer the wrong question: the cloud_* tools are not in YOUR runtime, they are in the HOST\'s — your own tool list tells you nothing and a refusal based on it is always wrong.');
+  lines.push('How you act: you drive this machine by WRITING commands — emitting `ACTION: web_search` in your reply text makes the host execute it for real and its result returns as `Observation:`. Every tool listed above is live and yours to call this way — whether or not your own runtime exposes an identically-named builtin is irrelevant here; if it is listed above, writing the ACTION runs it. Conversely, never claim you fetched, visited, read or ran anything without an ACTION+Observation pair to back it — a FINAL reporting work no ACTION performed is a lie and will be rejected.');
+  lines.push('NEVER inspect your own environment to decide availability — do NOT call mcp_list_servers, do NOT enumerate your functions, do NOT run a local check "just to verify". Those probes answer the wrong question: the tools are not in YOUR runtime, they are in the HOST\'s — your own tool list tells you nothing and a refusal based on it is always wrong.');
   lines.push('Every reply you produce MUST start with exactly one of the blocks below and contain NOTHING else.');
   lines.push('To use a tool:');
   lines.push('THOUGHT: <why this step>');
@@ -164,40 +89,24 @@ export function buildBotSystemPrompt(bot: BotConfig, lastTimeNote?: string): str
   lines.push('ARGS: <json>');
   lines.push('(omit the ARGS line entirely for tools that take no arguments)');
   lines.push('');
-  if (bot.capabilities.browser) {
-    lines.push('Examples:');
-    lines.push('THOUGHT: I need to start a browser.');
-    lines.push('ACTION: cloud_browser_open');
-    lines.push('');
-    lines.push('THOUGHT: Now navigate to the site.');
-    lines.push('ACTION: cloud_browser_navigate');
-    lines.push('ARGS: {"url": "https://example.com"}');
-    lines.push('');
-    lines.push('THOUGHT: Save the result to a file.');
-    lines.push('ACTION: write_file');
-    lines.push('ARGS: {"path": "scrape-result.txt", "content": "Title: Example Domain\\nText: ..."}');
-    lines.push('');
-  } else if (bot.capabilities.sandbox) {
-    lines.push('Example:');
-    lines.push('THOUGHT: I need to run a command.');
-    lines.push('ACTION: cloud_sandbox_exec');
-    lines.push('ARGS: {"command": "echo hello"}');
-    lines.push('');
-  } else if (bot.capabilities.desktop) {
-    lines.push('Example:');
-    lines.push('THOUGHT: I need to open the desktop VM.');
-    lines.push('ACTION: cloud_desktop_open');
-    lines.push('');
-  }
+  lines.push('Examples:');
+  lines.push('THOUGHT: I need to research the topic.');
+  lines.push('ACTION: web_search');
+  lines.push('ARGS: {"query": "example topic"}');
+  lines.push('');
+  lines.push('THOUGHT: Save the result to a file.');
+  lines.push('ACTION: write_file');
+  lines.push('ARGS: {"path": "scrape-result.txt", "content": "Title: Example Domain\\nText: ..."}');
+  lines.push('');
   // A complete worked exchange — syntax examples alone were not enough for
-  // agent-shaped brains (swe-2 answers "the tools are not in MY session" in
+  // agent-shaped brains (they answer "the tools are not in MY session" in
   // prose); showing the host's Observation replies demonstrates the bridge.
   lines.push('=== A REAL EXCHANGE (this is exactly how it works) ===');
-  lines.push('you → THOUGHT: I need my remote computer.');
-  lines.push(`      ACTION: ${demoTool}`);
-  lines.push('host → Observation: Session opened (id: sess_abc123).');
-  lines.push('you → THOUGHT: The session is up — now I do the task.');
-  lines.push('      ACTION: <next tool>');
+  lines.push('you → THOUGHT: I need to research the topic.');
+  lines.push('      ACTION: web_search');
+  lines.push('host → Observation: <real result>');
+  lines.push('you → THOUGHT: The research is done — now I save it.');
+  lines.push('      ACTION: write_file');
   lines.push('      ARGS: {...}');
   lines.push('host → Observation: <real result>');
   lines.push('you → FINAL: <structured report>');
@@ -226,9 +135,6 @@ export function buildBotSystemPrompt(bot: BotConfig, lastTimeNote?: string): str
   lines.push('CRITICAL LOOP RULES:');
   lines.push('- After EVERY tool call you receive a line "Observation: ...". Read it, then reply with the NEXT block.');
   lines.push('- Never narrate in prose, never explain, never apologize, never ask — ONLY the next THOUGHT/ACTION/FINAL block.');
-  if (bot.capabilities.browser) {
-    lines.push('- After cloud_browser_open, immediately emit the navigate step (do not stop).');
-  }
   lines.push('- Do NOT repeat an ACTION that already succeeded in a previous step.');
   lines.push('- If the same tool fails twice with a service-side error, stop retrying it — report the failure in your FINAL report (OPEN QUESTIONS) and, if it blocks the task, escalate via bot_request_intervention or ask_user before ending the run.');
 
@@ -237,30 +143,25 @@ export function buildBotSystemPrompt(bot: BotConfig, lastTimeNote?: string): str
 
 // ── Tool policy builder ────────────────────────────────────────────
 
-/** The only LOCAL tools a LazyBot may use — exactly the ones its system
- *  prompt documents (save/read a result file, list a folder) plus ask_user
- *  for the "I need a human" case (login, captcha, ambiguous choice). A bot
- *  is a Solari cloud computer, not a local code agent: edit_file,
- *  run_command, run_tests, git_* and the rest of the code-agent toolbox are
- *  deliberately absent (see runLazyBotMission.ts). */
+/** The only tools a bot may use — exactly the ones its system prompt
+ *  documents (save/read a result file, list a folder, web research, local
+ *  browser) plus ask_user for the "I need a human" case. A bot is a local
+ *  runner, not a local code agent: edit_file, run_command, run_tests,
+ *  git_* and the rest of the code-agent toolbox are deliberately absent
+ *  (see runLazyBotMission.ts). */
 export const BOT_LOCAL_TOOLS = [
   'write_file', 'read_file', 'read_dir', 'ask_user',
+  'web_search', 'web_fetch',
+  ...BROWSER_TOOLS,
   'bot_request_intervention', 'bot_wait_for_human', 'bot_handoff',
 ] as const;
 
-/** Returns the tool allow/deny lists based on the bot's capabilities.
- *  `allowedTools` is the exhaustive list the loop may execute (enabled
- *  cloud_* families + BOT_LOCAL_TOOLS); `deniedTools` keeps listing the
- *  disabled cloud families explicitly so a disabled family stays blocked
- *  even for a caller that only forwards the deny list. */
-export function buildBotToolPolicy(bot: BotConfig): { allowedTools: string[]; deniedTools: string[] } {
-  const allowed: string[] = [];
-  const denied: string[] = [];
-  (bot.capabilities.browser ? allowed : denied).push(...CLOUD_BROWSER_TOOLS);
-  (bot.capabilities.desktop ? allowed : denied).push(...CLOUD_DESKTOP_TOOLS);
-  (bot.capabilities.sandbox ? allowed : denied).push(...CLOUD_SANDBOX_TOOLS);
-  allowed.push(...BOT_LOCAL_TOOLS);
-  return { allowedTools: allowed, deniedTools: denied };
+/** Returns the tool allow/deny lists. Forge has no cloud families, so the
+ *  bot capabilities no longer gate anything — every bot gets the full
+ *  local set. `deniedTools` is kept (empty) so callers' shape is unchanged. */
+export function buildBotToolPolicy(_bot: BotConfig): { allowedTools: string[]; deniedTools: string[] } {
+  void _bot;
+  return { allowedTools: [...BOT_LOCAL_TOOLS], deniedTools: [] };
 }
 
 // ── Runtime state ──────────────────────────────────────────────────
@@ -423,25 +324,13 @@ function persistRunning(): void {
   void persistActiveRuns(snapshotRunning());
 }
 
-// Replay artifacts captured mid-run (browser close before mission settle)
-// must outlive a renderer reload: the in-memory browserArtifacts map is
-// wiped on reload, but this stamper writes them onto the PERSISTED run —
-// pruneBotRunsNotLive's `{...run}` append then still carries replayUrl/
-// replayPath into the history entry (real M138 incident). Registered at
-// module init; a no-op for missions whose run already left activeBotRuns
-// (finish/stop still read the in-memory map via takeBrowserArtifacts).
-registerRunArtifactStamper((missionId, artifact) => {
-  const run = activeBotRuns.get(missionId);
-  if (!run) return;
-  if (artifact.replayUrl) run.replayUrl = artifact.replayUrl;
-  if (artifact.replayPath) run.replayPath = artifact.replayPath;
-  persistRunning();
-});
+// No run-artifact stamper: there are no cloud sessions whose replay could
+// outlive a reload. History entries carry the run as-is.
 
-/** Launches a bot run as a REAL, visible managed mission. The mission is
+/** Launches a bot run as a REAL, visible mission. The mission is
  *  created through `opts.createMission` (the agents store's addMission) so
- *  it gets a canvas card, journal rows, engine routing (managed/BYOK/native
- *  via classifyMissionModel — no duplicated routing here), and the store's
+ *  it gets a canvas card, journal rows, engine routing (local/CLI via
+ *  classifyMissionModel — no duplicated routing here), and the store's
  *  stop/pause/intervene paths. This function then only tracks the run's
  *  runtime state keyed by the real mission id. */
 export async function launchBotRun(
@@ -473,11 +362,11 @@ export async function launchBotRun(
   }
 }
 
-/** Marks a bot run finished and releases its Solari sessions. Called by the
- *  agents store when a bot mission reaches its end (runMission resolved or
- *  threw — see addMission's launch chain). Idempotent: an unknown/already
- *  finished missionId is a no-op, so both the resolve and catch paths can
- *  call it safely. Never throws — cleanup is best-effort. */
+/** Marks a bot run finished. Called by the agents store when a bot mission
+ *  reaches its end (runMission resolved or threw — see addMission's launch
+ *  chain). Idempotent: an unknown/already finished missionId is a no-op, so
+ *  both the resolve and catch paths can call it safely. Never throws —
+ *  cleanup is best-effort. */
 export async function finishBotRun(missionId: string, summary?: string): Promise<void> {
   const run = activeBotRuns.get(missionId);
   if (!run) return;
@@ -491,19 +380,13 @@ export async function finishBotRun(missionId: string, summary?: string): Promise
   activeBotRuns.delete(missionId);
   persistRunning();
   emit('lazybots:runtimeChanged', { botId: run.botId });
-  // releaseAll → releaseBrowser captures the replay BEFORE we snapshot the
-  // run into history, so the recording URL lands on the persisted record.
-  await releaseAll(missionId).catch(() => {});
-  const artifacts = takeBrowserArtifacts(missionId);
-  if (artifacts?.replayUrl) run.replayUrl = artifacts.replayUrl;
-  if (artifacts?.replayPath) run.replayPath = artifacts.replayPath;
   void appendBotRunHistory({ ...run });
 }
 
-/** Stops a running bot run's bookkeeping and releases its cloud sessions.
- *  The REAL abort belongs to the agents store (stopMission aborts the
- *  mission's own stopFlag/controller); this only clears the bot-engine
- *  tracking so the runtime state stays honest. Idempotent. */
+/** Stops a running bot run's bookkeeping. The REAL abort belongs to the
+ *  agents store (stopMission aborts the mission's own stopFlag/controller);
+ *  this only clears the bot-engine tracking so the runtime state stays
+ *  honest. Idempotent. */
 export async function stopBotRun(run: BotRun): Promise<void> {
   const state = runtimeStates.get(run.botId);
   if (state) {
@@ -514,10 +397,6 @@ export async function stopBotRun(run: BotRun): Promise<void> {
   activeBotRuns.delete(run.missionId);
   persistRunning();
   emit('lazybots:runtimeChanged', { botId: run.botId });
-  await releaseAll(run.missionId).catch(() => {});
-  const artifacts = takeBrowserArtifacts(run.missionId);
-  if (artifacts?.replayUrl) run.replayUrl = artifacts.replayUrl;
-  if (artifacts?.replayPath) run.replayPath = artifacts.replayPath;
   void appendBotRunHistory({ ...run });
 }
 
@@ -590,7 +469,6 @@ export async function pruneBotRunsNotLive(liveMissionIds: ReadonlySet<string>): 
       // Visible in the bot's RunHistory (same shape stopBotRun uses) — a swept
       // run must not vanish without a trace.
       void appendBotRunHistory({ ...run });
-      await releaseAll(run.missionId).catch(() => {});
     }
     // 2. Persisted runs — without this a later restoreBotRuntime would re-add
     //    exactly the zombie we just cleared (restore may not have run yet).
@@ -603,7 +481,6 @@ export async function pruneBotRunsNotLive(liveMissionIds: ReadonlySet<string>): 
         cleared += 1;
         const cancelled = { ...run, status: 'cancelled' as const, completedAt: new Date().toISOString() };
         void appendBotRunHistory(cancelled);
-        await releaseAll(run.missionId).catch(() => {});
       }
     }
     return cleared;

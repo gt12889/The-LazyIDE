@@ -30,7 +30,6 @@
 
 import { journalQuery } from '../journal/journal.js';
 import type { JournalEventRow } from '../journal/eventTypes.js';
-import { findOpenRouterModel } from '../models/openrouterCatalog.js';
 
 // ── Size classification ──────────────────────────────────────────────
 
@@ -123,30 +122,23 @@ export function sizeClassOf(taskText: string, scopePaths: string[] = []): SizeCl
 
 export type ModelTierClass = 'cheap' | 'standard' | 'premium';
 
-// Native Anthropic ids (registry.ts) carry no tier field, and any future/
-// unlisted id (a new catalog entry, a BYOK custom id, ...) must still
-// classify to *something* — so both native ids and unknown ids fall back
-// to matching the id string itself against the same fast/max naming the
-// model picker already uses (haiku=fast, opus/fable=max, sonnet=balanced).
+// Native CLI ids carry no tier field, and any future/unlisted id (a new
+// catalog entry, a local Ollama id, ...) must still classify to
+// *something* — so everything falls back to matching the id string itself
+// against the same fast/max naming the model picker already uses
+// (haiku=fast, opus/fable=max, sonnet=balanced). Local runs cost $0, so
+// they always classify 'cheap'.
 const CHEAP_ID_PATTERN = /haiku|mini|flash-lite|-lite\b|nano/i;
 const PREMIUM_ID_PATTERN = /opus|fable|\bmax\b|gpt-5\.5/i;
 
 /**
- * Classifies a model id (native Anthropic or OpenRouter) into a cost tier.
- * OpenRouter ids ('provider/model') carry an explicit tier in the curated
- * catalog (openrouterCatalog.ts) — trusted first when present. Everything
- * else (native ids, and any id not found in that catalog) falls back to
- * pattern-matching the id string, mirroring the same tiering.
+ * Classifies a model id (native CLI or `local/…`) into a cost tier.
+ * Local ids always classify 'cheap' (Ollama runs cost $0). Everything
+ * else falls back to pattern-matching the id string, mirroring the same
+ * tiering.
  */
 export function modelTierOf(modelId: string): ModelTierClass {
-  if (modelId.includes('/')) {
-    const orModel = findOpenRouterModel(modelId);
-    if (orModel) {
-      if (orModel.tier === 'max') return 'premium';
-      if (orModel.tier === 'fast' || orModel.tier === 'free') return 'cheap';
-      return 'standard'; // 'balanced'
-    }
-  }
+  if (modelId.startsWith('local/')) return 'cheap';
   if (CHEAP_ID_PATTERN.test(modelId)) return 'cheap';
   if (PREMIUM_ID_PATTERN.test(modelId)) return 'premium';
   return 'standard';

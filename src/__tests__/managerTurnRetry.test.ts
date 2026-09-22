@@ -20,11 +20,11 @@ import type { ManagerMessage } from '../lib/agents/types.js';
 
 describe('resolveManagerTurnMode', () => {
   it('honors cli override with the native engine mode, not the ambient raw mode', () => {
-    expect(resolveManagerTurnMode('managed', 'cli', 'claude-code')).toBe('claude-code');
+    expect(resolveManagerTurnMode('local', 'cli', 'claude-code')).toBe('claude-code');
   });
 
-  it('maps pro override onto the managed rail', () => {
-    expect(resolveManagerTurnMode('claude-code', 'pro', 'claude-code')).toBe('managed');
+  it('maps local override onto the local rail', () => {
+    expect(resolveManagerTurnMode('claude-code', 'local', 'claude-code')).toBe('local');
   });
 
   it('keeps the ambient mode when no override is set', () => {
@@ -113,9 +113,9 @@ describe('appendTurnRetryMessages', () => {
 
 describe('eligibleRepairMode', () => {
   it('returns the resolved mode when a failed nudge still has budget', () => {
-    expect(eligibleRepairMode(true, 3, 3, 'managed')).toBe('managed');
-    expect(eligibleRepairMode(true, 4, 3, 'managed')).toBeUndefined();
-    expect(eligibleRepairMode(false, 1, 3, 'managed')).toBeUndefined();
+    expect(eligibleRepairMode(true, 3, 3, 'local')).toBe('local');
+    expect(eligibleRepairMode(true, 4, 3, 'local')).toBeUndefined();
+    expect(eligibleRepairMode(false, 1, 3, 'local')).toBeUndefined();
     expect(eligibleRepairMode(true, 1, 3, undefined)).toBeUndefined();
   });
 });

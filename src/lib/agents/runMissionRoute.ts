@@ -7,7 +7,7 @@
 import { getProviderMode } from '../models/index.js';
 import {
   classifyMissionModel,
-  isManagedAgentAvailable,
+  isLocalLoopAvailable,
   NATIVE_DEFAULT_MAX_DURATION_MS,
 } from './runtime.js';
 import type { Mission } from './types.js';
@@ -32,6 +32,9 @@ export function cliModelFamily(model: string | undefined): 'haiku' | 'sonnet' | 
 }
 
 export function resolveMissionCliRoute(mission: Mission, isTauri: boolean): {
+  /** True when the mission will run Forge's own ReAct loop (local engine or
+   *  Devin CLI brain) rather than the native CLI one-shot rail. Kept under
+   *  its historical name so budget/settle call sites compile unchanged. */
   willRunManaged: boolean;
   isNativeRail: boolean;
   tool: 'codex' | 'claude';
@@ -41,7 +44,10 @@ export function resolveMissionCliRoute(mission: Mission, isTauri: boolean): {
   budgetCapUsd: number | undefined;
 } {
   const missionRouteKind = isTauri ? classifyMissionModel(mission.model) : undefined;
-  const willRunManaged = missionRouteKind === 'managed' || (!missionRouteKind && isManagedAgentAvailable());
+  const willRunManaged =
+    missionRouteKind === 'local' ||
+    missionRouteKind === 'devin' ||
+    (!missionRouteKind && isLocalLoopAvailable() && getProviderMode() === 'local');
   const isNativeRail = missionRouteKind === 'native';
   const providerMode = isTauri ? getProviderMode() : 'mock';
   return {

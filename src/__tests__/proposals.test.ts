@@ -72,11 +72,8 @@ beforeEach(() => {
   mockGetModelPickerOptions.mockReset();
   mockGetModelPickerOptions.mockReturnValue({
     claudeSub: true,
-    pro: 'inactive',
-    byok: null,
     groups: [],
     hasOptions: true,
-    proExhausted: false,
     codexManaged: false,
     defaultModelId: 'claude-sonnet-5',
   });
@@ -233,11 +230,8 @@ describe('generateProposals — default model wiring', () => {
 
     mockGetModelPickerOptions.mockReturnValue({
       claudeSub: true,
-      pro: 'inactive',
-      byok: null,
       groups: [],
       hasOptions: true,
-      proExhausted: false,
       codexManaged: false,
       defaultModelId: 'claude-haiku-4-5',
     });
@@ -245,11 +239,8 @@ describe('generateProposals — default model wiring', () => {
 
     mockGetModelPickerOptions.mockReturnValue({
       claudeSub: true,
-      pro: 'inactive',
-      byok: null,
       groups: [],
       hasOptions: true,
-      proExhausted: false,
       codexManaged: false,
       defaultModelId: 'claude-opus-5',
     });

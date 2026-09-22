@@ -146,14 +146,14 @@ describe('launchDraft', () => {
       expect(mockedGetEngineReadiness).toHaveBeenCalledWith(undefined, 'claude-sonnet-5');
     });
 
-    it('refuses honestly with the readiness reasonKey and never calls addMission when the engine is not ready (e.g. Pro wallet empty)', async () => {
-      canvasStoreVanilla.getState().addDraft(draft({ id: 'D1', model: 'anthropic/claude-sonnet-5' }));
+    it('refuses honestly with the readiness reasonKey and never calls addMission when the engine is not ready (e.g. CLI not found)', async () => {
+      canvasStoreVanilla.getState().addDraft(draft({ id: 'D1', model: 'claude-sonnet-5' }));
       const addMission = vi.fn();
-      mockedGetEngineReadiness.mockReturnValue({ mode: 'pro', ready: false, reason: 'pro-no-credits' });
+      mockedGetEngineReadiness.mockReturnValue({ mode: 'cli', ready: false, reason: 'cli-not-found' });
 
       const result = await launchDraft('D1', { addMission, activeProjectId: null });
 
-      expect(result).toEqual({ ok: false, reasonKey: 'engine.reason.pro-no-credits' });
+      expect(result).toEqual({ ok: false, reasonKey: 'engine.reason.cli-not-found' });
       expect(addMission).not.toHaveBeenCalled();
       // The draft is untouched — no silent removal/remap on refusal.
       expect(canvasStoreVanilla.getState().drafts.some((d) => d.id === 'D1')).toBe(true);

@@ -1,15 +1,22 @@
 /* estimateUsageUsd — per-model estimate when the backend did not settle costUsd.
 
-   Catalog rates come from OPENROUTER_MODELS (same table catalogParity locks
-   to ai-proxy). Unknown / CLI-only ids fall back to the historical Haiku
-   0.80/4.00 constants — never invent a third price table.
+   Forge: no hosted price catalog. Rates below are static documentation-grade
+   estimates for the native CLI ids in registry.ts; unknown / local ids fall
+   back to the historical Haiku 0.80/4.00 constants. Local Ollama runs cost
+   $0 in reality — costStore records these estimates only so usage dashboards
+   keep a consistent unit, never a bill.
 */
 
-import { OPENROUTER_MODELS } from './openrouterCatalog.js';
+const STATIC_RATES: Record<string, { priceIn: number; priceOut: number }> = {
+  'claude-opus-5': { priceIn: 5, priceOut: 25 },
+  'claude-sonnet-5': { priceIn: 2, priceOut: 10 },
+  'claude-haiku-4-5': { priceIn: 1, priceOut: 5 },
+  'claude-fable-5': { priceIn: 10, priceOut: 50 },
+};
 
-/** USD / 1M tokens — only used when the model is not in the catalog. */
-export const FALLBACK_PRICE_INPUT_PER_M = 0.80;
-export const FALLBACK_PRICE_OUTPUT_PER_M = 4.00;
+/** USD / 1M tokens — only used when the model is not in the static table. */
+export const FALLBACK_PRICE_INPUT_PER_M = 0.8;
+export const FALLBACK_PRICE_OUTPUT_PER_M = 4.0;
 
 function normalizeModelKey(model: string): string {
   let key = model.trim().toLowerCase().replace(/_/g, '-');
@@ -17,44 +24,18 @@ function normalizeModelKey(model: string): string {
   return key;
 }
 
-// eslint-disable-next-line complexity -- rate catalog lookup is inherently branchy
 export function catalogRatesFor(model: string): { priceIn: number; priceOut: number } | null {
   const key = normalizeModelKey(model);
   if (!key) return null;
-
-  let exact: (typeof OPENROUTER_MODELS)[number] | undefined;
-  let shortFree: (typeof OPENROUTER_MODELS)[number] | undefined;
-  let shortPaid: (typeof OPENROUTER_MODELS)[number] | undefined;
-
-  for (const entry of OPENROUTER_MODELS) {
-    const id = normalizeModelKey(entry.id);
-    if (id === key) {
-      exact = entry;
-      break;
-    }
-    const slash = id.lastIndexOf('/');
-    const short = slash >= 0 ? id.slice(slash + 1) : id;
-    const shortBase = short.replace(/:free$/, '');
-    if (short === key || shortBase === key) {
-      if (entry.isFree) shortFree ??= entry;
-      else shortPaid ??= entry;
-    }
+  // Local runs are free — report zero, not an estimate.
+  if (key.startsWith('local/')) return { priceIn: 0, priceOut: 0 };
+  // Vendor-prefixed ids ('anthropic/claude-sonnet-5') resolve against the
+  // bare native id — the same short-id matching the old catalog applied.
+  const bare = key.includes('/') ? key.slice(key.lastIndexOf('/') + 1) : key;
+  for (const [id, rates] of Object.entries(STATIC_RATES)) {
+    if (normalizeModelKey(id) === key || normalizeModelKey(id) === bare) return rates;
   }
-
-  const chosen = exact ?? shortFree ?? shortPaid;
-  if (!chosen) return null;
-
-  if (!chosen.isFree) {
-    const freeSibling = OPENROUTER_MODELS.find(
-      (m) => m.isFree && (normalizeModelKey(m.id) === `${normalizeModelKey(chosen.id)}:free`
-        || normalizeModelKey(m.id) === `${key}:free`),
-    );
-    if (freeSibling) {
-      return { priceIn: freeSibling.priceIn, priceOut: freeSibling.priceOut };
-    }
-  }
-
-  return { priceIn: chosen.priceIn, priceOut: chosen.priceOut };
+  return null;
 }
 
 export function estimateUsageUsd(model: string, inputTokens: number, outputTokens: number): number {

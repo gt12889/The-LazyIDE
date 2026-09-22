@@ -6,7 +6,6 @@ import { fastTrackUnparseable, parseReActActionWithRetry } from '../lib/agents/m
 import { classifyManagedTurnError, applyManagedTurnError } from '../lib/agents/managedAgentTurnError';
 import { nextConsecutiveFailures, repeatedToolFailure, toolHasTestFailure } from '../lib/agents/managedAgentAftermath';
 import type { AgentStepRecord } from '../lib/agents/stuckDetector';
-import { ManagedUnavailableError } from '../lib/models/managedProvider';
 import { guardManagedLoopStep, workingMessagesWithReflections, advanceManagedMilestones } from '../lib/agents/managedAgentLoopGuard';
 import { applyMissionCaps } from '../lib/agents/managedAgentCaps';
 import type { MissionCapIo } from '../lib/agents/managedAgentCaps';
@@ -192,7 +191,7 @@ describe('classifyManagedTurnError', () => {
   });
 
   it('treats no_credits as a hard stop', () => {
-    expect(classifyManagedTurnError(new ManagedUnavailableError('empty', 'no_credits'))).toEqual({ kind: 'no_credits' });
+    expect(classifyManagedTurnError(new Error('no_credits: quota exhausted'))).toEqual({ kind: 'no_credits' });
   });
 
   it('retries a generic network error and escalates at the cap', () => {

@@ -2,13 +2,10 @@
    leaking into Settings > Models > "Available engines".
 
    ProvidersPanel renders one BackendCard per lib/models/readiness.ts
-   descriptor. Those descriptors used to hardcode their label/reason/
-   howToEnable strings in French regardless of locale (e.g. "Claude Code
-   (abonnement)", "Clé API DeepSeek (BYOK)") — observed live with the
-   interface language set to English. ProvidersPanel now passes its own
-   useI18n().t into getAllBackendsReadiness(t); this test mounts the real
-   component under an English I18nProvider and asserts none of the
-   previously hardcoded French leaks through the wiring.
+   descriptor (Claude Code, Codex CLI, local Ollama engine). Those
+   descriptors must resolve through the active locale (English here), never
+   render raw keys or another locale's copy. This test mounts the real
+   component under an English I18nProvider and asserts the English cards.
 */
 
 import { describe, it, expect } from 'vitest';
@@ -29,7 +26,8 @@ describe('ProvidersPanel — "Available engines" renders in English with no hard
 
     expect(await screen.findByText('Available engines')).toBeInTheDocument();
     expect(screen.getByText('Claude Code (subscription)')).toBeInTheDocument();
-    expect(screen.getByText(/DeepSeek API key \(BYOK\)/)).toBeInTheDocument();
+    expect(screen.getByText('Codex CLI (OpenAI)')).toBeInTheDocument();
+    expect(screen.getByText('Local LLM (Ollama / LM Studio)')).toBeInTheDocument();
 
     localStorage.removeItem('lazy.locale');
   });

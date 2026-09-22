@@ -36,7 +36,7 @@ vi.mock('../app/AppContext', () => ({
 }));
 
 vi.mock('../lib/auth/useAuth', () => ({
-  useAuth: () => ({ user: { id: 'user-test-1' }, session: null, loading: false }),
+  useAuth: () => ({ user: null, session: null, loading: false, signOut: async () => {} }),
 }));
 
 vi.mock('../lib/bus', () => ({
@@ -118,8 +118,8 @@ describe('GettingStarted — first-run checklist', () => {
     expect(screen.queryByRole('button', { name: fr['home.action.newMission'] })).toBeNull();
   });
 
-  it('marks the mission/assistant step done from the lazy.firstAssistantSend flag alone', () => {
-    localStorage.setItem('lazy.firstAssistantSend', '1');
+  it('marks the mission/assistant step done from the forge.firstAssistantSend flag alone', () => {
+    localStorage.setItem('forge.firstAssistantSend', '1');
     renderCard(false);
 
     expect(screen.queryByRole('button', { name: fr['home.action.newMission'] })).toBeNull();
@@ -143,16 +143,16 @@ describe('GettingStarted — first-run checklist', () => {
     expect(mockSetActiveSpace).toHaveBeenCalledWith('agents');
   });
 
-  it('"Masquer" hides the card and persists the dismissal for this account', () => {
+  it('"Masquer" hides the card and persists the dismissal', () => {
     renderCard(false);
     fireEvent.click(screen.getByRole('button', { name: fr['home.gettingStarted.dismiss'] }));
 
     expect(screen.queryByText(fr['home.gettingStarted.title'])).toBeNull();
-    expect(localStorage.getItem('lazy.gettingStarted.dismissed:user-test-1')).toBe('1');
+    expect(localStorage.getItem('forge.gettingStarted.dismissed')).toBe('1');
   });
 
   it('stays hidden on a later mount once dismissed', () => {
-    localStorage.setItem('lazy.gettingStarted.dismissed:user-test-1', '1');
+    localStorage.setItem('forge.gettingStarted.dismissed', '1');
     renderCard(false);
 
     expect(screen.queryByText(fr['home.gettingStarted.title'])).toBeNull();
@@ -164,6 +164,6 @@ describe('GettingStarted — first-run checklist', () => {
     renderCard(true);
 
     expect(screen.queryByText(fr['home.gettingStarted.title'])).toBeNull();
-    expect(localStorage.getItem('lazy.gettingStarted.dismissed:user-test-1')).toBe('1');
+    expect(localStorage.getItem('forge.gettingStarted.dismissed')).toBe('1');
   });
 });

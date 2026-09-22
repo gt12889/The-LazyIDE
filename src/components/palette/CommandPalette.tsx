@@ -15,7 +15,6 @@ import { useAgentsUiContext } from '../agents/agentsUiContext';
 import { getPlatform } from '../../lib/platform';
 import type { DirEntry } from '../../lib/platform/types';
 import { emit } from '../../lib/bus';
-import { useSubscriptionContext } from '../../lib/billing';
 import { useToast } from '../ui';
 import {
   buildCommandItems,
@@ -26,7 +25,6 @@ import {
   type Section,
   type FileEntry,
 } from './paletteItems';
-import { buildBillingCommandItems, runBillingCommand } from './paletteBilling';
 import { fuzzyFilter } from './fuzzy';
 import { PaletteRow } from './PaletteRow';
 import { usePaletteState } from './usePaletteState';
@@ -186,7 +184,6 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const { setActiveSpace, openProject, projectRoot, openProjects } = useAppContext();
   const { openFile } = useEditorStore();
   const { requestNewMission } = useAgentsUiContext();
-  const { isPro, isProPlus } = useSubscriptionContext();
   const { toast } = useToast();
 
   const { query, setQuery, highlightedIndex, setHighlightedIndex, reset } = usePaletteState();
@@ -202,12 +199,10 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   // Real file entries from projectRoot (Tauri only, loaded once per open)
   const [realFileEntries, setRealFileEntries] = useState<FileEntry[]>([]);
 
-  // QA fix (B7): static nav/action commands + the billing entries relevant
-  // to the user's real subscription state (mirrors AccountPopover's own
-  // free/Pro branching).
+  // Static nav/action commands.
   const commandSource = useMemo(
-    () => [...buildCommandItems(t), ...buildBillingCommandItems(isPro, isProPlus, t)],
-    [isPro, isProPlus, t],
+    () => [...buildCommandItems(t)],
+    [t],
   );
 
   const sections = useMemo(() => buildSections(t), [t]);
@@ -319,15 +314,6 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
           onClose();
           await openProject();
           return; // already closed above
-        case 'billing': {
-          // QA fix (B7): real Stripe checkout/portal actions, same plumbing
-          // AccountChip's popover uses — errors surface via the same toast
-          // pattern instead of failing silently.
-          onClose();
-          const { error } = await runBillingCommand(action.billingAction, t);
-          if (error) toast(error, 'error');
-          return; // already closed above
-        }
         case 'newFile':
           // Real fs/rename/spawn actions — CenterEditor.tsx is the sole
           // owner of tabs/platform wiring for the active file (same split

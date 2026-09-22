@@ -156,23 +156,11 @@ describe('SpacesLayer — keep-alive (no remount-refetch on revisit)', () => {
     expect(mountCounts.review).toBe(1);
   });
 
-  it('renders the "team" space only when showTeamTab is true', async () => {
+  it('never renders the retired "team" space, whatever showTeamTab says', async () => {
     const { rerender } = render(spaces('team', false));
     expect(screen.queryByTestId('space-team')).toBeNull();
 
     rerender(spaces('team', true));
-    await waitForSpaceMounted('team');
-  });
-
-  it('navigating away from "team" and back does not remount it (showTeamTab held constant, as it is for the whole time a real user can reach the tab at all)', async () => {
-    const { rerender } = render(spaces('team', true));
-    await waitForSpaceMounted('team');
-
-    rerender(spaces('code', true));
-    await waitForSpaceMounted('code');
-
-    rerender(spaces('team', true));
-    expect(screen.getByTestId('space-team')).toBeInTheDocument();
-    expect(mountCounts.team).toBe(1); // unchanged — same keep-alive guarantee as every other space
+    expect(screen.queryByTestId('space-team')).toBeNull();
   });
 });

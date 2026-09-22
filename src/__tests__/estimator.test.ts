@@ -133,15 +133,9 @@ describe('modelTierOf', () => {
     expect(modelTierOf('claude-fable-5')).toBe('premium');
   });
 
-  it('classifies OpenRouter ids via the curated catalog tier', () => {
-    expect(modelTierOf('anthropic/claude-haiku-4.5')).toBe('cheap'); // tier: fast
-    expect(modelTierOf('anthropic/claude-sonnet-5')).toBe('standard'); // tier: balanced
-    expect(modelTierOf('anthropic/claude-opus-5')).toBe('premium'); // tier: max
-    expect(modelTierOf('deepseek/deepseek-v4-flash')).toBe('cheap'); // tier: fast
-    // V4 Pro moved max -> fast in the 2026-08-08 curation: at $0.44/$0.87 it
-    // is cheaper than every 'fast' model it used to sit above.
-    expect(modelTierOf('deepseek/deepseek-v4-pro')).toBe('cheap'); // tier: fast
-    expect(modelTierOf('moonshotai/kimi-k3')).toBe('premium'); // tier: max
+  it('classifies local ids as cheap (Ollama runs cost $0)', () => {
+    expect(modelTierOf('local/hermes3')).toBe('cheap');
+    expect(modelTierOf('local/llama4')).toBe('cheap');
   });
 
   it('falls back to standard for unrecognized ids', () => {

@@ -69,12 +69,12 @@ describe('runLearningLoop — skill-shaped memory (P2)', () => {
     expect(events[0].text).toContain('Provenance: mission m1');
   });
 
-  it('tags a managed-engine mission correctly (model id contains a slash) with medium confidence near the floor', async () => {
-    const mission = makeMission({ model: 'anthropic/claude-sonnet-5', judgeVerdict: makeVerdict({ score: 75 }) });
+  it('tags a local-engine mission correctly (model id has the local/ prefix) with medium confidence near the floor', async () => {
+    const mission = makeMission({ model: 'local/hermes3', judgeVerdict: makeVerdict({ score: 75 }) });
     await runLearningLoop(mission);
 
     const [event] = skillNoteEvents();
-    expect(event.tags).toContain('engine:managed');
+    expect(event.tags).toContain('engine:local');
     expect(event.tags).toContain('confidence:medium');
   });
 

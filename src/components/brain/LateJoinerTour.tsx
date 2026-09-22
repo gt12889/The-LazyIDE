@@ -5,7 +5,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useI18n } from '../../i18n';
-import { readActiveBrainConfig } from '../../lib/teams/activeBrainConfig';
 import { getPlatform } from '../../lib/platform';
 import { isTauri } from '../../lib/platform';
 import { parseNoteIds } from '../../lib/brain/queryCssParse';
@@ -26,7 +25,7 @@ export function LateJoinerTour() {
   const [loading, setLoading] = useState(true);
   const [visible, setVisible] = useState(false);
 
-  const orgId = useMemo(() => readActiveBrainConfig()?.orgId ?? null, []);
+  const orgId = useMemo(() => null, []);
 
   useEffect(() => {
     if (!orgId || !isTauri()) return;

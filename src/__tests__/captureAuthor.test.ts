@@ -1,39 +1,13 @@
 /**
  * captureAuthor.test.ts
  *
- * Tests for the author cache lifecycle:
- *   1. resolveCaptureIdentity returns author + authorId.
- *   2. After invalidateCaptureAuthor, the next call re-fetches (cache cleared).
+ * Tests for the author cache lifecycle (Forge: single local profile):
+ *   1. resolveCaptureIdentity returns the local profile author.
+ *   2. After invalidateCaptureAuthor, the next call re-reads (cache cleared).
  *   3. withCaptureAuthor stamps both author and authorId.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-// ── supabase client mock ──────────────────────────────────────────────
-const getUserMock = vi.fn();
-const fromMock = vi.fn();
-
-function queryChain(result: { data: unknown; error: unknown }) {
-  const chain: {
-    select: () => unknown;
-    eq: () => unknown;
-    limit: () => Promise<unknown>;
-  } = {
-    select: () => chain,
-    eq: () => chain,
-    limit: () => Promise.resolve(result),
-  };
-  return chain;
-}
-
-vi.mock('../lib/supabase/client.js', () => ({
-  supabase: {
-    auth: {
-      getUser: (...args: unknown[]) => getUserMock(...args),
-    },
-    from: (...args: unknown[]) => fromMock(...args),
-  },
-}));
+import { describe, it, expect, beforeEach } from 'vitest';
 
 import {
   resolveCaptureIdentity,
@@ -42,69 +16,51 @@ import {
   invalidateCaptureAuthor,
   withCaptureAuthor,
   enrichCaptureAuthor,
+  setLocalAuthor,
 } from '../lib/brain/captureAuthor.js';
 import type { CaptureEvent } from '../lib/platform/types.js';
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  localStorage.clear();
   invalidateCaptureAuthor();
-  getUserMock.mockResolvedValue({
-    data: {
-      user: {
-        id: 'user-uuid-abc',
-        email: 'alice@example.com',
-        user_metadata: { display_name: 'Alice' },
-      },
-    },
-  });
-  fromMock.mockImplementation((table: string) => {
-    if (table === 'org_members') {
-      return queryChain({ data: [{ dept_id: 'dept-eng' }], error: null });
-    }
-    if (table === 'departments') {
-      return queryChain({ data: [{ slug: 'engineering' }], error: null });
-    }
-    return queryChain({ data: [], error: null });
-  });
+  setLocalAuthor('Alice');
 });
 
 describe('resolveCaptureIdentity', () => {
-  it('returns author + authorId from the Supabase session', async () => {
+  it('returns the local profile author', async () => {
     const identity = await resolveCaptureIdentity();
 
     expect(identity.author).toBe('Alice');
-    expect(identity.authorId).toBe('user-uuid-abc');
-    expect(getUserMock).toHaveBeenCalledTimes(1);
+    expect(identity.authorId).toBeUndefined();
   });
 
-  it('caches the result — a second call does not re-fetch', async () => {
+  it('caches the result — a second call does not re-read after clearing storage', async () => {
     await resolveCaptureIdentity();
-    await resolveCaptureIdentity();
-
-    expect(getUserMock).toHaveBeenCalledTimes(1);
+    localStorage.clear();
+    const identity = await resolveCaptureIdentity();
+    expect(identity.author).toBe('Alice');
   });
 });
 
 describe('invalidateCaptureAuthor', () => {
-  it('clears the cache so the next call re-fetches', async () => {
+  it('clears the cache so the next call re-reads', async () => {
     await resolveCaptureIdentity();
-    expect(getUserMock).toHaveBeenCalledTimes(1);
 
     invalidateCaptureAuthor();
+    setLocalAuthor('Bob');
 
-    await resolveCaptureIdentity();
-    expect(getUserMock).toHaveBeenCalledTimes(2);
+    const identity = await resolveCaptureIdentity();
+    expect(identity.author).toBe('Bob');
   });
 
   it('clears the cache for resolveCaptureAuthor and resolveCaptureAuthorId too', async () => {
     await resolveCaptureAuthor();
     await resolveCaptureAuthorId();
-    expect(getUserMock).toHaveBeenCalledTimes(1);
 
     invalidateCaptureAuthor();
+    setLocalAuthor('Carol');
 
-    await resolveCaptureAuthor();
-    expect(getUserMock).toHaveBeenCalledTimes(2);
+    await expect(resolveCaptureAuthor()).resolves.toBe('Carol');
   });
 });
 
@@ -151,13 +107,8 @@ describe('withCaptureAuthor', () => {
   });
 });
 
-describe('department stamp (team brains)', () => {
-  it('resolveCaptureIdentity includes the org member dept slug', async () => {
-    const identity = await resolveCaptureIdentity();
-    expect(identity.dept).toBe('engineering');
-  });
-
-  it('enrichCaptureAuthor stamps dept when the event has none', async () => {
+describe('local author enrichment', () => {
+  it('enrichCaptureAuthor stamps the local author when the event has none', async () => {
     const event: CaptureEvent = {
       kind: 'episodic',
       title: 'Test',
@@ -165,19 +116,18 @@ describe('department stamp (team brains)', () => {
       source: 'test',
     };
     const stamped = await enrichCaptureAuthor(event);
-    expect(stamped.dept).toBe('engineering');
     expect(stamped.author).toBe('Alice');
   });
 
-  it('does not overwrite an event that already carries dept', async () => {
+  it('does not overwrite an event that already carries an author', async () => {
     const event: CaptureEvent = {
       kind: 'episodic',
       title: 'Test',
       text: 'content',
       source: 'test',
-      dept: 'design',
+      author: 'Bob',
     };
     const stamped = await enrichCaptureAuthor(event);
-    expect(stamped.dept).toBe('design');
+    expect(stamped.author).toBe('Bob');
   });
 });

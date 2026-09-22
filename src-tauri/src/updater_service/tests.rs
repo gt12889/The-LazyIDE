@@ -50,7 +50,7 @@ fn save_then_load_state_roundtrips() {
     let mut state = UpdaterState::default();
     state.auto_update = false;
     state.ignored_version = Some("0.1.12".to_string());
-    state.staged = Some(staged_fixture("0.1.13", "Lazy_0.1.13_x64-setup.exe", "deadbeef", 1));
+    state.staged = Some(staged_fixture("0.1.13", "Forge_0.1.13_x64-setup.exe", "deadbeef", 1));
     save_state(tmp.path(), &state).unwrap();
     assert_eq!(load_state(tmp.path()), state);
     eprintln!("save_then_load_state_roundtrips PASSED");
@@ -85,10 +85,10 @@ fn missing_state_file_yields_none() {
 #[test]
 fn staged_version_already_reached_reports_update_applied_and_clears_state() {
     let tmp = tempfile::tempdir().unwrap();
-    let sha = write_installer(tmp.path(), "Lazy_0.1.12_x64-setup.exe", b"installer bytes");
+    let sha = write_installer(tmp.path(), "Forge_0.1.12_x64-setup.exe", b"installer bytes");
     let mut state = UpdaterState::default();
     state.installing_from = Some("0.1.11".to_string());
-    state.staged = Some(staged_fixture("0.1.12", "Lazy_0.1.12_x64-setup.exe", &sha, 1));
+    state.staged = Some(staged_fixture("0.1.12", "Forge_0.1.12_x64-setup.exe", &sha, 1));
     save_state(tmp.path(), &state).unwrap();
 
     let action = take_boot_action(tmp.path(), "0.1.12");
@@ -104,9 +104,9 @@ fn staged_version_already_reached_reports_update_applied_and_clears_state() {
 fn staged_version_older_than_current_is_also_treated_as_applied() {
     // e.g. the user manually installed a newer build in the meantime.
     let tmp = tempfile::tempdir().unwrap();
-    let sha = write_installer(tmp.path(), "Lazy_0.1.10_x64-setup.exe", b"stale installer");
+    let sha = write_installer(tmp.path(), "Forge_0.1.10_x64-setup.exe", b"stale installer");
     let mut state = UpdaterState::default();
-    state.staged = Some(staged_fixture("0.1.10", "Lazy_0.1.10_x64-setup.exe", &sha, 0));
+    state.staged = Some(staged_fixture("0.1.10", "Forge_0.1.10_x64-setup.exe", &sha, 0));
     save_state(tmp.path(), &state).unwrap();
 
     let action = take_boot_action(tmp.path(), "0.1.12");
@@ -118,7 +118,7 @@ fn staged_version_older_than_current_is_also_treated_as_applied() {
 fn missing_installer_file_discards_staged_and_yields_none() {
     let tmp = tempfile::tempdir().unwrap();
     let mut state = UpdaterState::default();
-    state.staged = Some(staged_fixture("0.1.12", "Lazy_0.1.12_x64-setup.exe", "deadbeef", 0));
+    state.staged = Some(staged_fixture("0.1.12", "Forge_0.1.12_x64-setup.exe", "deadbeef", 0));
     save_state(tmp.path(), &state).unwrap();
 
     let action = take_boot_action(tmp.path(), "0.1.11");
@@ -130,25 +130,25 @@ fn missing_installer_file_discards_staged_and_yields_none() {
 #[test]
 fn sha256_mismatch_discards_staged_and_yields_none() {
     let tmp = tempfile::tempdir().unwrap();
-    write_installer(tmp.path(), "Lazy_0.1.12_x64-setup.exe", b"real installer bytes");
+    write_installer(tmp.path(), "Forge_0.1.12_x64-setup.exe", b"real installer bytes");
     let mut state = UpdaterState::default();
     state.staged =
-        Some(staged_fixture("0.1.12", "Lazy_0.1.12_x64-setup.exe", "0000000000000000000000000000000000000000000000000000000000000000", 0));
+        Some(staged_fixture("0.1.12", "Forge_0.1.12_x64-setup.exe", "0000000000000000000000000000000000000000000000000000000000000000", 0));
     save_state(tmp.path(), &state).unwrap();
 
     let action = take_boot_action(tmp.path(), "0.1.11");
     assert_eq!(action, BootAction::None);
     assert!(load_state(tmp.path()).staged.is_none());
-    assert!(!updates_dir(tmp.path()).join("Lazy_0.1.12_x64-setup.exe").exists(), "tampered file must be removed");
+    assert!(!updates_dir(tmp.path()).join("Forge_0.1.12_x64-setup.exe").exists(), "tampered file must be removed");
     eprintln!("sha256_mismatch_discards_staged_and_yields_none PASSED");
 }
 
 #[test]
 fn attempts_at_max_discards_staged_and_yields_none_never_loops() {
     let tmp = tempfile::tempdir().unwrap();
-    let sha = write_installer(tmp.path(), "Lazy_0.1.12_x64-setup.exe", b"installer bytes");
+    let sha = write_installer(tmp.path(), "Forge_0.1.12_x64-setup.exe", b"installer bytes");
     let mut state = UpdaterState::default();
-    state.staged = Some(staged_fixture("0.1.12", "Lazy_0.1.12_x64-setup.exe", &sha, MAX_INSTALL_ATTEMPTS));
+    state.staged = Some(staged_fixture("0.1.12", "Forge_0.1.12_x64-setup.exe", &sha, MAX_INSTALL_ATTEMPTS));
     save_state(tmp.path(), &state).unwrap();
 
     let action = take_boot_action(tmp.path(), "0.1.11");
@@ -160,13 +160,13 @@ fn attempts_at_max_discards_staged_and_yields_none_never_loops() {
 #[test]
 fn valid_staged_update_below_max_attempts_returns_install_and_increments_attempts() {
     let tmp = tempfile::tempdir().unwrap();
-    let sha = write_installer(tmp.path(), "Lazy_0.1.12_x64-setup.exe", b"installer bytes");
+    let sha = write_installer(tmp.path(), "Forge_0.1.12_x64-setup.exe", b"installer bytes");
     let mut state = UpdaterState::default();
-    state.staged = Some(staged_fixture("0.1.12", "Lazy_0.1.12_x64-setup.exe", &sha, 0));
+    state.staged = Some(staged_fixture("0.1.12", "Forge_0.1.12_x64-setup.exe", &sha, 0));
     save_state(tmp.path(), &state).unwrap();
 
     let action = take_boot_action(tmp.path(), "0.1.11");
-    let expected_exe = updates_dir(tmp.path()).join("Lazy_0.1.12_x64-setup.exe");
+    let expected_exe = updates_dir(tmp.path()).join("Forge_0.1.12_x64-setup.exe");
     assert_eq!(action, BootAction::Install { exe_path: expected_exe });
 
     let after = load_state(tmp.path());
@@ -178,9 +178,9 @@ fn valid_staged_update_below_max_attempts_returns_install_and_increments_attempt
 #[test]
 fn one_attempt_below_max_still_installs_the_second_time() {
     let tmp = tempfile::tempdir().unwrap();
-    let sha = write_installer(tmp.path(), "Lazy_0.1.12_x64-setup.exe", b"installer bytes");
+    let sha = write_installer(tmp.path(), "Forge_0.1.12_x64-setup.exe", b"installer bytes");
     let mut state = UpdaterState::default();
-    state.staged = Some(staged_fixture("0.1.12", "Lazy_0.1.12_x64-setup.exe", &sha, MAX_INSTALL_ATTEMPTS - 1));
+    state.staged = Some(staged_fixture("0.1.12", "Forge_0.1.12_x64-setup.exe", &sha, MAX_INSTALL_ATTEMPTS - 1));
     save_state(tmp.path(), &state).unwrap();
 
     let action = take_boot_action(tmp.path(), "0.1.11");
@@ -192,9 +192,9 @@ fn one_attempt_below_max_still_installs_the_second_time() {
 #[test]
 fn malformed_current_version_fails_open_to_none() {
     let tmp = tempfile::tempdir().unwrap();
-    let sha = write_installer(tmp.path(), "Lazy_0.1.12_x64-setup.exe", b"installer bytes");
+    let sha = write_installer(tmp.path(), "Forge_0.1.12_x64-setup.exe", b"installer bytes");
     let mut state = UpdaterState::default();
-    state.staged = Some(staged_fixture("0.1.12", "Lazy_0.1.12_x64-setup.exe", &sha, 0));
+    state.staged = Some(staged_fixture("0.1.12", "Forge_0.1.12_x64-setup.exe", &sha, 0));
     save_state(tmp.path(), &state).unwrap();
 
     assert_eq!(take_boot_action(tmp.path(), "not-a-version"), BootAction::None);
@@ -226,7 +226,7 @@ fn stage_writes_file_computes_sha256_and_persists_state() {
     let staged = stage(tmp.path(), "0.2.0", Some("notes".to_string()), bytes).unwrap();
 
     assert_eq!(staged.version, "0.2.0");
-    assert_eq!(staged.file, "Lazy_0.2.0_x64-setup.exe");
+    assert_eq!(staged.file, "Forge_0.2.0_x64-setup.exe");
     assert_eq!(staged.attempts, 0);
     assert_eq!(staged.sha256, sha256_hex(bytes));
 
@@ -281,13 +281,13 @@ fn clear_staged_is_a_silent_no_op_when_nothing_staged() {
 fn prune_orphans_deletes_exes_that_are_not_the_current_staged_file() {
     let tmp = tempfile::tempdir().unwrap();
     let staged = stage(tmp.path(), "0.2.0", None, b"kept payload").unwrap();
-    fs::write(updates_dir(tmp.path()).join("Lazy_0.1.9_x64-setup.exe"), b"orphan").unwrap();
+    fs::write(updates_dir(tmp.path()).join("Forge_0.1.9_x64-setup.exe"), b"orphan").unwrap();
     fs::write(updates_dir(tmp.path()).join("not-an-installer.txt"), b"ignored").unwrap();
 
     prune_orphans(tmp.path());
 
     assert!(updates_dir(tmp.path()).join(&staged.file).exists(), "the currently staged file must survive");
-    assert!(!updates_dir(tmp.path()).join("Lazy_0.1.9_x64-setup.exe").exists(), "orphan exe must be removed");
+    assert!(!updates_dir(tmp.path()).join("Forge_0.1.9_x64-setup.exe").exists(), "orphan exe must be removed");
     assert!(updates_dir(tmp.path()).join("not-an-installer.txt").exists(), "non-exe files are untouched");
     eprintln!("prune_orphans_deletes_exes_that_are_not_the_current_staged_file PASSED");
 }

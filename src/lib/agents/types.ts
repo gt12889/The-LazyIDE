@@ -616,7 +616,7 @@ export interface OrchestratorPlanStepInput {
   agentName?: string;
   model?: string;
   effort?: Effort;
-  engine?: 'cli' | 'pro' | 'auto';
+  engine?: 'cli' | 'local' | 'auto';
   budgetCapUsd?: number;
   maxDurationMs?: number;
   scopePaths?: string[];
@@ -718,7 +718,7 @@ export interface OrchestratorPlanStep {
   /** See OrchestratorPlanStepInput.extraReadableProjectIds's doc comment (same wiring-gap caveat for the graph/orchestrator path). */
   extraReadableProjectIds?: string[];
   effort?: Effort;
-  engine?: 'cli' | 'pro' | 'auto';
+  engine?: 'cli' | 'local' | 'auto';
   budgetCapUsd?: number;
   maxDurationMs?: number;
   scopePaths?: string[];
@@ -1091,7 +1091,7 @@ export interface ManagerMessage {
  * before the mission ever reaches runtime.ts's classifyMissionModel-based
  * dispatch. Omitted on an action means "keep today's mode-based default".
  */
-export type ManagerEngineChoice = 'cli' | 'pro';
+export type ManagerEngineChoice = 'cli' | 'local';
 
 /**
  * Exact catalog id (openrouterCatalog.ts's `OpenRouterModel.id` on the Pro
@@ -2018,24 +2018,13 @@ export type ManagerAction =
    *  the gate solved so a parked bot_wait_for_human call returns. Honest
    *  no-op result when the bot has nothing outstanding. */
   | { type: 'resolve_bot_intervention'; botId: string }
-  /** Releases Solari cloud resources (browser sessions, sandboxes, Agent
-   *  Computer desktops) still held by missions that are no longer live —
-   *  the in-app recovery for "the bot's cloud session is stuck" that
-   *  otherwise requires an app restart to trigger the boot sweep. */
-  | { type: 'sweep_solari' }
-  /** Lists a LazyBot's recent run history entries (status, summary,
-   *  replayUrl/replayPath presence) — newest first, `limit` (default 10). */
+  /** Lists a bot's recent run history entries (status, summary) — newest
+   *  first, `limit` (default 10). */
   | { type: 'lazybot_runs'; botId: string; limit?: number }
-  /** Opens (`open: true`) or closes (`open: false`, or toggles when omitted)
-   *  the bot's live VM window node on the canvas — "montre-moi le bot X en
-   *  direct". Display-only. */
-  | { type: 'toggle_bot_vm'; botId: string; open?: boolean }
-  /** Teach-by-demonstration lifecycle for a LazyBot. `start` opens the bot's
-   *  canvas VM window (the user demonstrates in the live view — every
-   *  navigation/action is journaled) and begins recording; `stop` compiles
-   *  the journal into a skill and merges it into the bot's systemPrompt
-   *  under the "=== TEACH SKILL ===" marker (replacing any prior teach
-   *  block). `skillName` names the skill on start. */
+  /** Teach-by-demonstration lifecycle for a bot. `start` begins recording;
+   *  `stop` compiles the journal into a skill and merges it into the bot's
+   *  systemPrompt under the "=== TEACH SKILL ===" marker (replacing any
+   *  prior teach block). `skillName` names the skill on start. */
   | { type: 'teach_lazybot'; botId: string; mode: 'start' | 'stop'; skillName?: string }
   | { type: 'info'; message: string };
 

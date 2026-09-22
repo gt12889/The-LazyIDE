@@ -1,11 +1,11 @@
 /* ModelCheckStep — step 2 of 4.
-   Presents the 3 real access modes (cli/byok/pro) with LIVE detection via
+   Presents the 2 real access modes (local/cli) with LIVE detection via
    getEngineReadiness() — the same single source of truth every other
-   preflight surface uses (mission modal, assistant composer, locked managed
-   models). CLI is marked "recommended" once detected ready. Picking a mode
-   writes accessMode through the same saveAccessSettings() path Settings
-   uses. Never hard-blocks — the user can always continue and configure
-   later from Settings.
+   preflight surface uses (mission modal, assistant composer). Local
+   (Ollama) is marked "recommended" — it ships with the Forge setup.
+   Picking a mode writes accessMode through the same saveAccessSettings()
+   path Settings uses. Never hard-blocks — the user can always continue
+   and configure later from Settings.
 */
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -19,20 +19,18 @@ interface ModelCheckStepProps {
   onBack: () => void;
 }
 
-const MODES: AccessMode[] = ['cli', 'byok', 'pro'];
+const MODES: AccessMode[] = ['local', 'cli'];
 
 const MODE_LABEL_KEYS: Record<AccessMode, string> = {
-  cli: 'onboarding.model.mode.cli',
-  byok: 'onboarding.model.mode.byok',
-  pro: 'onboarding.model.mode.pro',
   local: 'onboarding.model.mode.local',
+  cli: 'onboarding.model.mode.cli',
 };
 
 export function ModelCheckStep({ onNext, onBack }: ModelCheckStepProps) {
   const { t } = useI18n();
   const [detecting, setDetecting] = useState(true);
   const [detectionTick, setDetectionTick] = useState(0);
-  const [selected, setSelected] = useState<AccessMode>(() => loadAccessSettings().accessMode ?? 'cli');
+  const [selected, setSelected] = useState<AccessMode>(() => loadAccessSettings().accessMode ?? 'local');
 
   // Actively (re-)probe CLI backends rather than trusting a possibly-stale
   // startup cache — onboarding can show before initProviderMode() finishes.
@@ -50,14 +48,12 @@ export function ModelCheckStep({ onNext, onBack }: ModelCheckStepProps) {
   }, []);
 
   const readiness = useMemo<Record<AccessMode, EngineReadiness>>(() => ({
-    cli: getEngineReadiness('cli'),
-    byok: getEngineReadiness('byok'),
-    pro: getEngineReadiness('pro'),
     local: getEngineReadiness('local'),
+    cli: getEngineReadiness('cli'),
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [detectionTick]);
 
-  const recommended: AccessMode | null = readiness.cli.ready ? 'cli' : null;
+  const recommended: AccessMode | null = 'local';
 
   function selectMode(mode: AccessMode): void {
     setSelected(mode);

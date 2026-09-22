@@ -16,9 +16,9 @@
  *      after a real merge succeeds; discardMission emits mission.rejected;
  *      stopMission/pauseMission/resumeMission/interveneMission emit their
  *      matching lifecycle events.
- *   3. evaluator.ts: evaluateMission (managed pipeline) emits gate.passed
+ *   3. evaluator.ts: evaluateMission (local pipeline) emits gate.passed
  *      per role when a role's verdict approves, and gate.failed otherwise —
- *      exercised via evaluateMission itself (evaluateLive/evaluateManaged
+ *      exercised via evaluateMission itself (evaluateLive/evaluateLocal
  *      are not exported — same constraint evaluator.test.ts documents).
  *
  * Mocking patterns below mirror the existing suites this task's brief
@@ -40,7 +40,6 @@ import type { JournalEventInput } from '../lib/journal/eventTypes';
 import { evaluateMission } from '../lib/agents/evaluator';
 import type { Mission } from '../lib/agents/types';
 import { getProviderMode } from '../lib/models/index';
-import { streamManagedAgentTurn } from '../lib/models/managedProvider';
 
 // ── Mock the journal client — the module under test-by-proxy here. ───────
 vi.mock('../lib/journal/journal', () => ({
@@ -75,11 +74,13 @@ vi.mock('../lib/models/index', async (importOriginal) => {
   };
 });
 
-vi.mock('../lib/models/managedProvider', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/models/managedProvider')>();
+const { mockLocalTurn } = vi.hoisted(() => ({ mockLocalTurn: vi.fn() }));
+
+vi.mock('../lib/models/localProvider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/models/localProvider')>();
   return {
     ...actual,
-    streamManagedAgentTurn: vi.fn(),
+    createLocalAgentTurnStreamer: () => mockLocalTurn,
   };
 });
 
@@ -87,7 +88,7 @@ const mockedEmitEvent = vi.mocked(emitEvent);
 const mockedEmitBuffered = vi.mocked(emitBuffered);
 const mockedInvoke = vi.mocked(invoke);
 const mockedGetProviderMode = vi.mocked(getProviderMode);
-const mockedStream = vi.mocked(streamManagedAgentTurn);
+const mockedStream = vi.mocked(mockLocalTurn);
 
 /** Toggle the global flag isTauriRuntime()/isTauri() read (both agentsStore's
  *  and evaluator's own local copies key off the same window flag). */
@@ -282,7 +283,7 @@ describe('agentsStore — mission lifecycle journal emissions', () => {
 // ── evaluator.ts — gate.passed / gate.failed per role ──────────────
 
 /** Creates an async generator that yields a single text chunk — mirrors
- *  evaluator.test.ts's identical helper for streamManagedAgentTurn responses. */
+ *  evaluator.test.ts's identical helper for local-streamer responses. */
 async function* makeStream(text: string): AsyncIterable<string> {
   yield text;
 }
@@ -292,14 +293,14 @@ function makeMission(overrides: Partial<Mission> = {}): Mission {
     id: 'mission-1',
     title: 'Fix the thing',
     status: 'review',
-    model: 'anthropic/claude-sonnet-5',
+    model: 'local/hermes3',
     ...overrides,
   };
 }
 
 describe('evaluator — gate.passed / gate.failed per role', () => {
   beforeEach(() => {
-    mockedGetProviderMode.mockReturnValue('managed');
+    mockedGetProviderMode.mockReturnValue('local');
     setTauriRuntime(true);
   });
 

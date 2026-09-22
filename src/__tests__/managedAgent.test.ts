@@ -11,14 +11,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // We import it here to configure per-test behaviours.
 import { invoke } from '@tauri-apps/api/core';
 
-// ── Mock managedProvider's streamManagedAgentTurn ─────────────────
-vi.mock('../lib/models/managedProvider', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/models/managedProvider')>();
-  return {
-    ...actual,
-    streamManagedAgentTurn: vi.fn(),
-  };
-});
+// ── planAndActManaged loop streamer ─────────────────────────────────
+// The loop has no hosted fallback rail: every test drives it through an
+// explicit stub `streamTurn` (a CLI tool or the local Ollama engine in
+// production — see planAndActManaged's required streamTurn opt).
 
 // ── Mock platform (brain recall) ──────────────────────────────────
 vi.mock('../lib/platform', () => ({
@@ -65,33 +61,15 @@ vi.mock('../lib/journal/journal', () => ({
   emitEvent: vi.fn(),
 }));
 
-// ── Mock supabase/env — only exercised by the "settled spend correction"
-// describe block below, which uses vi.importActual to drive the REAL
-// streamManagedAgentTurn (bypassing the vi.mock('../lib/models/managedProvider',
-// ...) override above, just for those tests). Harmless for every other test
-// in this file: none of them ever call a method on the real supabase client
-// — see managedProvider.test.ts for the identical mocking pattern. ───
-vi.mock('../lib/supabase/client', () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'test-token' } } }),
-    },
-  },
-}));
-vi.mock('../lib/env', () => ({
-  supabaseAnonKey: 'test-anon-key',
-  getAiProxyUrl: () => 'https://mock.proxy/ai',
-}));
+// ── No hosted-auth mocks: the loop needs no session, key, or proxy URL. ──
 
 import {
   parseReActAction,
   planAndActManaged,
   stripVerbatimPrefix,
-  toManagedOpenRouterModel,
 } from '../lib/agents/managedAgent';
 import type { PlanStep, ActionEvent } from '../lib/agents/types';
-import { streamManagedAgentTurn } from '../lib/models/managedProvider';
-import type { RealUsage } from '../lib/models/managedProvider';
+import type { RealUsage } from '../lib/models/costStore';
 import { listAgents } from '../lib/agents/agentsStorage';
 import { saveProjectPermissions } from '../lib/agents/toolPermissions';
 import { emitBuffered } from '../lib/journal/journal';
@@ -102,7 +80,7 @@ import { MISSION_HISTORY_CHAR_BUDGET } from '../lib/agents/missionHistoryWindow'
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-const mockedStream = streamManagedAgentTurn as ReturnType<typeof vi.fn>;
+const mockedStream = vi.fn();
 const mockedInvoke = invoke as ReturnType<typeof vi.fn>;
 const mockedGetPlatform = getPlatform as ReturnType<typeof vi.fn>;
 
@@ -138,6 +116,16 @@ async function* makeStream(text: string): AsyncIterable<string> {
   yield text;
 }
 
+/** True when this streamTurn call is a Reflexion auxiliary turn rather than
+ *  a main-loop turn. Reflexion runs on the SAME mission model now
+ *  (cheapModel := mission model — there is no separate cheap hosted rail),
+ *  so tests detect it by its prompt marker instead of the old CHEAP_MODEL id. */
+function isReflexionTurn(callOpts: { model?: string; messages?: Array<{ role: string; content: string }> }): boolean {
+  const messages = callOpts.messages ?? [];
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+  return lastUser.includes('Tool result indicates an issue');
+}
+
 function makeSteps(): PlanStep[] {
   return [
     { label: 'Initialisation', state: 'todo' as const },
@@ -164,6 +152,7 @@ function makeOpts(overrides: Partial<Parameters<typeof planAndActManaged>[0]> = 
     onProgress,
     stopSignal,
     model: 'anthropic/claude-sonnet-5',
+    streamTurn: mockedStream,
     ...overrides,
   };
 }
@@ -1666,7 +1655,7 @@ describe('planAndActManaged — onMetrics real usage vs estimate', () => {
   });
 
   it('the retry/Reflexion/PRM auxiliary turns also report real usage through onUsage (runTurn, not just the main loop)', async () => {
-    // A tool ERROR triggers a Reflexion turn (CHEAP_MODEL) right after the
+    // A tool ERROR triggers a Reflexion turn (same mission model) right after the
     // main turn — verifies runTurn (not just the main-loop call site) wires
     // onUsage into addTurnTokens too.
     const editTurn = `THOUGHT: editing\nACTION: edit_file\nARGS: {"path": "missing.ts", "old_string": "NOT_FOUND", "new_string": "x"}`;
@@ -1677,7 +1666,7 @@ describe('planAndActManaged — onMetrics real usage vs estimate', () => {
     let callCount = 0;
     mockedStream.mockImplementation((callOpts: { model: string; onUsage?: (u: RealUsage) => void }) => {
       callCount += 1;
-      if (callOpts.model === 'deepseek/deepseek-v4-flash') {
+      if (isReflexionTurn(callOpts)) {
         // Reflexion turn — also reports real usage.
         callOpts.onUsage?.(reflectUsage);
         return makeStream('no reflection tag here');
@@ -1702,39 +1691,8 @@ describe('planAndActManaged — onMetrics real usage vs estimate', () => {
   });
 });
 
-// ── toManagedOpenRouterModel: defensive tier -> OpenRouter mapping ─
-// Backstops the upstream call-site fix: under managed mode, streamAgentTurn
-// must never forward a bare tier/native id to the ai-proxy as-is (it would
-// reject with "Modèle non supporté").
-
-describe('toManagedOpenRouterModel', () => {
-  it('maps bare tier "haiku"/"sonnet"/"opus" to the matching Anthropic OpenRouter id', () => {
-    expect(toManagedOpenRouterModel('haiku')).toBe('anthropic/claude-haiku-4.5');
-    expect(toManagedOpenRouterModel('sonnet')).toBe('anthropic/claude-sonnet-5');
-    expect(toManagedOpenRouterModel('opus')).toBe('anthropic/claude-opus-5');
-  });
-
-  it('maps a display label to the matching OpenRouter id', () => {
-    expect(toManagedOpenRouterModel('Claude Haiku 4.5')).toBe('anthropic/claude-haiku-4.5');
-  });
-
-  it('maps a native Claude CLI id to the matching OpenRouter id', () => {
-    expect(toManagedOpenRouterModel('claude-sonnet-5')).toBe('anthropic/claude-sonnet-5');
-  });
-
-  it('passes an already-valid OpenRouter id through unchanged', () => {
-    expect(toManagedOpenRouterModel('anthropic/claude-opus-5')).toBe('anthropic/claude-opus-5');
-    expect(toManagedOpenRouterModel('deepseek/deepseek-v4-flash')).toBe('deepseek/deepseek-v4-flash');
-  });
-
-  it('falls back to the catalog default for an unrecognized label/id', () => {
-    expect(toManagedOpenRouterModel('some-unknown-model-xyz')).toBe('anthropic/claude-sonnet-5');
-    expect(toManagedOpenRouterModel('')).toBe('anthropic/claude-sonnet-5');
-  });
-});
-
-describe('planAndActManaged — defensive model normalization (managed mode)', () => {
-  it('normalizes a bare tier Mission.model before it reaches the managed proxy', async () => {
+describe('planAndActManaged — model pass-through (no hosted rail)', () => {
+  it('forwards a bare tier Mission.model to the stub streamer unmangled', async () => {
     const finalTurn = `THOUGHT: Done\nACTION: FINAL\nARGS: {"summary": "done"}`;
     mockedStream.mockImplementation(() => makeStream(finalTurn));
 
@@ -1743,18 +1701,30 @@ describe('planAndActManaged — defensive model normalization (managed mode)', (
 
     expect(mockedStream).toHaveBeenCalled();
     const firstCallModel = mockedStream.mock.calls[0][0].model as string;
-    expect(firstCallModel).toBe('anthropic/claude-haiku-4.5');
+    expect(firstCallModel).toBe('haiku');
   });
 
-  it('passes an already-valid OpenRouter Mission.model through unchanged', async () => {
+  it('passes a local Mission.model through unchanged', async () => {
     const finalTurn = `THOUGHT: Done\nACTION: FINAL\nARGS: {"summary": "done"}`;
     mockedStream.mockImplementation(() => makeStream(finalTurn));
 
-    const opts = makeOpts({ model: 'anthropic/claude-opus-5' });
+    const opts = makeOpts({ model: 'local/hermes3' });
     await planAndActManaged(opts);
 
     const firstCallModel = mockedStream.mock.calls[0][0].model as string;
-    expect(firstCallModel).toBe('anthropic/claude-opus-5');
+    expect(firstCallModel).toBe('local/hermes3');
+  });
+
+  it('fails honestly without a streamTurn (no hosted fallback exists)', async () => {
+    const { streamTurn: _st, ...rest } = makeOpts();
+    const opts = rest as Parameters<typeof planAndActManaged>[0];
+    await planAndActManaged(opts);
+
+    const actions = (opts.onAction as ReturnType<typeof vi.fn>).mock.calls.map(
+      (c: unknown[]) => (c[0] as ActionEvent).text,
+    );
+    expect(actions.some((t: string) => t.includes('requires a streamTurn'))).toBe(true);
+    expect(actions.some((t: string) => t.includes('Escalade'))).toBe(true);
   });
 });
 
@@ -1795,10 +1765,10 @@ describe('planAndActManaged — V4 consecutive-failure escalation', () => {
 ACTION: edit_file
 ARGS: {"path": "missing.ts", "old_string": "NOT_FOUND", "new_string": "x"}`;
 
-    // Reflexion turns route through CHEAP_MODEL — return harmless text so
+    // Reflexion turns carry the diagnose prompt — return harmless text so
     // parseReflectBlock finds no <reflect> tag and the loop just continues.
     mockedStream.mockImplementation((callOpts: { model: string }) => {
-      if (callOpts.model === 'deepseek/deepseek-v4-flash') return makeStream('no reflection tag here');
+      if (isReflexionTurn(callOpts)) return makeStream('no reflection tag here');
       return makeStream(editTurn);
     });
     mockedInvoke.mockImplementation((cmd: string) => {
@@ -1911,7 +1881,7 @@ ARGS: {"path": "missing.ts", "old_string": "NOT_FOUND", "new_string": "x"}`;
 
     let mainCallCount = 0;
     mockedStream.mockImplementation((callOpts: { model: string }) => {
-      if (callOpts.model === 'deepseek/deepseek-v4-flash') return makeStream('no reflection tag here');
+      if (isReflexionTurn(callOpts)) return makeStream('no reflection tag here');
       mainCallCount += 1;
       // 1st call = the original turn (unparseable); 2nd = the format retry
       // (recovers cleanly to a valid FINAL).
@@ -1950,7 +1920,7 @@ ARGS: {"path": "src/main.ts"}`;
     const mainSequence = [failTurn, failTurn, okTurn, finalTurn];
     let mainCallIdx = 0;
     mockedStream.mockImplementation((callOpts: { model: string }) => {
-      if (callOpts.model === 'deepseek/deepseek-v4-flash') return makeStream('no reflection tag here');
+      if (isReflexionTurn(callOpts)) return makeStream('no reflection tag here');
       const turn = mainSequence[Math.min(mainCallIdx, mainSequence.length - 1)];
       mainCallIdx += 1;
       return makeStream(turn);
@@ -1990,7 +1960,7 @@ describe('planAndActManaged — stuck detector (task #4)', () => {
     const sequence = [failTurn, okTurn, failTurn, okTurn, failTurn, okTurn, failTurn];
     let idx = 0;
     mockedStream.mockImplementation((callOpts: { model: string }) => {
-      if (callOpts.model === 'deepseek/deepseek-v4-flash') return makeStream('no reflection tag here');
+      if (isReflexionTurn(callOpts)) return makeStream('no reflection tag here');
       const turn = sequence[Math.min(idx, sequence.length - 1)];
       idx += 1;
       return makeStream(turn);
@@ -2007,7 +1977,7 @@ describe('planAndActManaged — stuck detector (task #4)', () => {
     // Aborted well before the 7-turn sequence (and nowhere near MAX_STEPS)
     // — the 3rd edit_file failure trips it even with successes in between.
     const mainCalls = mockedStream.mock.calls.filter(
-      (c) => (c[0] as { model: string }).model !== 'deepseek/deepseek-v4-flash',
+      (c) => !isReflexionTurn(c[0] as { messages?: Array<{ role: string; content: string }> }),
     );
     expect(mainCalls.length).toBeLessThan(7);
 
@@ -2094,16 +2064,16 @@ describe('planAndActManaged — stuck detector (task #4)', () => {
 });
 
 // ── BUG-1: no_credits is terminal, never retried ───────────────────
-// A `ManagedUnavailableError` with code 'no_credits' means the wallet is
-// empty — retrying (like a transient network/model error) just hammers the
-// same wall. This must stop after exactly one attempt with a clear French
-// action message, distinct from the V4 3-strikes escalation above.
+// A quota-shaped turn error (message matches the quota pattern — e.g. an
+// engine reporting no_credits / insufficient balance / quota exceeded
+// in-band) means the run can never succeed by retrying. This must stop
+// after exactly one attempt with a clear action message, distinct from the
+// V4 3-strikes escalation above.
 
 describe('planAndActManaged — BUG-1 no_credits is terminal', () => {
-  it('stops after a single attempt on ManagedUnavailableError(no_credits) — no retry, no escalation', async () => {
-    const { ManagedUnavailableError } = await import('../lib/models/managedProvider');
+  it('stops after a single attempt on a quota-shaped error — no retry, no escalation', async () => {
     mockedStream.mockImplementation(() => {
-      throw new ManagedUnavailableError('Crédits insuffisants', 'no_credits');
+      throw new Error('Engine quota exceeded: no_credits for this run');
     });
 
     const onMetrics = vi.fn();
@@ -2118,7 +2088,7 @@ describe('planAndActManaged — BUG-1 no_credits is terminal', () => {
     );
     // "Erreur agent:" prefix is intentional (runtime.ts/recovery.ts signal) —
     // see managedAgent.ts's stopForNoCredits doc comment.
-    expect(actions.some((t: string) => t.startsWith('Erreur agent:') && t.includes('Crédits Pro épuisés'))).toBe(
+    expect(actions.some((t: string) => t.startsWith('Erreur agent:') && t.includes('quota exhausted'))).toBe(
       true,
     );
     expect(actions.some((t: string) => t.includes('Escalade'))).toBe(false);
@@ -2133,10 +2103,9 @@ describe('planAndActManaged — BUG-1 no_credits is terminal', () => {
     expect((failedEvent?.payload as { reason?: string } | undefined)?.reason).toBe('no_credits');
   });
 
-  it('a transient ManagedUnavailableError (not no_credits) is still retried like before', async () => {
-    const { ManagedUnavailableError } = await import('../lib/models/managedProvider');
+  it('a transient error (not quota-shaped) is still retried like before', async () => {
     mockedStream.mockImplementation(() => {
-      throw new ManagedUnavailableError('Réponse vide du proxy géré (agent)', 'empty_response');
+      throw new Error('empty response from engine');
     });
 
     const opts = makeOpts();
@@ -2151,43 +2120,37 @@ describe('planAndActManaged — BUG-1 no_credits is terminal', () => {
   });
 });
 
-// ── 2026-08-05 DeepSeek 402 incident: BYOK provider definitive error is
-// terminal ───────────────────────────────────────────────────────────
-// Real incident: a mission agent (M49) froze at 16% for 10+ minutes on a
-// BYOK DeepSeek key that had run out of balance — every HTTP call came back
-// 402, silently retried, RAM climbing, no failure status ever set. Mirrors
-// the BUG-1 no_credits block above exactly, but exercises the BYOK rail
-// (opts.streamTurn override — see streamAgentTurn in managedAgent.ts) instead
-// of the managed/Pro streamManagedAgentTurn rail.
+// ── Definitive engine rejection is terminal ─────────────────────────
+// A definitive engine error (bad credentials, unknown model — an HTTP
+// 401/402/403/404 or invalid-key/model-not-found shape in-band) means
+// retrying the identical request can never succeed. Mirrors the BUG-1
+// no_credits block above exactly.
 
-describe('planAndActManaged — BYOK provider definitive error is terminal (2026-08-05 DeepSeek 402 incident)', () => {
-  it('stops after a single attempt on ProviderDefinitiveError(402) — no retry, honest French statusReason + raw short reason in the timeline', async () => {
-    const { ProviderDefinitiveError } = await import('../lib/models/byokProviders');
+describe('planAndActManaged — definitive engine error is terminal', () => {
+  it('stops after a single attempt on a 401-shaped error — no retry, honest timeline entry', async () => {
     const streamTurn = vi.fn(() => {
-      throw new ProviderDefinitiveError(402, 'deepseek', 'Insufficient Balance');
+      throw new Error('Engine error 401: invalid api key for this engine');
     });
 
     const onMetrics = vi.fn();
     const opts = makeOpts({ onMetrics, streamTurn });
     await planAndActManaged(opts);
 
-    // Exactly ONE HTTP-equivalent attempt — never retried, since retrying
-    // the identical call against an empty wallet can never succeed.
+    // Exactly ONE attempt — never retried, since retrying
+    // the identical call can never succeed.
     expect(streamTurn).toHaveBeenCalledTimes(1);
 
     const actions = (opts.onAction as ReturnType<typeof vi.fn>).mock.calls.map(
       (c: unknown[]) => (c[0] as ActionEvent).text,
     );
     // "Erreur agent:" prefix is intentional (runtime.ts signal, same
-    // convention as stopForNoCredits) — the honest French message plus the
-    // raw short reason from the provider both land in the same timeline entry.
+    // convention as stopForNoCredits).
     expect(
       actions.some(
         (t: string) =>
           t.startsWith('Erreur agent:') &&
-          t.includes('Clé du fournisseur inutilisable') &&
-          t.includes('mission arrêtée') &&
-          t.includes('Insufficient Balance'),
+          t.includes('definitively rejected') &&
+          t.includes('invalid api key'),
       ),
     ).toBe(true);
     // Never mistaken for the V4 3-strikes escalation path.
@@ -2203,10 +2166,10 @@ describe('planAndActManaged — BYOK provider definitive error is terminal (2026
     expect((failedEvent?.payload as { reason?: string } | undefined)?.reason).toBe('provider_definitive_error');
   });
 
-  it('also fails fast on an UNWRAPPED error whose message matches the definitive-error fallback pattern (401/402/403 or Insufficient Balance/invalid api key)', async () => {
-    // Simulates a layer between byokProviders.ts and this loop re-throwing a
-    // generic Error and losing the original ProviderDefinitiveError instance
-    // — classifyDefinitiveProviderError's regex fallback must still catch it.
+  it('a quota-shaped unwrapped error (402 Insufficient Balance) stops fast on the no_credits path', async () => {
+    // A generic Error carrying a quota-shaped message is still caught by the
+    // message-regex classifier (classifyManagedTurnError) — quota wins over
+    // the definitive-error pattern.
     const streamTurn = vi.fn(() => {
       throw new Error('DeepSeek API error 402: {"error":{"message":"Insufficient Balance"}}');
     });
@@ -2218,11 +2181,11 @@ describe('planAndActManaged — BYOK provider definitive error is terminal (2026
       (c: unknown[]) => (c[0] as ActionEvent).text,
     );
     expect(
-      actions.some((t: string) => t.startsWith('Erreur agent:') && t.includes('Clé du fournisseur inutilisable')),
+      actions.some((t: string) => t.startsWith('Erreur agent:') && t.includes('quota exhausted')),
     ).toBe(true);
   });
 
-  it('a transient BYOK error (e.g. network/5xx-shaped) is still retried like before — V4: 3 attempts then escalate', async () => {
+  it('a transient engine error (e.g. network/5xx-shaped) is still retried like before — V4: 3 attempts then escalate', async () => {
     const streamTurn = vi.fn(() => {
       throw new Error('network timeout contacting provider');
     });
@@ -2459,14 +2422,14 @@ describe('planAndActManaged — toolPermissions integration', () => {
     return { pattern, level, source: 'project' as const, createdAt: '' };
   }
 
-  /** Cheap-model (Reflexion) turns interleave with main-loop turns whenever
+  /** Reflexion auxiliary turns interleave with main-loop turns whenever
    *  a step produces an ERROR observation (see the V4 escalation suite
    *  above) — route them to a harmless response so assertions don't have
    *  to account for how many reflection turns fired in between. */
   function mockMainSequence(turns: string[]): void {
     let mainCallIdx = 0;
     mockedStream.mockImplementation((callOpts: { model: string }) => {
-      if (callOpts.model === 'deepseek/deepseek-v4-flash') return makeStream('no reflection tag here');
+      if (isReflexionTurn(callOpts)) return makeStream('no reflection tag here');
       const turn = turns[Math.min(mainCallIdx, turns.length - 1)];
       mainCallIdx += 1;
       return makeStream(turn);
@@ -2606,7 +2569,7 @@ describe('planAndActManaged — toolPermissions integration', () => {
     // Escalates well before MAX_STEPS (20) — parity with the existing
     // tool-ERROR / unparseable-response escalation tests above.
     const mainCalls = mockedStream.mock.calls.filter(
-      (c) => (c[0] as { model: string }).model !== 'deepseek/deepseek-v4-flash',
+      (c) => !isReflexionTurn(c[0] as { messages?: Array<{ role: string; content: string }> }),
     );
     expect(mainCalls.length).toBeLessThan(10);
 
@@ -2762,7 +2725,7 @@ describe('planAndActManaged — journal instrumentation', () => {
 
     let callCount = 0;
     mockedStream.mockImplementation((callOpts: { model: string }) => {
-      if (callOpts.model === 'deepseek/deepseek-v4-flash') {
+      if (isReflexionTurn(callOpts)) {
         return makeStream('<reflect>the old_string was wrong</reflect>');
       }
       callCount += 1;
@@ -2791,7 +2754,7 @@ describe('planAndActManaged — journal instrumentation', () => {
     // starve this test of the PRM steps it's actually verifying.
     let n = 0;
     mockedStream.mockImplementation((callOpts: { model: string }) => {
-      if (callOpts.model === 'deepseek/deepseek-v4-flash') return makeStream('no reflection tag here');
+      if (isReflexionTurn(callOpts)) return makeStream('no reflection tag here');
       n += 1;
       return makeStream(`THOUGHT: Still reading\nACTION: read_file\nARGS: {"path": "file-${n}.ts"}`);
     });
@@ -2819,7 +2782,7 @@ describe('planAndActManaged — journal instrumentation', () => {
     // legitimately tripping the new stuck detector before PRM ever fires).
     let n = 0;
     mockedStream.mockImplementation((callOpts: { model: string }) => {
-      if (callOpts.model === 'deepseek/deepseek-v4-flash') return makeStream('no reflection tag here');
+      if (isReflexionTurn(callOpts)) return makeStream('no reflection tag here');
       n += 1;
       return makeStream(`THOUGHT: Still reading\nACTION: read_file\nARGS: {"path": "file-${n}.ts"}`);
     });
@@ -2872,7 +2835,7 @@ describe('planAndActManaged — journal instrumentation', () => {
 
     let callCount = 0;
     mockedStream.mockImplementation((callOpts: { model: string }) => {
-      if (callOpts.model === 'deepseek/deepseek-v4-flash') return makeStream('summary text');
+      if (isReflexionTurn(callOpts)) return makeStream('summary text');
       callCount += 1;
       return makeStream(callCount === 1 ? readTurn : finalTurn);
     });
@@ -2890,95 +2853,7 @@ describe('planAndActManaged — journal instrumentation', () => {
   });
 });
 
-// ── managedProvider.ts settle path (T0.4) ────────────────────────────
-// streamManagedAgentTurn is mocked (vi.fn()) throughout the rest of this
-// file (see the vi.mock('../lib/models/managedProvider', ...) block near
-// the top) — that mock replaces the function wholesale, so it can never
-// exercise the real settle-emission code inside it. This describe block
-// bypasses that one mock via vi.importActual to drive the REAL
-// implementation directly (fetch mocked, supabase/env mocked at file scope
-// above), the same way managedProvider.test.ts already drives the real
-// streamManagedAgentTurn for the pre-existing real-usage-marker behavior —
-// so the corrective 'settled' spend.tokens event is verified against
-// actual code, not a re-description of it.
-
-describe('streamManagedAgentTurn — settled spend correction (real implementation)', () => {
-  it('emits a corrective spend.tokens event with source "settled" carrying the ai-proxy settled totals', async () => {
-    const { streamManagedAgentTurn: realStreamManagedAgentTurn } = await vi.importActual<
-      typeof import('../lib/models/managedProvider')
-    >('../lib/models/managedProvider');
-
-    const encoder = new TextEncoder();
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(encoder.encode('THOUGHT: done\nACTION: FINAL\nARGS: {}\n'));
-        controller.enqueue(
-          encoder.encode('\x1b[usage]{"inputTokens":42,"outputTokens":17,"costUsd":0.0033}'),
-        );
-        controller.close();
-      },
-    });
-    global.fetch = vi.fn().mockResolvedValueOnce({ ok: true, body } as unknown as Response);
-
-    const chunks: string[] = [];
-    for await (const chunk of realStreamManagedAgentTurn({
-      messages: [{ role: 'user', content: 'hi' }],
-      system: 'sys',
-      model: 'anthropic/claude-sonnet-5',
-      missionId: 'mission-settle-1',
-      projectId: 'proj-settle-1',
-    })) {
-      chunks.push(chunk);
-    }
-
-    expect(chunks.join('')).toContain('ACTION: FINAL');
-
-    const settled = mockedEmitBuffered.mock.calls
-      .map((c: unknown[]) => c[0] as JournalEventInput)
-      .find((e) => e.type === 'spend.tokens' && (e.payload as { source: string }).source === 'settled');
-
-    expect(settled).toBeDefined();
-    expect(settled?.payload).toEqual({
-      tokensIn: 42,
-      tokensOut: 17,
-      costUsd: 0.0033,
-      source: 'settled',
-    });
-    expect(settled?.missionId).toBe('mission-settle-1');
-    expect(settled?.projectId).toBe('proj-settle-1');
-    expect(settled?.actor).toBe('agent');
-  });
-
-  it('does not emit a settled spend.tokens event when missionId/projectId are absent', async () => {
-    const { streamManagedAgentTurn: realStreamManagedAgentTurn } = await vi.importActual<
-      typeof import('../lib/models/managedProvider')
-    >('../lib/models/managedProvider');
-
-    const encoder = new TextEncoder();
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(
-          encoder.encode('done\n\x1b[usage]{"inputTokens":1,"outputTokens":1,"costUsd":0.0001}'),
-        );
-        controller.close();
-      },
-    });
-    global.fetch = vi.fn().mockResolvedValueOnce({ ok: true, body } as unknown as Response);
-
-    const drainedChunks: string[] = [];
-    for await (const chunk of realStreamManagedAgentTurn({
-      messages: [{ role: 'user', content: 'hi' }],
-      system: 'sys',
-      model: 'anthropic/claude-sonnet-5',
-      // no missionId/projectId supplied
-    })) {
-      drainedChunks.push(chunk);
-    }
-    expect(drainedChunks.length).toBeGreaterThan(0);
-
-    const settledCalls = mockedEmitBuffered.mock.calls
-      .map((c: unknown[]) => c[0] as JournalEventInput)
-      .filter((e) => e.type === 'spend.tokens' && (e.payload as { source: string }).source === 'settled');
-    expect(settledCalls).toHaveLength(0);
-  });
-});
+// ── Hosted settle path removed ─────────────────────────────────────
+// The ai-proxy settle marker no longer exists — Forge has no hosted backend.
+// Per-turn real usage now arrives via the stub streamTurn onUsage callback
+// (see the onMetrics real usage vs estimate block above).

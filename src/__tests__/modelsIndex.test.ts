@@ -10,21 +10,18 @@ import {
   saveAccessSettings,
   getProviderMode,
   getProvider,
-  isManagedActive,
-  setManagedAvailability,
   describeProviderReadiness,
   getDefaultModelIdForMode,
   getActiveModel,
 } from '../lib/models/index';
 import { DEFAULT_MODEL, findModelById } from '../lib/models/registry';
-import { DEFAULT_OPENROUTER_MODEL_ID, findOpenRouterModel } from '../lib/models/openrouterCatalog';
+import { DEFAULT_LOCAL_MODEL_ID } from '../lib/models/localProvider';
+import { DEFAULT_DEVIN_MODEL_ID, findDevinModel } from '../lib/models/devinCatalog';
 
 // localStorage is provided by jsdom
 beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
-  // Reset managed availability to false before each test
-  setManagedAvailability(false);
 });
 
 describe('loadAccessSettings / saveAccessSettings', () => {
@@ -34,18 +31,43 @@ describe('loadAccessSettings / saveAccessSettings', () => {
   });
 
   it('saveAccessSettings + loadAccessSettings roundtrip', () => {
-    saveAccessSettings({ accessMode: 'byok', byokProvider: 'anthropic' });
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'codex' });
     const loaded = loadAccessSettings();
-    expect(loaded.accessMode).toBe('byok');
-    expect(loaded.byokProvider).toBe('anthropic');
+    expect(loaded.accessMode).toBe('cli');
+    expect(loaded.cliTool).toBe('codex');
   });
 
   it('saveAccessSettings overwrites previous value', () => {
     saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
-    saveAccessSettings({ accessMode: 'byok' });
+    saveAccessSettings({ accessMode: 'local' });
     const loaded = loadAccessSettings();
-    expect(loaded.accessMode).toBe('byok');
+    expect(loaded.accessMode).toBe('local');
     expect(loaded.cliTool).toBeUndefined();
+  });
+
+  it('migrates the legacy lazy.accessSettings key once, then removes it', () => {
+    localStorage.setItem(
+      'lazy.accessSettings',
+      JSON.stringify({ accessMode: 'cli', cliTool: 'codex', model: 'claude-opus-5' }),
+    );
+
+    const loaded = loadAccessSettings();
+
+    expect(loaded).toEqual({ accessMode: 'cli', cliTool: 'codex', model: 'claude-opus-5' });
+    expect(localStorage.getItem('lazy.accessSettings')).toBeNull();
+    expect(localStorage.getItem('forge.accessSettings')).not.toBeNull();
+  });
+
+  it('legacy migration drops modes that no longer exist (byok/pro collapse to auto-detect)', () => {
+    localStorage.setItem(
+      'lazy.accessSettings',
+      JSON.stringify({ accessMode: 'byok', model: 'claude-opus-5' }),
+    );
+
+    const loaded = loadAccessSettings();
+
+    expect(loaded.accessMode).toBeUndefined();
+    expect(loaded.model).toBe('claude-opus-5');
   });
 });
 
@@ -96,6 +118,15 @@ describe('cliBackendProvider factory', () => {
     expect(models).toEqual([]);
   });
 
+  it('devin backend listModels returns the Devin catalog', async () => {
+    const { cliBackendProvider } = await import('../lib/models/cliBackendProvider');
+    const provider = cliBackendProvider('devin');
+    const models = provider.listModels();
+    expect(models.length).toBeGreaterThan(0);
+    expect(models.every(m => m.provider === 'devin')).toBe(true);
+    expect(models.some(m => m.id === DEFAULT_DEVIN_MODEL_ID)).toBe(true);
+  });
+
   it('isCliBackendAvailable returns null before detectAllCliBackends is called', async () => {
     const { isCliBackendAvailable } = await import('../lib/models/cliBackendProvider');
     // Before detection, should be null (not yet checked)
@@ -109,58 +140,26 @@ describe('describeProviderReadiness', () => {
   it('is not ready in a non-Tauri (mock) context', () => {
     const r = describeProviderReadiness();
     expect(r.ready).toBe(false);
-    expect(r.reason).toMatch(/moteur|clé API|Claude Code/i);
+    expect(r.reason).toMatch(/No engine detected/);
   });
 
-  it('is not ready in pro mode (subscription required)', () => {
-    const r = describeProviderReadiness('pro');
+  it('mock-mode reason points at Ollama or a CLI tool in Settings > Models', () => {
+    const r = describeProviderReadiness('mock');
     expect(r.ready).toBe(false);
-    expect(r.reason).toMatch(/Abonnement Pro/i);
+    expect(r.reason).toMatch(/Ollama|Claude Code \/ Codex/);
+    expect(r.reason).toMatch(/Settings > Models/);
   });
 
-  it('pro mode readiness text mentions Modèles for engine selection', () => {
-    const r = describeProviderReadiness('pro');
-    expect(r.reason).toMatch(/Modèles/i);
+  it('mock-mode reason uses the translator when one is supplied', () => {
+    const r = describeProviderReadiness('mock', (key) => `t:${key}`);
+    expect(r.ready).toBe(false);
+    expect(r.reason).toBe('t:models.readiness.noEngine');
   });
 
-  it('is ready when an engine mode is active', () => {
-    const r = describeProviderReadiness('live-key');
+  it.each(['claude-code', 'codex', 'devin', 'local'] as const)('is ready when the %s engine is active', (mode) => {
+    const r = describeProviderReadiness(mode);
     expect(r.ready).toBe(true);
     expect(r.reason).toBeUndefined();
-  });
-});
-
-// ── isManagedActive ───────────────────────────────────────────────
-
-describe('isManagedActive', () => {
-  it('returns false when _managedActive is false, accessMode unset', () => {
-    setManagedAvailability(false);
-    localStorage.clear();
-    expect(isManagedActive()).toBe(false);
-  });
-
-  it('returns true when _managedActive is true and accessMode is unset (auto)', () => {
-    setManagedAvailability(true);
-    localStorage.clear();
-    expect(isManagedActive()).toBe(true);
-  });
-
-  it('returns true when _managedActive is true and accessMode is "pro"', () => {
-    setManagedAvailability(true);
-    saveAccessSettings({ accessMode: 'pro' });
-    expect(isManagedActive()).toBe(true);
-  });
-
-  it('returns false when _managedActive is true but accessMode is "cli"', () => {
-    setManagedAvailability(true);
-    saveAccessSettings({ accessMode: 'cli' });
-    expect(isManagedActive()).toBe(false);
-  });
-
-  it('returns false when _managedActive is true but accessMode is "byok"', () => {
-    setManagedAvailability(true);
-    saveAccessSettings({ accessMode: 'byok' });
-    expect(isManagedActive()).toBe(false);
   });
 });
 
@@ -170,7 +169,6 @@ describe('getProviderMode (Tauri runtime simulation)', () => {
   afterEach(() => {
     // Remove the Tauri marker we added
     delete (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'];
-    setManagedAvailability(false);
     localStorage.clear();
   });
 
@@ -178,39 +176,40 @@ describe('getProviderMode (Tauri runtime simulation)', () => {
     (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {};
   }
 
-  it('returns "managed" when _managedActive is true and accessMode is unset', () => {
+  it('returns "claude-code" when accessMode is "cli" with the default tool', () => {
     simulateTauri();
-    setManagedAvailability(true);
-    localStorage.clear();
-    expect(getProviderMode()).toBe('managed');
-  });
-
-  it('returns "claude-code" when accessMode is "cli" even if _managedActive is true', () => {
-    simulateTauri();
-    setManagedAvailability(true);
     saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
     expect(getProviderMode()).toBe('claude-code');
   });
 
-  it('returns "live-key" when accessMode is "byok" even if _managedActive is true', () => {
+  it('returns "codex" when accessMode is "cli" with cliTool "codex"', () => {
     simulateTauri();
-    setManagedAvailability(true);
-    saveAccessSettings({ accessMode: 'byok' });
-    expect(getProviderMode()).toBe('live-key');
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'codex' });
+    expect(getProviderMode()).toBe('codex');
   });
 
-  it('returns "managed" when accessMode is "pro" and _managedActive is true', () => {
+  it('returns "devin" when accessMode is "cli" with cliTool "devin"', () => {
     simulateTauri();
-    setManagedAvailability(true);
-    saveAccessSettings({ accessMode: 'pro' });
-    expect(getProviderMode()).toBe('managed');
+    saveAccessSettings({ accessMode: 'cli', cliTool: 'devin' });
+    expect(getProviderMode()).toBe('devin');
   });
 
-  it('returns "pro" when accessMode is "pro" and _managedActive is false', () => {
+  it('returns "local" when accessMode is "local"', () => {
     simulateTauri();
-    setManagedAvailability(false);
-    saveAccessSettings({ accessMode: 'pro' });
-    expect(getProviderMode()).toBe('pro');
+    saveAccessSettings({ accessMode: 'local' });
+    expect(getProviderMode()).toBe('local');
+  });
+
+  it('returns "local" when a local model id is persisted (explicit local routing)', () => {
+    simulateTauri();
+    saveAccessSettings({ model: 'local/hermes3' });
+    expect(getProviderMode()).toBe('local');
+  });
+
+  it('returns "claude-code" in auto mode before detection settles (benefit of the doubt)', () => {
+    simulateTauri();
+    localStorage.clear();
+    expect(getProviderMode()).toBe('claude-code');
   });
 });
 
@@ -219,7 +218,6 @@ describe('getProviderMode (Tauri runtime simulation)', () => {
 describe('getProvider (Tauri runtime simulation)', () => {
   afterEach(() => {
     delete (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'];
-    setManagedAvailability(false);
     localStorage.clear();
   });
 
@@ -227,54 +225,59 @@ describe('getProvider (Tauri runtime simulation)', () => {
     (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {};
   }
 
-  it('returns managed provider (id "managed") when _managedActive is true and accessMode is unset', () => {
-    simulateTauri();
-    setManagedAvailability(true);
-    localStorage.clear();
+  it('returns the mock provider outside Tauri', () => {
     const provider = getProvider();
-    expect(provider.id).toBe('managed');
+    expect(provider.id).toBe('mock');
   });
 
-  it('returns cli provider when accessMode is "cli" even if _managedActive is true', () => {
+  it('returns cli provider when accessMode is "cli"', () => {
     simulateTauri();
-    setManagedAvailability(true);
     saveAccessSettings({ accessMode: 'cli', cliTool: 'claude' });
     const provider = getProvider();
     // cliBackendProvider('claude') has id 'cli-claude'
     expect(provider.id).toBe('cli-claude');
   });
+
+  it('returns the local provider when accessMode is "local"', () => {
+    simulateTauri();
+    saveAccessSettings({ accessMode: 'local' });
+    const provider = getProvider();
+    expect(provider.id).toBe('local');
+  });
+
+  it('routes a picked Devin-catalog id through the Devin backend whatever the ambient mode is', () => {
+    simulateTauri();
+    saveAccessSettings({ model: 'swe-2-medium' });
+    const provider = getProvider();
+    expect(provider.id).toBe('cli-devin');
+  });
 });
 
 // ── getDefaultModelIdForMode ──────────────────────────────────────
-// The BLOCKER this resolves: LazyManager (and manager-launched missions)
-// used to always default to a native Anthropic id, which the managed/Pro
-// ai-proxy rejects with "Modèle non supporté" (400). The default must be
-// mode-aware — OpenRouter id for managed/pro, native id everywhere else.
+// The single source of truth for "which model should we start with before
+// the user picks one" — mirrors NewMissionModal's getInitialModelId() so
+// every "pick a starting model for the current mode" call site agrees.
 
 describe('getDefaultModelIdForMode', () => {
-  it('returns the OpenRouter default id in "managed" mode', () => {
-    expect(getDefaultModelIdForMode('managed')).toBe(DEFAULT_OPENROUTER_MODEL_ID);
+  it('returns the Devin default id in "devin" mode', () => {
+    expect(getDefaultModelIdForMode('devin')).toBe(DEFAULT_DEVIN_MODEL_ID);
   });
 
-  it('returns the OpenRouter default id in "pro" mode (selected but not yet active)', () => {
-    expect(getDefaultModelIdForMode('pro')).toBe(DEFAULT_OPENROUTER_MODEL_ID);
-  });
-
-  it('the managed/pro default is a real OpenRouter-format id (contains a provider prefix)', () => {
-    expect(getDefaultModelIdForMode('managed')).toContain('/');
+  it('returns the local default id in "local" mode', () => {
+    expect(getDefaultModelIdForMode('local')).toBe(DEFAULT_LOCAL_MODEL_ID);
   });
 
   it('returns the native Anthropic default id in "claude-code" mode', () => {
     expect(getDefaultModelIdForMode('claude-code')).toBe(DEFAULT_MODEL.id);
   });
 
-  // 'codex' is deliberately NOT the same as claude-code/live-key/mock: the
+  // 'codex' is deliberately NOT the same as claude-code/mock: the
   // registry (ALL_MODELS/DEFAULT_MODEL) is Anthropic-only (see registry.ts's
-  // module comment — the OpenAI/Google stubs were removed), so there is no
-  // real "codex default model id" in there. Returning DEFAULT_MODEL.id used
-  // to silently forward an Anthropic model id to the OpenAI Codex CLI via
-  // agent_cli_chat_stream (cliBackendProvider.ts) — a genuine cross-provider
-  // mismatch this resolves.
+  // module comment), so there is no real "codex default model id" in there.
+  // Returning DEFAULT_MODEL.id used to silently forward an Anthropic model
+  // id to the OpenAI Codex CLI via agent_cli_chat_stream
+  // (cliBackendProvider.ts) — a genuine cross-provider mismatch this
+  // resolves.
   it('returns an empty id (never an Anthropic id) in "codex" mode — the Codex CLI picks its own default', () => {
     expect(getDefaultModelIdForMode('codex')).toBe('');
   });
@@ -287,18 +290,8 @@ describe('getDefaultModelIdForMode', () => {
     expect(codexId === undefined || !anthropicIds.has(codexId)).toBe(true);
   });
 
-  it('returns the native Anthropic default id in "live-key" mode', () => {
-    expect(getDefaultModelIdForMode('live-key')).toBe(DEFAULT_MODEL.id);
-  });
-
   it('returns the native Anthropic default id in "mock" mode', () => {
     expect(getDefaultModelIdForMode('mock')).toBe(DEFAULT_MODEL.id);
-  });
-
-  it('never returns an OpenRouter id (with a provider prefix) for a non-managed mode', () => {
-    for (const mode of ['claude-code', 'codex', 'live-key', 'mock'] as const) {
-      expect(getDefaultModelIdForMode(mode)).not.toContain('/');
-    }
   });
 });
 
@@ -308,10 +301,8 @@ describe('getDefaultModelIdForMode', () => {
 // Claude Code CLI subscription path rejects outright ("may not exist or you
 // may not have access to it"), so Ctrl+K inline-edit never produced a diff.
 // getActiveModel() replaces every one of those literals; it must resolve
-// exactly like the working Ask composer does (assistantStore's
-// INITIAL_STATE.selectedModel / Composer's getManagedModelDisplay()) so
-// every AI feature agrees on "the active model" instead of each hardcoding
-// its own id.
+// exactly like the working Ask composer does so every AI feature agrees on
+// "the active model" instead of each hardcoding its own id.
 
 describe('getActiveModel', () => {
   it('defaults to DEFAULT_MODEL (Haiku) when no override is persisted — the same default the Ask composer starts with', () => {
@@ -322,7 +313,7 @@ describe('getActiveModel', () => {
     expect(getActiveModel().id).not.toBe('claude-sonnet-4-20250514');
   });
 
-  it('honors a persisted native model id (CLI/BYOK/auto id namespace)', () => {
+  it('honors a persisted native model id (CLI id namespace)', () => {
     saveAccessSettings({ model: 'claude-opus-5' });
     expect(getActiveModel()).toEqual(findModelById('claude-opus-5'));
   });
@@ -332,10 +323,9 @@ describe('getActiveModel', () => {
     expect(getActiveModel()).toEqual(DEFAULT_MODEL);
   });
 
-  describe('managed/pro mode (Tauri runtime simulation)', () => {
+  describe('codex mode (Tauri runtime simulation)', () => {
     afterEach(() => {
       delete (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'];
-      setManagedAvailability(false);
       localStorage.clear();
     });
 
@@ -343,31 +333,65 @@ describe('getActiveModel', () => {
       (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {};
     }
 
-    it('resolves the OpenRouter catalog default when managed is active and no model is persisted', () => {
+    it('returns the Codex-managed sentinel (empty id), never a persisted or default native id', () => {
       simulateTauri();
-      setManagedAvailability(true);
+      saveAccessSettings({ accessMode: 'cli', cliTool: 'codex', model: 'claude-opus-5' });
       const active = getActiveModel();
-      expect(active.id).toBe(DEFAULT_OPENROUTER_MODEL_ID);
-      expect(findOpenRouterModel(active.id)).toBeDefined();
+      expect(active.id).toBe('');
+      expect(active.provider).toBe('openai');
+    });
+  });
+
+  describe('local mode (Tauri runtime simulation)', () => {
+    afterEach(() => {
+      delete (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'];
+      localStorage.clear();
     });
 
-    it('honors a persisted OpenRouter model id when accessMode is "pro"', () => {
+    function simulateTauri(): void {
+      (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {};
+    }
+
+    it('resolves the local default when no model is persisted', () => {
       simulateTauri();
-      setManagedAvailability(false);
-      saveAccessSettings({ accessMode: 'pro', model: 'anthropic/claude-opus-5' });
+      saveAccessSettings({ accessMode: 'local' });
       const active = getActiveModel();
-      expect(active.id).toBe('anthropic/claude-opus-5');
-      expect(active.label).toBe('Claude Opus 5');
+      expect(active.id).toBe(DEFAULT_LOCAL_MODEL_ID);
+      expect(active.provider).toBe('local');
     });
 
-    it('never leaks a native id into the managed/OpenRouter namespace — falls back to the OpenRouter default instead', () => {
+    it('honors a persisted local model id', () => {
       simulateTauri();
-      setManagedAvailability(true);
-      // A native id left over from CLI mode must not be forwarded to the
-      // managed ai-proxy, which only understands OpenRouter-format ids.
-      saveAccessSettings({ model: 'claude-opus-5' });
+      saveAccessSettings({ accessMode: 'local', model: 'local/mymodel' });
       const active = getActiveModel();
-      expect(active.id).toBe(DEFAULT_OPENROUTER_MODEL_ID);
+      expect(active.id).toBe('local/mymodel');
+      expect(active.provider).toBe('local');
+    });
+  });
+
+  describe('devin mode (Tauri runtime simulation)', () => {
+    afterEach(() => {
+      delete (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'];
+      localStorage.clear();
+    });
+
+    function simulateTauri(): void {
+      (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {};
+    }
+
+    it('resolves the Devin catalog default when no model is persisted', () => {
+      simulateTauri();
+      saveAccessSettings({ accessMode: 'cli', cliTool: 'devin' });
+      const active = getActiveModel();
+      expect(active.id).toBe(DEFAULT_DEVIN_MODEL_ID);
+      expect(findDevinModel(active.id)).toBeDefined();
+    });
+
+    it('honors a persisted Devin model id', () => {
+      simulateTauri();
+      saveAccessSettings({ accessMode: 'cli', cliTool: 'devin', model: 'swe-2-high' });
+      const active = getActiveModel();
+      expect(active.id).toBe('swe-2-high');
     });
   });
 });

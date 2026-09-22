@@ -1,7 +1,14 @@
-/* managedAgent — Managed (Pro tier) autonomous agent loop.
+/* managedAgent — Forge autonomous agent loop (local-first, no hosted backend).
 
    ReAct loop (inspired by Claude Code's agentic loop): compose task + brain
-   context, stream a turn (streamManagedAgentTurn), parse THOUGHT/ACTION/ARGS,
+   context, stream a turn through the caller-supplied streamTurn (a CLI tool
+   or the local Ollama engine — see localProvider.ts's
+   createLocalAgentTurnStreamer and cliAgentTurnStreamer.ts), parse
+   THOUGHT/ACTION/ARGS, execute the named tool (read_file/write_file/
+   edit_file, read_dir, glob, grep_file, run_command, run_tests,
+   brain_query, brain_record), feed the observation back and repeat. Stops on
+   ACTION: FINAL, MAX_STEPS, or MAX_CONSECUTIVE_FAILURES consecutive errored
+   steps (escalation — V4).
    execute the named tool (read_file/write_file/edit_file, read_dir, glob,
    grep_file, run_command, run_tests, brain_query, brain_record), feed the
    observation back and repeat. Stops on ACTION: FINAL, MAX_STEPS, or
@@ -37,28 +44,11 @@
    and ./managedToolPermissions.ts (imported here, file-size cohesion).
 
    Model routing: this loop is invoked ONLY once runtime.ts's planAndAct has
-   already confirmed the mission's chosen model belongs to the managed
-   catalog AND that Pro is ready (see planAndAct's routing-by-model
-   dispatch) — every turn here (streamAgentTurn) therefore ALWAYS stays on
-   the managed ai-proxy path. It must never re-derive routing from
-   getProviderMode() and divert back to the native claude-code CLI mid-loop:
-   that used to happen here (a stale `if (getProviderMode() ===
-   'claude-code')` branch calling a claude-only toNativeClaudeModel +
-   streamClaudeCodeTurn), which was harmless only while mission dispatch was
-   itself mode-based (planAndActManaged was never reached while
-   mode==='claude-code' — see isManagedAgentAvailable in runtime.ts). Now
-   that dispatch is model-based, a mission CAN legitimately run here while
-   accessMode is 'cli' (a user entitled to both a Claude subscription and
-   Pro who picked a managed model for THIS mission) — reviving that branch
-   would silently reroute every turn back to native and mangle a non-Claude
-   OpenRouter id (e.g. 'openai/gpt-5.5') through toNativeClaudeModel, which
-   only recognizes the opus/sonnet/haiku substrings and passes anything else
-   through UNCHANGED into the claude CLI's `model` field. The remaining
-   toManagedOpenRouterModel normalization is a defensive backstop only (maps
-   a bare tier/native id, if one ever leaks in, to a real catalog id) — a
-   real OpenRouter id for ANY provider (anthropic/openai/google/x-ai/
-   deepseek/meta-llama) already matches findOpenRouterModel and passes
-   through unmangled.
+   already resolved the mission's chosen model to a local engine (see
+   planAndAct's routing-by-model dispatch) and built the matching streamTurn
+   — every turn here (streamAgentTurn) therefore ALWAYS stays on that
+   streamer. It must never re-derive routing from getProviderMode() and
+   divert mid-loop.
 
    Pause / Intervene (real here, polled once per step alongside stopSignal):
    pauseSignal() true -> wait (PAUSE_POLL_MS poll, stopSignal still honored),
@@ -98,9 +88,8 @@ import { buildProofArtifact, storeProofText } from './proofs.js';
 import { estimateTokens } from '../brain/context.js';
 import { estimateMessagesTokens } from './managedAgentPure.js';
 export { parseReflectBlock, estimateMessagesTokens, shouldHandoff, parsePrmVerdict } from './managedAgentPure.js';
-import { streamManagedAgentTurn } from '../models/managedProvider.js';
-import type { RealUsage } from '../models/managedProvider.js';
-import { findOpenRouterModel, OPENROUTER_MODELS, DEFAULT_OPENROUTER_MODEL_ID } from '../models/openrouterCatalog.js';
+import type { RealUsage } from '../models/costStore.js';
+import { estimateUsageUsd } from '../models/estimateUsageUsd.js';
 import { stripVerbatimPrefix } from '../paths.js';
 import {
   AGENT_SYSTEM_PROMPT,
@@ -122,9 +111,8 @@ import { applyManagedLoopStep } from './managedAgentLoop.js';
 export { parseReActAction, extractBalancedJsonObject, sanitizeJsonStringControlChars } from './managedAgentParse.js';
 import { type AgentStepRecord } from './stuckDetector.js';
 
-/** Managed-loop step cap — 100 (raised from 60 on 2026-08-05): DeepSeek verbose verification loops need the headroom. */
+/** Managed-loop step cap — 100 (raised from 60 on 2026-08-05): verbose verification loops need the headroom. */
 const MAX_STEPS = 100;
-const CHEAP_MODEL = 'deepseek/deepseek-v4-flash';
 const PRM_MAX = 2;
 /** V4 — consecutive-failure escalation cap (see planAndActManaged). */
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -302,10 +290,10 @@ export interface PlanAndActManagedOpts {
    * goes straight to 'failed' with an honest timeout reason). Default: no-op.
    */
   onDurationExceeded?: () => void;
-  /** Reasoning effort forwarded to the managed proxy when the model supports
+  /** Reasoning effort forwarded to the engine when the model supports
    *  it. Sourced from MissionContract.effort (set by NewMissionModal or the
-   *  LazyManager's launch_mission/create_loop action). */
-  reasoningEffort?: import('../models/openrouterCatalog.js').ReasoningEffort;
+   *  manager's launch_mission/create_loop action). */
+  reasoningEffort?: import('../models/accessSettings.js').ReasoningEffort;
   /** Optional i18n translate function — see {@link TFunc}'s doc comment
    *  (runtime.ts). Threaded through this loop's own action-feed strings
    *  (agents.managedAgent.* keys) the same way runtime.ts threads it
@@ -376,68 +364,36 @@ function resolveProofsRoot(projectRoot: string | undefined, worktreePath: string
   return worktreePath;
 }
 
-/** Maps any model label/tier/native-id to a valid OpenRouter id for the
- *  ai-proxy (managedProvider.ts forwards `model` as-is and rejects anything
- *  else). Reuses OPENROUTER_MODELS (never hardcoded) — a defensive backstop
- *  for when Mission.model doesn't already carry a valid id (see
- *  models/index.ts's getDefaultModelIdForMode). */
-export function toManagedOpenRouterModel(model: string): string {
-  // Already a valid OpenRouter id — pass through unchanged.
-  if (findOpenRouterModel(model)) return model;
-
-  const lower = model.toLowerCase();
-  const anthropicModelId = (needle: string): string | undefined =>
-    OPENROUTER_MODELS.find(
-      (m) => m.provider === 'Anthropic' && m.id.toLowerCase().includes(needle),
-    )?.id;
-
-  if (lower.includes('opus')) return anthropicModelId('opus') ?? DEFAULT_OPENROUTER_MODEL_ID;
-  if (lower.includes('sonnet')) return anthropicModelId('sonnet') ?? DEFAULT_OPENROUTER_MODEL_ID;
-  if (lower.includes('haiku')) return anthropicModelId('haiku') ?? DEFAULT_OPENROUTER_MODEL_ID;
-
-  // Unrecognized label/id with no catalog match — fall back to the catalog
-  // default rather than forwarding an id the proxy will reject.
-  return DEFAULT_OPENROUTER_MODEL_ID;
-}
-
-/** Streams one turn via the managed (OpenRouter/ai-proxy) backend — see this
- *  file's header ("Model routing") for why this must NEVER branch on
- *  getProviderMode() / divert to the native CLI: this loop only ever runs
- *  once runtime.ts has already committed to the managed engine for this
- *  mission. */
+/** Streams one turn via the caller-supplied streamer — see this file's
+ *  header ("Model routing"). streamTurn is REQUIRED: Forge has no hosted
+ *  fallback rail, so a loop started without one is a wiring bug and fails
+ *  loudly here instead of silently calling nothing. */
 async function* streamAgentTurn(opts: {
   messages: Array<{ role: string; content: string }>;
   system: string;
   model: string;
   signal?: AbortSignal;
-  /** Reasoning effort forwarded to the managed proxy. */
-  reasoningEffort?: import('../models/openrouterCatalog.js').ReasoningEffort;
-  /** Real-usage callback, populated from the ai-proxy's post-settlement marker. */
+  /** Reasoning effort forwarded to the engine. */
+  reasoningEffort?: import('../models/accessSettings.js').ReasoningEffort;
+  /** Real-usage callback, populated by streamers that know real token counts. */
   onUsage?: (usage: RealUsage) => void;
-  /** Forwarded to managedProvider.ts so its post-settlement corrective
-   *  spend.tokens event (T0.4) carries the right journal identity. */
+  /** Forwarded so journal spend events carry the right mission identity. */
   missionId?: string;
   projectId?: string;
   /** Forwarded to a CLI streamTurn so native model://action tool calls
-   *  (swe-2 acting with its own tools) count as real work. */
+   *  (an agent acting with its own tools) count as real work. */
   onNativeAction?: () => void;
-  /** Mission worktree — CLI backends anchor their ACP session cwd to it so
+  /** Mission worktree — CLI backends anchor their session cwd to it so
    *  native writes stay inside the isolated worktree. */
   worktreePath?: string;
-  /** BYOK wave: overrides the ai-proxy rail with the user's own BYOK
-   *  provider streamer (see resolveByokAgentTurnStreamer). */
+  /** Per-turn streamer built by runtime.ts's dispatch (CLI or local engine).
+   *  REQUIRED — see this function's doc comment. */
   streamTurn?: PlanAndActManagedOpts['streamTurn'];
 }): AsyncIterable<string> {
-  // Defensive model normalization (see toManagedOpenRouterModel) — a real
-  // OpenRouter id for ANY provider passes through unmangled. BYOK wave: when
-  // a streamTurn override is provided (mission routed to the user's own
-  // BYOK provider), the model id goes through UNMANGLED — DeepSeek catalog
-  // ids must never be rewritten to OpenRouter-style ids.
-  if (opts.streamTurn) {
-    yield* opts.streamTurn({ ...opts, model: opts.model });
-    return;
+  if (!opts.streamTurn) {
+    throw new Error('planAndActManaged requires a streamTurn (CLI or local engine) — no hosted fallback exists');
   }
-  yield* streamManagedAgentTurn({ ...opts, model: toManagedOpenRouterModel(opts.model) });
+  yield* opts.streamTurn({ ...opts, model: opts.model });
 }
 
 // resolvePath moved to toolRuntime.ts — re-exported here for tests that import it.
@@ -456,11 +412,10 @@ export { resolvePath } from '../tools/toolRuntime.js';
 // (managedAgent.test.ts imports stripVerbatimPrefix from this module).
 export { stripVerbatimPrefix };
 
-/** Estimates USD cost from the OpenRouter catalog's per-model pricing (priceIn/priceOut, USD per 1M tokens); returns 0 (honest "not derivable") when the model isn't in the catalog or is free. */
+/** Estimates USD cost via estimateUsageUsd (static local rates; 0 for local
+ *  runs). Returns 0 (honest "not derivable") when the model is unknown. */
 function estimateCostUsd(model: string, inputTokens: number, outputTokens: number): number {
-  const entry = findOpenRouterModel(model);
-  if (!entry || entry.isFree) return 0;
-  return (inputTokens / 1_000_000) * entry.priceIn + (outputTokens / 1_000_000) * entry.priceOut;
+  return estimateUsageUsd(model, inputTokens, outputTokens);
 }
 
 // ── Tool executor (delegates to shared runtime) ───────────────────
@@ -809,27 +764,27 @@ export async function planAndActManaged(opts: PlanAndActManagedOpts): Promise<vo
     emitMetrics({ type: 'failed', reason: `stuck_${reason}` });
   };
 
-  /** BUG-1 — a `no_credits` ManagedUnavailableError is NOT transient: retrying
-   *  hammers the same wall (managedAgent.ts's own retry loop AND, previously,
-   *  recovery.ts's evaluateRecovery on top). Stop after exactly one attempt
-   *  with a clear action message instead of burning consecutiveFailures.
-   *  Emits via agentErrorEvent (kind=error + i18n prefix) so detection is
+  /** BUG-1 — a `no_credits` turn error is NOT transient: retrying hammers
+   *  the same wall (this loop's own retry AND, previously, recovery.ts's
+   *  evaluateRecovery on top). Stop after exactly one attempt with a clear
+   *  action message instead of burning consecutiveFailures. Emits via
+   *  agentErrorEvent (kind=error + i18n prefix) so detection is
    *  locale-independent; runMission prefers managedOutcome.failed.reason. */
   const stopForNoCredits = (): void => {
     const message = t
       ? t('agents.managedAgent.noCreditsMessage')
-      : 'Crédits Pro épuisés — recharge ou bascule sur ton abonnement CLI dans Réglages > Modèles.';
+      : 'Engine quota exhausted — check the engine (Ollama model pulled? CLI logged in?) or switch engine in Settings > Models.';
     onAction(agentErrorEvent(nowTime(), message, t));
     onStep(4, 'done', `crédits épuisés · ${nowTime()}`);
     onProgress(100);
     emitMetrics({ type: 'failed', reason: 'no_credits' });
   };
 
-  /** 2026-08-05 DeepSeek 402 incident — mirrors stopForNoCredits above
-   *  exactly, for a BYOK provider DEFINITIVE error (401/402/403/404) instead
-   *  of a managed/Pro no_credits one. Same agentErrorEvent convention. */
+  /** Definitive provider error (bad credentials, no quota, unknown model)
+   *  — retrying the identical request can never succeed. Mirrors
+   *  stopForNoCredits above. Same agentErrorEvent convention. */
   const PROVIDER_ERROR_MESSAGE =
-    'Clé du fournisseur inutilisable (solde épuisé ou accès refusé) — mission arrêtée';
+    'Engine call definitively rejected (bad credentials, no quota, or unknown model) — mission stopped';
 
   const stopForDefinitiveProviderError = (providerId: string, shortReason: string): void => {
     onAction(
@@ -876,7 +831,7 @@ export async function planAndActManaged(opts: PlanAndActManagedOpts): Promise<vo
   }
 
   onStep(0, 'in_progress');
-  onAction({ time: nowTime(), text: `Managed agent starting (${model})…`, isLive: true });
+  onAction({ time: nowTime(), text: `Forge agent starting (${model})…`, isLive: true });
   onProgress(5);
 
   const initialUserMessage: { role: string; content: string } = { role: 'user', content: fullTaskPrompt };
@@ -939,7 +894,9 @@ export async function planAndActManaged(opts: PlanAndActManagedOpts): Promise<vo
     projectId,
     missionId,
     model,
-    cheapModel: CHEAP_MODEL,
+    // Verification (PRM/reflection) turns run on the SAME engine as the
+    // mission itself — there is no separate cheap hosted rail anymore.
+    cheapModel: model,
     systemPrompt: AGENT_SYSTEM_PROMPT,
     nowTime,
     onAction,

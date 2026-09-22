@@ -307,12 +307,12 @@ function captureToBrain(mission: Mission, insights: LearningInsight[]): boolean 
  *  passed's own bar. */
 const SKILL_CAPTURE_MIN_SCORE = 70;
 
-/** Mirrors runtime.ts's own `classifyMissionModel` (OpenRouter/managed ids
- *  always carry a '/', native Anthropic ids never do) — reimplemented here
+/** Mirrors runtime.ts's own `classifyMissionModel` (`local/…` ids run the
+ *  local engine, everything else is native CLI) — reimplemented here
  *  rather than imported to avoid a runtime.ts <-> learningLoop.ts import
  *  cycle (runtime.ts calls into this module after every mission). */
-function classifyEngine(model: string): 'managed' | 'native' {
-  return model.includes('/') ? 'managed' : 'native';
+function classifyEngine(model: string): 'local' | 'native' {
+  return model.startsWith('local/') ? 'local' : 'native';
 }
 
 function buildSkillNoteBody(mission: Mission, verdict: JudgeVerdict): string {

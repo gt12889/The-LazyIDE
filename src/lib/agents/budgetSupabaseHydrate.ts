@@ -1,15 +1,14 @@
-/* budgetSupabaseHydrate — read-through from usage_events into budgetTracker.
-
-   Local usageHistory is not the managed-rail source of truth. This module
-   sums cost_charged_usd from the signed-in user's own RLS-scoped rows.
-   No session / query error → null (never invent 0 spend that would look
-   like a successful empty ledger). hydrateGlobalSpentCents uses max() so
-   a concurrent live spend() is never clobbered.
-*/
+/* budgetLedger — local ledger math for budgetTracker (Forge: no cloud ledger).
+ *
+ *  chargedUsdSum/sumLedgerCredits are pure helpers over caller-supplied
+ *  rows (kept for the journal-backed ledger views). There is no hosted
+ *  usage ledger anymore, so hydrateBudgetFromLedger resolves null (never
+ *  invent 0 spend that would look like a successful empty ledger) and
+ *  startBudgetLedgerReconcile is a no-op timer kept for call-site
+ *  compatibility until Cockpit is reworked.
+ */
 
 import { usdToCredits } from '../billing/credits.js';
-import { supabase } from '../supabase/client.js';
-import { hydrateGlobalSpentCents } from './budgetTracker.js';
 
 export interface LedgerRow {
   cost_charged_usd: number | string | null;
@@ -87,30 +86,24 @@ export async function fetchLedgerChargedCredits(
   });
 }
 
+/** No hosted ledger exists — always resolves null (never invent spend).
+ *  Kept for call-site compatibility. */
 export async function hydrateBudgetFromSupabase(
-  client: SessionUserClient = supabase as unknown as SessionUserClient,
+  _client?: SessionUserClient,
 ): Promise<number | null> {
-  try {
-    const cents = await fetchLedgerChargedCredits(client);
-    if (cents == null) return null;
-    hydrateGlobalSpentCents(cents);
-    return cents;
-  } catch {
-    return null;
-  }
+  void _client;
+  return null;
 }
 
-/** Cursor `/usage` analog: re-read the durable ledger while the cockpit stays
-    open. No session / error stays a no-op (hydrateBudgetFromSupabase). */
+/** No-op timer (see hydrateBudgetFromSupabase). Returns a stop function for
+ *  call-site compatibility. */
 export const LEDGER_RECONCILE_MS = 60_000;
 
 export function startBudgetLedgerReconcile(
-  client: SessionUserClient = supabase as unknown as SessionUserClient,
-  intervalMs: number = LEDGER_RECONCILE_MS,
+  _client?: SessionUserClient,
+  _intervalMs: number = LEDGER_RECONCILE_MS,
 ): () => void {
-  void hydrateBudgetFromSupabase(client);
-  const id = setInterval(() => {
-    void hydrateBudgetFromSupabase(client);
-  }, intervalMs);
-  return () => clearInterval(id);
+  void _client;
+  void _intervalMs;
+  return () => {};
 }

@@ -76,19 +76,18 @@ describe('sendManagerMessage — real turn cost visibility (no fabrication)', ()
     expect(lastMsg.approxCreditsUsed).toBeGreaterThan(0);
   });
 
-  it('a CLI-subscription (native/devin) or BYOK turn reports usage but shows NO credits — they are not metered by Lazy', async () => {
+  it('a local-engine turn (zero derivable cost) shows NO credits — never a fabricated estimate', async () => {
     const { result } = renderHook(() => useAgentsStore(), { wrapper });
 
     vi.mocked(runManagerTurn).mockImplementationOnce(async () => {
-      // The CLI backend DOES call addUsage (token counts feed the session
-      // ledger/budget) — but the "credits" chip must stay off: a flat-rate
-      // subscription turn never consumes Lazy credits.
-      addUsage({ inputTokens: 200, outputTokens: 3_000, model: 'swe-2-medium' });
+      // Local runs cost $0 by construction (static local rates) — the
+      // "credits" chip must stay off: there is nothing to bill.
+      addUsage({ inputTokens: 200, outputTokens: 3_000, model: 'local/hermes3' });
       return { responseText: 'Done.', actions: [], rawResponse: '' };
     });
 
     await act(async () => {
-      await result.current.sendManagerMessage(result.current.activeConversationId, 'do something', 'swe-2-medium');
+      await result.current.sendManagerMessage(result.current.activeConversationId, 'do something', 'local/hermes3');
     });
 
     const lastMsg = result.current.managerMessages[result.current.managerMessages.length - 1];

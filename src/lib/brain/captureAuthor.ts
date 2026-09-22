@@ -1,9 +1,8 @@
-/* captureAuthor.ts — "qui a écrit quoi et quand" for every brain capture.
-
-   The author (signed-in Supabase user's display name / email local part) is
-   stamped onto CaptureEvents so the resulting neurons carry
-   data-cerveau-author on the article + each fact paragraph. Populated
-   automatically when the event doesn't already carry one.
+/* captureAuthor.ts — "who wrote what and when" for every brain capture.
+   Forge is single-user: the author is the local profile name (see
+   getLocalAuthor below), stamped onto CaptureEvents so the resulting
+   neurons carry data-cerveau-author on the article + each fact paragraph.
+   Populated automatically when the event doesn't already carry one.
 
    Single choke point used by:
      - src/lib/brain/capture.ts's dispatch() (IDE captures),
@@ -12,6 +11,29 @@
 */
 
 import type { CaptureEvent } from '../platform/types.js';
+
+const LS_AUTHOR_KEY = 'forge.profileName';
+
+/** Local profile name — set once in Settings > General, defaults to the
+ *  OS username when available. */
+function getLocalAuthor(): string | undefined {
+  try {
+    const saved = localStorage.getItem(LS_AUTHOR_KEY)?.trim();
+    if (saved) return saved;
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
+
+export function setLocalAuthor(name: string): void {
+  try {
+    if (name.trim()) localStorage.setItem(LS_AUTHOR_KEY, name.trim());
+    else localStorage.removeItem(LS_AUTHOR_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 let _cachedAuthor: string | null | undefined;
 let _cachedAuthorId: string | null | undefined;
@@ -47,7 +69,7 @@ export async function resolveCaptureIdentity(): Promise<{
   };
 }
 
-/** Reset caches to "not yet fetched" (undefined). Called on sign-out. */
+/** Reset caches to "not yet fetched" (undefined). */
 export function invalidateCaptureAuthor(): void {
   _cachedAuthor = undefined;
   _cachedAuthorId = undefined;
@@ -55,61 +77,9 @@ export function invalidateCaptureAuthor(): void {
 }
 
 async function populateCaptureCache(): Promise<void> {
-  _cachedAuthor = null;
+  _cachedAuthor = getLocalAuthor() ?? null;
   _cachedAuthorId = null;
   _cachedDept = null;
-  try {
-    const { supabase } = await import('../supabase/client.js');
-    const { data } = await supabase.auth.getUser();
-    const email = data?.user?.email;
-    const name = data?.user?.user_metadata?.['display_name'] as string | undefined;
-    const userId = data?.user?.id;
-    _cachedAuthor = name || (email && email.includes('@') ? email.split('@')[0] : '') || null;
-    _cachedAuthorId = userId || null;
-    if (userId) {
-      _cachedDept = await resolveDeptSlug(
-        supabase as unknown as { from: (table: string) => DeptQuery },
-        userId,
-      );
-    }
-  } catch {
-    _cachedAuthor = null;
-    _cachedAuthorId = null;
-    _cachedDept = null;
-  }
-}
-
-async function resolveDeptSlug(
-  supabase: { from: (table: string) => DeptQuery },
-  userId: string,
-): Promise<string | null> {
-  try {
-    const { data: memberRows, error } = await supabase
-      .from('org_members')
-      .select('dept_id')
-      .eq('user_id', userId)
-      .limit(1);
-    if (error || !memberRows?.[0]?.dept_id) return null;
-    const deptId = memberRows[0].dept_id as string;
-    const { data: deptRows } = await supabase
-      .from('departments')
-      .select('slug')
-      .eq('id', deptId)
-      .limit(1);
-    const slug = deptRows?.[0]?.slug as string | undefined;
-    return slug || deptId;
-  } catch {
-    return null;
-  }
-}
-
-interface DeptQuery {
-  select: (cols: string) => DeptQuery;
-  eq: (col: string, value: string) => DeptQuery;
-  limit: (n: number) => Promise<{
-    data: Array<Record<string, string | null>> | null;
-    error: unknown;
-  }>;
 }
 
 /** Stamp `author` (and optionally `authorId`) onto the event unless it

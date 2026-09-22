@@ -25,7 +25,7 @@ import { MissionDetailCheckpoints } from './MissionDetailCheckpoints';
 import { MissionMailbox } from './MissionMailbox';
 import { MissionManagerAdvice } from './MissionManagerAdvice';
 import { useAgentsStoreActions, resolveProjectRoot } from './agentsStore';
-import { isManagedAgentAvailable } from '../../lib/agents/runtime';
+import { isLocalLoopAvailable } from '../../lib/agents/runtime';
 import { AgentWizard } from './library/AgentWizard';
 import { createNewAgent } from '../../lib/agents/agentDef';
 import type { LazyAgent } from '../../lib/agents/agentDef';
@@ -295,7 +295,7 @@ export function MissionDetail({ mission, onBack, layout = 'page', focusSection, 
 
   // Computed once and passed down to MissionDetailControls/MissionDetailIntervene
   // so every consumer of the managed-vs-native honesty distinction agrees.
-  const isManagedEngine = isManagedAgentAvailable();
+  const isLoopEngine = isLocalLoopAvailable();
 
   /** Build a pre-filled agent from this mission. */
   function buildAgentFromMission(): LazyAgent {
@@ -510,7 +510,7 @@ export function MissionDetail({ mission, onBack, layout = 'page', focusSection, 
           mission={mission}
           onBack={onBack}
           onSaveAsAgent={() => setSaveAsAgentOpen(true)}
-          isManagedEngine={isManagedEngine}
+          isLoopEngine={isLoopEngine}
         />
       </div>
 
@@ -539,7 +539,7 @@ export function MissionDetail({ mission, onBack, layout = 'page', focusSection, 
             </Section>
           )}
 
-          <MissionDetailIntervene mission={mission} isManagedEngine={isManagedEngine} />
+          <MissionDetailIntervene mission={mission} isLoopEngine={isLoopEngine} />
 
           <MissionMailbox mission={mission} />
 

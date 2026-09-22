@@ -1,4 +1,4 @@
-/* prefetchLazySpaces — warm Code/Brain/Team/Settings chunks after first paint.
+/* prefetchLazySpaces — warm Code/Brain/Settings chunks after first paint.
 
    First click on those tabs currently waits on the lazy() import (full-screen
    spinner). Scheduling the same dynamic imports on idle means a later click
@@ -11,7 +11,6 @@ const TIMEOUT_FALLBACK_MS = 400;
 export function loadLazySpaceChunks(): void {
   void import('../spaces/CodeSpace');
   void import('../spaces/BrainSpace');
-  void import('../spaces/TeamSpace');
   void import('../spaces/SettingsSpace');
 }
 

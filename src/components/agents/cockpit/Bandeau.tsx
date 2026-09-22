@@ -10,10 +10,10 @@ import type { FleetProject } from '../../../lib/agents/fleetMissions';
 
 /** Exported for CockpitMeteoLine.tsx (P1-3 full-bleed redesign): the
  *  greeting logic moved into the far-left rail's KPIs popover alongside
- *  KpiGroup — reused here rather than duplicated. */
+ *  KpiGroup — reused here rather than duplicated. Forge has one local
+ *  profile: the name comes from the local profile setting, if set. */
 export function firstName(user: ReturnType<typeof useAuth>['user']): string | null {
-  const meta = (user?.user_metadata ?? {}) as Record<string, unknown>;
-  const raw = (typeof meta.full_name === 'string' && meta.full_name) || (typeof meta.name === 'string' && meta.name) || null;
+  const raw = (typeof user?.email === 'string' && user.email) || null;
   if (!raw) return null;
   const first = raw.trim().split(/\s+/)[0];
   return first || null;

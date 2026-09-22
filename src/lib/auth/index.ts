@@ -1,3 +1,3 @@
 export { useAuth } from './useAuth.js';
-export type { AuthState, AuthActions } from './useAuth.js';
-export { useOAuthCallback } from './oauthDesktop.js';
+export type { ForgeUser, UseAuthResult } from './useAuth.js';
+export { isGuestMode, setGuestMode, clearGuestMode, GUEST_MODE_KEY } from './guestMode.js';

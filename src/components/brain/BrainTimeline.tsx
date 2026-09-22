@@ -4,7 +4,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useI18n } from '../../i18n';
-import { readActiveBrainConfig } from '../../lib/teams/activeBrainConfig';
 import { getPlatform } from '../../lib/platform';
 import { isTauri } from '../../lib/platform';
 import { parseAuthorsFromHtml, type AuthorInfo } from '../../lib/brain/queryCssParse';
@@ -35,7 +34,7 @@ export function BrainTimeline({ nodes }: BrainTimelineProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [authors, setAuthors] = useState<Map<string, AuthorInfo>>(new Map());
 
-  const orgId = useMemo(() => readActiveBrainConfig()?.orgId ?? 'solo', []);
+  const orgId = useMemo(() => 'solo', []);
 
   // `stored === null` means this profile has never recorded a visit to this
   // brain's timeline — NOT "last visited at the Unix epoch". Treating a

@@ -4,10 +4,10 @@
  *   - evaluateLive() (native CLI, claude-code) — regression coverage for the
  *     shared-helper refactor (buildReviewerTask/buildSecurityTask/
  *     buildJudgeTask/aggregateVerdict)
- *   - evaluateScripted() (pro/live-key/mock — no engine) — regression coverage
- *   - evaluateManaged() (Pro/managed subscription) — the fix under test:
- *     tester via run_shell (ground truth, no LLM), reviewer/security/judge
- *     via streamManagedAgentTurn, so a Pro user gets a real verdict instead
+ *   - evaluateScripted() (mock — no engine) — regression coverage
+ *   - evaluateLocal() (local Ollama engine) — tester via run_shell
+ *     (ground truth, no LLM), reviewer/security/judge via the local
+ *     turn streamer, so a local-engine user gets a real verdict instead
  *     of the "Test runner unavailable — use the desktop app…" placeholder
  *     and a fabricated score of 0.
  */
@@ -27,12 +27,16 @@ vi.mock('../lib/models/index', async (importOriginal) => {
   };
 });
 
-// ── Mock managedProvider's streamManagedAgentTurn (the managed LLM call) ──
-vi.mock('../lib/models/managedProvider', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/models/managedProvider')>();
+// ── Mock the local-engine turn streamer (evaluateLocal's LLM call) ──
+// runLocalEvaluatorAgent builds it via createLocalAgentTurnStreamer() per call;
+// the mock returns the shared stub so tests drive responses and assert the
+// model exactly like the old managed-provider mock.
+const { mockLocalTurn } = vi.hoisted(() => ({ mockLocalTurn: vi.fn() }));
+vi.mock('../lib/models/localProvider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/models/localProvider')>();
   return {
     ...actual,
-    streamManagedAgentTurn: vi.fn(),
+    createLocalAgentTurnStreamer: () => mockLocalTurn,
   };
 });
 
@@ -67,13 +71,13 @@ import {
 } from '../lib/agents/evaluator';
 import type { Mission, MissionContract, JudgeVerdict, ReviewerVerdict } from '../lib/agents/types';
 import { getProviderMode } from '../lib/models/index';
-import { streamManagedAgentTurn } from '../lib/models/managedProvider';
+
 import { getPlatform } from '../lib/platform';
 
 const mockedInvoke = invoke as ReturnType<typeof vi.fn>;
 const mockedListen = listen as ReturnType<typeof vi.fn>;
 const mockedGetProviderMode = getProviderMode as ReturnType<typeof vi.fn>;
-const mockedStream = streamManagedAgentTurn as ReturnType<typeof vi.fn>;
+const mockedStream = mockLocalTurn as unknown as ReturnType<typeof vi.fn>;
 const mockedGetPlatform = getPlatform as ReturnType<typeof vi.fn>;
 
 /** Toggle the global flag that isTauriRuntime() reads. */
@@ -472,7 +476,7 @@ describe('evaluateMission — native CLI (claude-code) — never hangs on a bad 
 
 // ── Scripted fallback (pro / live-key / mock — no engine) — unchanged ──────
 
-describe('evaluateMission — scripted fallback (pro/live-key/mock, no engine)', () => {
+describe('evaluateMission — scripted fallback (mock, no engine)', () => {
   it('mode="mock": a real, passing test run now lets the mission pass — reviewer/judge (no LLM in this mode) are honest non-votes, not a fabricated veto', async () => {
     mockedGetProviderMode.mockReturnValue('mock');
     mockedGetPlatform.mockReturnValue({
@@ -604,8 +608,8 @@ describe('evaluateMission — scripted fallback (pro/live-key/mock, no engine)',
 // ── B25 — live judge when a rail exists; honest inconclusive otherwise ──
 
 describe('evaluateMission — B25 live-vs-placeholder routing', () => {
-  it('prefers the managed (Pro) live judge pipeline over scripted placeholders', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
+  it('prefers the local live judge pipeline over scripted placeholders', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'run_shell') {
         return Promise.resolve({ stdout: 'Tests  1 passed (1)', stderr: '', exitCode: 0 });
@@ -621,13 +625,13 @@ describe('evaluateMission — B25 live-vs-placeholder routing', () => {
     mockedStream.mockImplementation(() => makeStream(responses[idx++]));
 
     const onProgress = vi.fn();
-    const verdict = await evaluateMission(makeMission({ model: 'anthropic/claude-sonnet-4' }), {
+    const verdict = await evaluateMission(makeMission({ model: 'local/sonnet-4' }), {
       repoPath: '/repo',
       worktreePath: '/repo/.lazy/worktrees/m',
       onProgress,
     });
 
-    expect(onProgress).toHaveBeenCalledWith(expect.stringMatching(/managed \(Pro\) evaluation/i));
+    expect(onProgress).toHaveBeenCalledWith(expect.stringMatching(/local-engine evaluation/i));
     expect(mockedStream).toHaveBeenCalled();
     expect(verdict.scoreUnavailable).not.toBe(true);
     expect(verdict.reviewers.some((r) => r.role === 'judge' && r.inconclusive !== true)).toBe(true);
@@ -644,12 +648,12 @@ describe('evaluateMission — B25 live-vs-placeholder routing', () => {
 
 // ── Managed (Pro) mode — the fix under test ─────────────────────────────
 
-describe('evaluateMission — managed (Pro) mode', () => {
+describe('evaluateMission — local mode', () => {
   beforeEach(() => {
-    mockedGetProviderMode.mockReturnValue('managed');
+    mockedGetProviderMode.mockReturnValue('local');
   });
 
-  it('produces a real numeric verdict: tester via run_shell, reviewer/security/judge via the managed LLM', async () => {
+  it('produces a real numeric verdict: tester via run_shell, reviewer/security/judge via the local LLM', async () => {
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'run_shell') {
         return Promise.resolve({ stdout: 'Tests  12 passed (12)', stderr: '', exitCode: 0 });
@@ -666,7 +670,7 @@ describe('evaluateMission — managed (Pro) mode', () => {
     mockedStream.mockImplementation(() => makeStream(responses[idx++]));
 
     const onProgress = vi.fn();
-    const verdict = await evaluateMission(makeMission({ model: 'anthropic/claude-opus-5' }), {
+    const verdict = await evaluateMission(makeMission({ model: 'local/opus-5' }), {
       repoPath: '/repo',
       worktreePath: '/repo/.lazy/worktrees/mission-1',
       onProgress,
@@ -681,11 +685,11 @@ describe('evaluateMission — managed (Pro) mode', () => {
     expect(mockedInvoke).not.toHaveBeenCalledWith('agent_run', expect.anything());
     expect(mockedListen).not.toHaveBeenCalled();
 
-    // Reviewer/security/judge all went through the managed provider with the
+    // Reviewer/security/judge all went through the local engine with the
     // mission's own (OpenRouter-format) model.
     expect(mockedStream).toHaveBeenCalledTimes(3);
     for (const invocation of mockedStream.mock.calls) {
-      expect(invocation[0].model).toBe('anthropic/claude-opus-5');
+      expect(invocation[0].model).toBe('opus-5');
     }
 
     expect(verdict.reviewers.map((r) => r.role)).toEqual(['tester', 'reviewer', 'security', 'judge']);
@@ -694,7 +698,7 @@ describe('evaluateMission — managed (Pro) mode', () => {
     expect(verdict.score).toBe(90); // judge's own score wins
     expect(verdict.risk).toBe('low');
 
-    expect(onProgress).toHaveBeenCalledWith(expect.stringContaining('managed'));
+    expect(onProgress).toHaveBeenCalledWith(expect.stringContaining('local'));
   });
 
   // fix/canvas-ux R10 — same leak class as the manager's sanitizeManagerDisplayText
@@ -724,7 +728,7 @@ describe('evaluateMission — managed (Pro) mode', () => {
     let idx = 0;
     mockedStream.mockImplementation(() => makeStream(responses[idx++]));
 
-    const verdict = await evaluateMission(makeMission({ model: 'anthropic/claude-opus-5' }), {
+    const verdict = await evaluateMission(makeMission({ model: 'local/opus-5' }), {
       repoPath: '/repo',
       worktreePath: '/repo/.lazy/worktrees/mission-1',
     });
@@ -918,7 +922,7 @@ describe('evaluateMission — managed (Pro) mode', () => {
     expect(verdict.score).toBe(85);
   });
 
-  describe('model resolution — reuses the mission model, then AccessSettings, then getDefaultModelIdForMode', () => {
+  describe('model resolution — reuses the mission local/ model, then AccessSettings, then the bundled local default', () => {
     beforeEach(() => {
       mockedInvoke.mockImplementation((cmd: string) => {
         if (cmd === 'run_shell') return Promise.resolve({ stdout: '1 passed (1)', stderr: '', exitCode: 0 });
@@ -929,29 +933,29 @@ describe('evaluateMission — managed (Pro) mode', () => {
       );
     });
 
-    it("uses mission.model directly when it is already an OpenRouter-format id", async () => {
-      await evaluateMission(makeMission({ model: 'anthropic/claude-opus-5' }), {
+    it("uses mission.model directly when it is already a local/ id (stripped to the Ollama name)", async () => {
+      await evaluateMission(makeMission({ model: 'local/opus-5' }), {
         repoPath: '/repo',
         worktreePath: '/wt',
       });
-      expect(mockedStream.mock.calls[0][0].model).toBe('anthropic/claude-opus-5');
+      expect(mockedStream.mock.calls[0][0].model).toBe('opus-5');
     });
 
-    it('falls back to the saved AccessSettings model when mission.model has no "/"', async () => {
-      localStorage.setItem('lazy.accessSettings', JSON.stringify({ model: 'anthropic/claude-haiku-4.5' }));
+    it('falls back to the saved AccessSettings model when mission.model is not a local/ id', async () => {
+      localStorage.setItem('forge.accessSettings', JSON.stringify({ model: 'local/custom-7b' }));
       await evaluateMission(makeMission({ model: 'haiku' }), {
         repoPath: '/repo',
         worktreePath: '/wt',
       });
-      expect(mockedStream.mock.calls[0][0].model).toBe('anthropic/claude-haiku-4.5');
+      expect(mockedStream.mock.calls[0][0].model).toBe('custom-7b');
     });
 
-    it('falls back to getDefaultModelIdForMode("managed") when neither mission.model nor AccessSettings has one', async () => {
+    it('falls back to the bundled local default when neither mission.model nor AccessSettings has one', async () => {
       await evaluateMission(makeMission({ model: 'haiku' }), {
         repoPath: '/repo',
         worktreePath: '/wt',
       });
-      expect(mockedStream.mock.calls[0][0].model).toBe('anthropic/claude-sonnet-5');
+      expect(mockedStream.mock.calls[0][0].model).toBe('hermes3');
     });
   });
 });
@@ -1121,8 +1125,8 @@ describe('evaluateMission — eval-infra failure is a non-vote, not a rejection 
     expect(verdict.tests).toEqual({ passed: 3, failed: 5 });
   });
 
-  it('managed: a tester that COULD NOT RUN (run_shell rejects) is inconclusive — an otherwise-approved change still passes', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
+  it('local: a tester that COULD NOT RUN (run_shell rejects) is inconclusive — an otherwise-approved change still passes', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'run_shell') return Promise.reject(new Error('cwd is not a directory'));
       return Promise.resolve(undefined);
@@ -1150,13 +1154,12 @@ describe('evaluateMission — eval-infra failure is a non-vote, not a rejection 
     expect(verdict.score).toBe(85);
   });
 
-  it('managed: a JUDGE that hits a definitive provider error (402) is inconclusive with the judge_unavailable_provider reason — an otherwise-approved change still passes, never a reject vote, never an exception (2026-08-05 DeepSeek 402 incident)', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
+  it('local: a JUDGE that hits a definitive engine error (model not found) is inconclusive with the judge_unavailable_provider reason — an otherwise-approved change still passes, never a reject vote, never an exception', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'run_shell') return Promise.resolve({ stdout: 'Tests  5 passed (5)', stderr: '', exitCode: 0 });
       return Promise.resolve(undefined);
     });
-    const { ProviderDefinitiveError } = await import('../lib/models/byokProviders');
 
     const responses = [
       JSON.stringify({ verdict: 'approve', summary: 'clean diff', score: 80 }), // reviewer
@@ -1166,8 +1169,8 @@ describe('evaluateMission — eval-infra failure is a non-vote, not a rejection 
     mockedStream.mockImplementation(() => {
       idx += 1;
       if (idx === 3) {
-        // Judge call — the exact incident shape: DeepSeek 402 mid-evaluation.
-        throw new ProviderDefinitiveError(402, 'deepseek', 'Insufficient Balance');
+        // Judge call — a definitive engine rejection in-band (unknown model).
+        throw new Error('Local engine error 404: model not found, try pulling it first');
       }
       return makeStream(responses[idx - 1]);
     });
@@ -1188,7 +1191,7 @@ describe('evaluateMission — eval-infra failure is a non-vote, not a rejection 
     // Distinct, stable reason marker so downstream UI can tell "could not
     // run" apart from "ran and rejected" — see JUDGE_UNAVAILABLE_PROVIDER_REASON's doc comment.
     expect(judge?.summary).toContain(JUDGE_UNAVAILABLE_PROVIDER_REASON);
-    expect(judge?.summary).toContain('Insufficient Balance');
+    expect(judge?.summary).toContain('model not found');
 
     // The judge's own infra failure never drags the verdict down — the
     // conclusive non-judge reviewers (reviewer+security, both approve)
@@ -1309,9 +1312,9 @@ describe('evaluateMission — judge-score honesty: unparsable-JSON path (R11)', 
 // letting it read as a code rejection.
 
 describe('evaluateMission — no test script configured (tester false-negative fix)', () => {
-  describe('managed (Pro) mode', () => {
+  describe('local mode', () => {
     beforeEach(() => {
-      mockedGetProviderMode.mockReturnValue('managed');
+      mockedGetProviderMode.mockReturnValue('local');
     });
 
     it('no package.json at all: tester is inconclusive, run_shell is never invoked, judge scores on the remaining reviewers', async () => {
@@ -1507,9 +1510,9 @@ describe('buildVerificationMissionReviewers', () => {
   });
 });
 
-describe('evaluateMission — verification mission judging, full pipeline (managed mode)', () => {
+describe('evaluateMission — verification mission judging, full pipeline (local mode)', () => {
   beforeEach(() => {
-    mockedGetProviderMode.mockReturnValue('managed');
+    mockedGetProviderMode.mockReturnValue('local');
   });
 
   it('verify-mission-with-passing-output: judges on the tester output, approves, and skips the LLM reviewer/security calls', async () => {
@@ -1915,12 +1918,12 @@ describe('evaluateMission — native CLI, vacuous-approval guard (defense-in-dep
   });
 });
 
-describe('evaluateMission — managed (Pro) mode, vacuous-approval guard (defense-in-depth, M2 shape)', () => {
+describe('evaluateMission — local mode, vacuous-approval guard (defense-in-depth, M2 shape)', () => {
   beforeEach(() => {
-    mockedGetProviderMode.mockReturnValue('managed');
+    mockedGetProviderMode.mockReturnValue('local');
   });
 
-  it('a managed security role approving on "no code = no risk" is downgraded to inconclusive, never approve', async () => {
+  it('a local security role approving on "no code = no risk" is downgraded to inconclusive, never approve', async () => {
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'run_shell') return Promise.resolve({ stdout: '', stderr: 'no tests', exitCode: 1 });
       return Promise.resolve(undefined);
@@ -1997,8 +2000,8 @@ describe("evaluateMission — judge grades against the mission's stated objectiv
       expect(taskById['mission-1-judge']).not.toMatch(/empty\/trivial/i);
     });
 
-    it('managed: falls back to agentTask when contract.objective is absent', async () => {
-      mockedGetProviderMode.mockReturnValue('managed');
+    it('local: falls back to agentTask when contract.objective is absent', async () => {
+      mockedGetProviderMode.mockReturnValue('local');
       mockedInvoke.mockImplementation((cmd: string) => {
         if (cmd === 'run_shell') return Promise.resolve({ stdout: '', stderr: 'no tests', exitCode: 1 });
         return Promise.resolve(undefined);
@@ -2024,7 +2027,7 @@ describe("evaluateMission — judge grades against the mission's stated objectiv
   });
 
   it('a correct non-code deliverable (hello.txt matching the objective exactly) passes with a real high score — the 15/100 repro, fixed', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
+    mockedGetProviderMode.mockReturnValue('local');
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'run_shell') return Promise.resolve({ stdout: '', stderr: 'no tests', exitCode: 1 });
       return Promise.resolve(undefined);
@@ -2072,7 +2075,7 @@ describe("evaluateMission — judge grades against the mission's stated objectiv
   });
 
   it('a deliverable that does NOT meet its stated objective still fails — the fix grades leniently against non-code rubrics, not against the objective itself', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
+    mockedGetProviderMode.mockReturnValue('local');
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'run_shell') return Promise.resolve({ stdout: '', stderr: 'no tests', exitCode: 1 });
       return Promise.resolve(undefined);
@@ -2113,7 +2116,7 @@ describe("evaluateMission — judge grades against the mission's stated objectiv
   });
 
   it('genuinely poor code still fails — the fix is not a leniency backdoor', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
+    mockedGetProviderMode.mockReturnValue('local');
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'run_shell') {
         return Promise.resolve({ stdout: 'Tests  0 passed, 3 failed', stderr: '', exitCode: 1 });
@@ -2164,7 +2167,7 @@ describe('evaluateMission — objective grading also covers deletions, renames, 
     ['docs-only', ['+++ README.md', '+## New section', '+Some docs text.']],
     ['config-only', ['+++ config.json', '+  "flag": true']],
   ])('%s diff: reviewer/security/judge prompts still carry the objective and the non-code grading rule', async (_kind, diffSnippet) => {
-    mockedGetProviderMode.mockReturnValue('managed');
+    mockedGetProviderMode.mockReturnValue('local');
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'run_shell') return Promise.resolve({ stdout: '', stderr: 'no tests', exitCode: 1 });
       return Promise.resolve(undefined);
@@ -2262,8 +2265,8 @@ describe('parseReviewerResult — malformed LLM output', () => {
 // buildSecurityTask/buildJudgeTask now carry an explicit fabrication-check
 // instruction (see NEVER_APPROVE_FABRICATED_FACTS(_JUDGE) in evaluator.ts).
 describe('evaluateMission — fabrication check in the reviewer/security/judge rubric', () => {
-  it('the fabrication-check instruction reaches the reviewer, security, and judge prompts (managed path)', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
+  it('the fabrication-check instruction reaches the reviewer, security, and judge prompts (local path)', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'run_shell') return Promise.resolve({ stdout: '', stderr: 'no tests', exitCode: 1 });
       return Promise.resolve(undefined);
@@ -2292,7 +2295,7 @@ describe('evaluateMission — fabrication check in the reviewer/security/judge r
   });
 
   it('rejects when a reviewer flags an unsourced factual claim invented by the implementer', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
+    mockedGetProviderMode.mockReturnValue('local');
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'run_shell') return Promise.resolve({ stdout: '', stderr: 'no tests', exitCode: 1 });
       return Promise.resolve(undefined);
@@ -2333,7 +2336,7 @@ describe('evaluateMission — fabrication check in the reviewer/security/judge r
   });
 
   it('a diff whose facts ARE derivable from the objective still passes (no false positive)', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
+    mockedGetProviderMode.mockReturnValue('local');
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'run_shell') return Promise.resolve({ stdout: '', stderr: 'no tests', exitCode: 1 });
       return Promise.resolve(undefined);

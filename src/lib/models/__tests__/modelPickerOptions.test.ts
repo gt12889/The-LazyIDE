@@ -3,20 +3,23 @@
  *
  * Unit coverage for the shared entitlement -> model options helper used by
  * LazyManager, the New Mission modal, and the assistant Composer (see
- * modelPickerOptions.ts's header for the bug this replaces: those three
- * pickers used to each derive their option list from getProviderMode() — a
- * single resolved, mutually-exclusive mode — so a user holding BOTH a Claude
- * subscription and an active Lazy Pro plan at once only ever saw one
- * catalog).
+ * modelPickerOptions.ts's header: those three pickers used to each derive
+ * their option list from getProviderMode() — a single resolved,
+ * mutually-exclusive mode — so a user holding BOTH a Claude subscription
+ * and a Devin CLI at once only ever saw one catalog).
+ *
+ * Forge: local-first. Offered groups are the local Ollama model
+ * (unconditional) plus the detected CLI backends' catalogs (Claude
+ * subscription, Devin CLI). There is no hosted catalog, no free tier, no
+ * upsell group.
  *
  * Two layers are tested separately:
  *   - buildModelPickerOptions() — pure, given a synthetic entitlements
- *     snapshot. Covers the 5 required combinations: claude-only, pro-only,
- *     both, neither, no-credit.
+ *     snapshot. Covers the required combinations: claude-only,
+ *     devin-only, both, neither (local only).
  *   - detectModelEntitlements()/getModelPickerOptions() — live detection,
  *     mirroring entitlement.test.ts's mocking style for the same underlying
- *     signals (CLI detection cache, BYOK localStorage, Pro subscription
- *     bridge).
+ *     signals (CLI detection cache, accessMode localStorage).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -25,245 +28,156 @@ import {
   detectModelEntitlements,
   getModelPickerOptions,
   isSelectablePickerModel,
+  isModelRailPending,
+  noModelFallbackMessage,
+  modelManagedByCodexMessage,
+  NO_MODEL_FALLBACK_MESSAGE,
+  MODEL_MANAGED_BY_CODEX_MESSAGE,
+  CLAUDE_SUB_LABEL,
+  DEVIN_LABEL,
+  LOCAL_LABEL,
 } from '../modelPickerOptions';
 import { ALL_MODELS, DEFAULT_MODEL } from '../registry';
-import { OPENROUTER_MODELS, DEFAULT_OPENROUTER_MODEL_ID, FREE_OPENROUTER_MODEL_ID } from '../openrouterCatalog';
-import { getEngineReadiness } from '../entitlement';
-import type { EngineReadiness } from '../entitlement';
+import { DEFAULT_DEVIN_MODEL_ID } from '../devinCatalog';
+import { DEFAULT_LOCAL_MODEL_ID } from '../localProvider';
 import { saveAccessSettings } from '../accessSettings';
 import { isCliBackendAvailable } from '../cliBackendProvider';
-import { hasAnthropicKey } from '../anthropicProvider';
-import { setManagedAvailability, setProPlanActive } from '../index';
-import { resolveByokDef, saveByokKey, resetByokVaultCacheForTests } from '../byokProviders';
-
-vi.mock('../entitlement', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../entitlement')>();
-  return { ...actual, getEngineReadiness: vi.fn() };
-});
 
 vi.mock('../cliBackendProvider', () => ({
   isCliBackendAvailable: vi.fn(),
 }));
 
-vi.mock('../anthropicProvider', () => ({
-  hasAnthropicKey: vi.fn(),
-}));
-
-const mockedReadiness = vi.mocked(getEngineReadiness);
 const mockedIsCliBackendAvailable = vi.mocked(isCliBackendAvailable);
-const mockedHasAnthropicKey = vi.mocked(hasAnthropicKey);
-
-const SENTINEL_READINESS: EngineReadiness = { mode: 'cli', ready: false, reason: 'cli-not-found' };
 
 beforeEach(() => {
   localStorage.clear();
-  resetByokVaultCacheForTests();
-  setManagedAvailability(false);
-  setProPlanActive(false);
-  mockedReadiness.mockReturnValue(SENTINEL_READINESS);
   mockedIsCliBackendAvailable.mockReturnValue(false);
-  mockedHasAnthropicKey.mockReturnValue(false);
 });
 
 // ── buildModelPickerOptions — pure, given entitlements ─────────────
 
 describe('buildModelPickerOptions', () => {
-  // The FREE tier (ox alpha) is unconditionally present since the free-model
-  // wave: every group-id assertion below therefore starts with 'free'.
-  it('offers the free group FIRST even with zero entitlements', () => {
-    const result = buildModelPickerOptions({ claudeSub: false, pro: 'inactive', codexManaged: false });
+  // The local group is unconditional: every group-id assertion below
+  // therefore starts with 'local'.
+  it('offers the local group FIRST even with zero entitlements', () => {
+    const result = buildModelPickerOptions({ claudeSub: false, codexManaged: false, local: true });
 
-    expect(result.groups[0].id).toBe('free');
-    expect(result.groups[0].models.map((m) => m.id)).toEqual(
-      OPENROUTER_MODELS.filter((m) => m.isFree).map((m) => m.id),
-    );
+    expect(result.groups[0].id).toBe('local');
+    expect(result.groups[0].models.map((m) => m.id)).toEqual([DEFAULT_LOCAL_MODEL_ID]);
+    expect(result.groups[0].models[0].provider).toBe('local');
     expect(result.hasOptions).toBe(true);
   });
 
-  it('claude-only: offers the Claude subscription group next to the free one', () => {
-    const result = buildModelPickerOptions({ claudeSub: true, pro: 'inactive', codexManaged: false });
+  it('claude-only: offers the Claude subscription group next to the local one', () => {
+    const result = buildModelPickerOptions({ claudeSub: true, codexManaged: false, local: true });
 
-    expect(result.groups.map((g) => g.id)).toEqual(['free', 'claude-sub']);
+    expect(result.groups.map((g) => g.id)).toEqual(['local', 'claude-sub']);
     expect(result.groups.find((g) => g.id === 'claude-sub')!.models.map((m) => m.id)).toEqual(ALL_MODELS.map((m) => m.id));
     expect(result.hasOptions).toBe(true);
     expect(result.defaultModelId).toBe(DEFAULT_MODEL.id);
-    expect(result.proExhausted).toBe(false);
-    expect(result.emptyReadiness).toBeUndefined();
-    expect(result.codexManaged).toBe(false);
-  });
-
-  it('pro-only: offers the LazyPro/Managed group next to the free one', () => {
-    const result = buildModelPickerOptions({ claudeSub: false, pro: 'active', codexManaged: false });
-
-    expect(result.groups.map((g) => g.id)).toEqual(['free', 'pro']);
-    // The pro group excludes isFree entries — those already live in 'free'
-    // (see modelPickerOptions.ts's managedOptions(): without this filter
-    // ox alpha rendered TWICE whenever Pro was also active).
-    expect(result.groups.find((g) => g.id === 'pro')!.models.map((m) => m.id)).toEqual(
-      OPENROUTER_MODELS.filter((m) => !m.isFree).map((m) => m.id),
-    );
-    expect(result.hasOptions).toBe(true);
-    expect(result.defaultModelId).toBe(DEFAULT_OPENROUTER_MODEL_ID);
-    expect(result.proExhausted).toBe(false);
     expect(result.emptyReadiness).toBeUndefined();
     expect(result.codexManaged).toBe(false);
   });
 
   it('both: offers BOTH groups together (the confirmed bug this fixes)', () => {
-    const result = buildModelPickerOptions({ claudeSub: true, pro: 'active', codexManaged: false });
+    const result = buildModelPickerOptions({ claudeSub: true, codexManaged: false, devin: true, local: true });
 
-    expect(result.groups.map((g) => g.id)).toEqual(['free', 'claude-sub', 'pro']);
+    expect(result.groups.map((g) => g.id)).toEqual(['local', 'claude-sub', 'devin']);
     expect(result.groups.flatMap((g) => g.models.map((m) => m.id))).toEqual([
-      ...OPENROUTER_MODELS.filter((m) => m.isFree).map((m) => m.id),
+      DEFAULT_LOCAL_MODEL_ID,
       ...ALL_MODELS.map((m) => m.id),
-      // The pro group excludes isFree entries — already covered by 'free'.
-      ...OPENROUTER_MODELS.filter((m) => !m.isFree).map((m) => m.id),
+      ...result.groups.find((g) => g.id === 'devin')!.models.map((m) => m.id),
     ]);
     expect(result.hasOptions).toBe(true);
-    // Managed default wins when both are entitled — mirrors getProviderMode()'s
-    // own auto-detect priority (managed takes priority in auto mode).
-    expect(result.defaultModelId).toBe(DEFAULT_OPENROUTER_MODEL_ID);
+    // Native default wins when both are entitled — mirrors the picker's
+    // own precedence (Claude subscription first).
+    expect(result.defaultModelId).toBe(DEFAULT_MODEL.id);
   });
 
-  it('devin detected: the Devin group sits between claude-sub and pro, sourced from the devin catalog', () => {
-    const result = buildModelPickerOptions({ claudeSub: true, pro: 'active', codexManaged: false, devin: true });
+  it('devin detected: the Devin group sits after claude-sub, sourced from the devin catalog', () => {
+    const result = buildModelPickerOptions({ claudeSub: true, codexManaged: false, devin: true, local: true });
 
-    expect(result.groups.map((g) => g.id)).toEqual(['free', 'claude-sub', 'devin', 'pro']);
+    expect(result.groups.map((g) => g.id)).toEqual(['local', 'claude-sub', 'devin']);
     const devinGroup = result.groups.find((g) => g.id === 'devin')!;
     expect(devinGroup.models.some((m) => m.id === 'swe-2-medium')).toBe(true);
     expect(devinGroup.models.every((m) => m.provider === 'devin')).toBe(true);
     expect(result.hasOptions).toBe(true);
   });
 
-  it('devin-only (no claude/byok/pro): the Devin group is offered and swe-2-medium is the default', () => {
-    const result = buildModelPickerOptions({ claudeSub: false, pro: 'inactive', codexManaged: false, devin: true });
+  it('devin-only (no claude): the Devin group is offered and swe-2-medium is the default', () => {
+    const result = buildModelPickerOptions({ claudeSub: false, codexManaged: false, devin: true, local: true });
 
-    expect(result.groups.map((g) => g.id)).toEqual(['free', 'devin']);
-    expect(result.defaultModelId).toBe('swe-2-medium');
+    expect(result.groups.map((g) => g.id)).toEqual(['local', 'devin']);
+    expect(result.defaultModelId).toBe(DEFAULT_DEVIN_MODEL_ID);
   });
 
-  it('neither: only the free group remains — still usable via ox alpha', () => {
-    const result = buildModelPickerOptions({ claudeSub: false, pro: 'inactive', codexManaged: false });
+  it('neither: only the local group remains — still usable via Ollama', () => {
+    const result = buildModelPickerOptions({ claudeSub: false, codexManaged: false, local: true });
 
-    expect(result.groups.map((g) => g.id)).toEqual(['free']);
+    expect(result.groups.map((g) => g.id)).toEqual(['local']);
     expect(result.hasOptions).toBe(true);
-    expect(result.proExhausted).toBe(false);
     expect(result.emptyReadiness).toBeUndefined();
     // CRITICAL fix: must be a member of the only group actually offered
-    // ('free'), never the native DEFAULT_MODEL.id — that id belongs to a
+    // ('local'), never the native DEFAULT_MODEL.id — that id belongs to a
     // group this user has no entitlement to see, so a caller seeding a form
     // with it (e.g. NewMissionModal) would silently mismatch the rendered
-    // <select> and fail the launch preflight even though ox alpha works.
-    expect(result.defaultModelId).toBe(OPENROUTER_MODELS.find((m) => m.isFree)!.id);
+    // <select> and fail the launch preflight even though Ollama works.
+    expect(result.defaultModelId).toBe(DEFAULT_LOCAL_MODEL_ID);
     expect(result.groups.flatMap((g) => g.models.map((m) => m.id))).toContain(result.defaultModelId);
     expect(result.codexManaged).toBe(false);
   });
 
-  it('codex-managed: the free group still gives hasOptions — codexManaged stays false (the free tier means an empty picker can no longer happen)', () => {
-    const result = buildModelPickerOptions({ claudeSub: false, pro: 'inactive', codexManaged: true });
+  it('codex-managed: the local group still gives hasOptions — codexManaged stays false (an empty picker cannot happen)', () => {
+    const result = buildModelPickerOptions({ claudeSub: false, codexManaged: true, local: true });
 
     expect(result.hasOptions).toBe(true);
-    // codexManaged is gated on !hasOptions; with the free tier always present
-    // the honest-Codex empty state is unreachable by construction.
+    // codexManaged is gated on !hasOptions; with the local group always
+    // present the honest-Codex empty state is unreachable by construction.
     expect(result.codexManaged).toBe(false);
   });
 
   it('codexManaged is only ever true when hasOptions is false (claudeSub still wins the group even if codexManaged were somehow also true)', () => {
-    const result = buildModelPickerOptions({ claudeSub: true, pro: 'inactive', codexManaged: true });
+    const result = buildModelPickerOptions({ claudeSub: true, codexManaged: true, local: true });
 
     expect(result.hasOptions).toBe(true);
     expect(result.codexManaged).toBe(false);
   });
 
-  it('no-credit (Pro only, exhausted): free group remains, Pro-exhausted surfaced distinctly', () => {
-    const result = buildModelPickerOptions({ claudeSub: false, pro: 'no-credits', codexManaged: false });
+  it('default labels are the English constants', () => {
+    const result = buildModelPickerOptions({ claudeSub: true, codexManaged: false, devin: true, local: true });
 
-    expect(result.groups.map((g) => g.id)).toEqual(['free']);
-    expect(result.hasOptions).toBe(true);
-    expect(result.proExhausted).toBe(true);
-    expect(result.emptyReadiness).toBeUndefined();
-    // Same rule as the 'neither' case: 'free' is the only group offered
-    // here (Pro is exhausted, not active — no 'pro' group), so the default
-    // must come from it, not the native (unoffered) DEFAULT_MODEL.id.
-    expect(result.defaultModelId).toBe(OPENROUTER_MODELS.find((m) => m.isFree)!.id);
+    expect(result.groups.find((g) => g.id === 'local')!.label).toBe(LOCAL_LABEL);
+    expect(result.groups.find((g) => g.id === 'claude-sub')!.label).toBe(CLAUDE_SUB_LABEL);
+    expect(result.groups.find((g) => g.id === 'devin')!.label).toBe(DEVIN_LABEL);
   });
 
-  it('no-credit + Claude subscription: Claude group stays usable, Pro-exhausted is a secondary notice (not a hard empty state)', () => {
-    const result = buildModelPickerOptions({ claudeSub: true, pro: 'no-credits', codexManaged: false });
+  it('a translator overrides the group labels', () => {
+    const t = (key: string): string => `t:${key}`;
+    const result = buildModelPickerOptions({ claudeSub: true, codexManaged: false, devin: true, local: true }, t);
 
-    expect(result.groups.map((g) => g.id)).toEqual(['free', 'claude-sub']);
-    expect(result.hasOptions).toBe(true);
-    expect(result.proExhausted).toBe(true);
-    expect(result.emptyReadiness).toBeUndefined();
-    expect(result.defaultModelId).toBe(DEFAULT_MODEL.id);
+    expect(result.groups.find((g) => g.id === 'local')!.label).toBe('t:models.picker.localLabel');
+    expect(result.groups.find((g) => g.id === 'claude-sub')!.label).toBe('t:models.picker.claudeSubLabel');
+    expect(result.groups.find((g) => g.id === 'devin')!.label).toBe('t:models.picker.devinLabel');
+  });
+});
+
+// ── fallback / codex messages ───────────────────────────────────────
+
+describe('picker empty-state messages', () => {
+  it('noModelFallbackMessage defaults to the English constant', () => {
+    expect(noModelFallbackMessage()).toBe(NO_MODEL_FALLBACK_MESSAGE);
+    expect(noModelFallbackMessage()).toMatch(/No model available/);
   });
 
-  // ── W-MODELSEL: lockedProGroup (upsell rendering) ────────────────
-
-  it('pro inactive (no plan at all): lockedProGroup carries the FULL (non-free) Pro catalog for the disabled upsell group', () => {
-    const result = buildModelPickerOptions({ claudeSub: true, pro: 'inactive', codexManaged: false });
-
-    expect(result.lockedProGroup).toBeDefined();
-    // isFree entries are excluded — they're already usable, unlocked, in the
-    // 'free' group; the upsell is only for the PAID catalog.
-    expect(result.lockedProGroup!.models.map((m) => m.id)).toEqual(
-      OPENROUTER_MODELS.filter((m) => !m.isFree).map((m) => m.id),
-    );
+  it('modelManagedByCodexMessage defaults to the English constant', () => {
+    expect(modelManagedByCodexMessage()).toBe(MODEL_MANAGED_BY_CODEX_MESSAGE);
+    expect(modelManagedByCodexMessage()).toMatch(/Codex manages its own models/);
   });
 
-  it('pro no-credits (plan active, wallet empty): lockedProGroup carries the FULL (non-free) Pro catalog — the user owns Pro, the models must stay VISIBLE (grayed out) so they can see what they are missing', () => {
-    const result = buildModelPickerOptions({ claudeSub: true, pro: 'no-credits', codexManaged: false });
-
-    expect(result.lockedProGroup).toBeDefined();
-    // isFree entries are excluded — they're already usable, unlocked, in the
-    // 'free' group; the locked group is only for the PAID catalog.
-    expect(result.lockedProGroup!.models.map((m) => m.id)).toEqual(
-      OPENROUTER_MODELS.filter((m) => !m.isFree).map((m) => m.id),
-    );
-    // proExhausted still distinguishes the messaging (recharge vs upgrade).
-    expect(result.proExhausted).toBe(true);
-  });
-
-  it('pro active: lockedProGroup is NOT set — the real group already covers it', () => {
-    const result = buildModelPickerOptions({ claudeSub: false, pro: 'active', codexManaged: false });
-
-    expect(result.lockedProGroup).toBeUndefined();
-  });
-
-  // ── BYOK wave: the keyed provider's catalog as a pickable group ──
-
-  it('byok-only: offers the BYOK group with the provider catalog', () => {
-    const result = buildModelPickerOptions({
-      claudeSub: false,
-      pro: 'inactive',
-      codexManaged: false,
-      byok: resolveByokDef('deepseek')!,
-    });
-
-    expect(result.groups.map((g) => g.id)).toEqual(['free', 'byok']);
-    expect(result.groups.find((g) => g.id === 'byok')!.models.map((m) => m.id)).toContain('deepseek-chat');
-    expect(result.hasOptions).toBe(true);
-    expect(result.defaultModelId).toBe('deepseek-chat');
-    expect(result.byok?.id).toBe('deepseek');
-  });
-
-  it('claude-sub + byok + pro active: all three groups coexist in order', () => {
-    const result = buildModelPickerOptions({
-      claudeSub: true,
-      pro: 'active',
-      codexManaged: false,
-      byok: resolveByokDef('deepseek')!,
-    });
-
-    expect(result.groups.map((g) => g.id)).toEqual(['free', 'claude-sub', 'byok', 'pro']);
-    // Managed default still wins when Pro is actively usable.
-    expect(result.defaultModelId).toBe(DEFAULT_OPENROUTER_MODEL_ID);
-  });
-
-  it('byok is null when no provider is keyed', () => {
-    const result = buildModelPickerOptions({ claudeSub: false, pro: 'inactive', codexManaged: false });
-    expect(result.byok).toBeNull();
-    expect(result.groups.map((g) => g.id)).toEqual(['free']);
+  it('both messages use the translator when one is supplied', () => {
+    const t = (key: string): string => `t:${key}`;
+    expect(noModelFallbackMessage(t)).toBe('t:models.picker.noModelFallback');
+    expect(modelManagedByCodexMessage(t)).toBe('t:models.picker.codexManaged');
   });
 });
 
@@ -278,30 +192,18 @@ describe('detectModelEntitlements', () => {
     (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {};
   }
 
-  it('outside Tauri: does not invent a Claude CLI entitlement (browser cannot run it)', () => {
-    expect(detectModelEntitlements()).toEqual({ claudeSub: false, pro: 'inactive', codexManaged: false, byok: null, devin: false });
+  it('outside Tauri: only the local group is genuinely usable (browser cannot run CLIs)', () => {
+    expect(detectModelEntitlements()).toEqual({ claudeSub: false, codexManaged: false, devin: false, local: true });
   });
 
-  it('outside Tauri + managed credits: Pro is offerable, Claude CLI is not', () => {
-    setManagedAvailability(true);
-    expect(detectModelEntitlements()).toEqual({ claudeSub: false, pro: 'active', codexManaged: false, byok: null, devin: false });
-  });
-
-  it('Tauri + nothing detected or declared: neither entitlement', () => {
+  it('Tauri + nothing detected or declared: local only', () => {
     simulateTauri();
-    expect(detectModelEntitlements()).toEqual({ claudeSub: false, pro: 'inactive', codexManaged: false, byok: null, devin: false });
+    expect(detectModelEntitlements()).toEqual({ claudeSub: false, codexManaged: false, devin: false, local: true });
   });
 
   it('Tauri + claude CLI detected available: claudeSub true', () => {
     simulateTauri();
     mockedIsCliBackendAvailable.mockImplementation((tool: string) => tool === 'claude');
-
-    expect(detectModelEntitlements().claudeSub).toBe(true);
-  });
-
-  it('Tauri + Anthropic BYOK key present: claudeSub true', () => {
-    simulateTauri();
-    mockedHasAnthropicKey.mockReturnValue(true);
 
     expect(detectModelEntitlements().claudeSub).toBe(true);
   });
@@ -313,42 +215,11 @@ describe('detectModelEntitlements', () => {
     expect(detectModelEntitlements().claudeSub).toBe(true);
   });
 
-  it('Tauri + accessMode "byok" declared without a key: no Claude group (honest empty state)', () => {
+  it('Tauri + accessMode "local" declared: no Claude group (honest local state)', () => {
     simulateTauri();
-    saveAccessSettings({ accessMode: 'byok' });
+    saveAccessSettings({ accessMode: 'local' });
 
     expect(detectModelEntitlements().claudeSub).toBe(false);
-  });
-
-  // ── BYOK wave: the keyed provider appears as a selectable group ──
-
-  it('Tauri + DeepSeek key set (selected): byok entitlement is deepseek', () => {
-    simulateTauri();
-    // Under Tauri, saveByokKey is the source of truth (OS credential vault,
-    // mirrored into byokProviders.ts's synchronous in-memory cache) — not
-    // localStorage directly, see byokProviders.ts's header comment.
-    saveByokKey('deepseek', 'sk-test');
-    saveAccessSettings({ accessMode: 'byok', byokProvider: 'deepseek' });
-
-    const e = detectModelEntitlements();
-    expect(e.byok?.id).toBe('deepseek');
-    // The Claude group disappears: with DeepSeek as the BYOK engine, native
-    // Claude models would be listed but never served. The free group stays.
-    expect(buildModelPickerOptions(e).groups.map((g) => g.id)).toEqual(['free', 'byok']);
-  });
-
-  it('Tauri + key set but no selection: first keyed non-Anthropic provider wins', () => {
-    simulateTauri();
-    saveByokKey('mistral', 'sk-test');
-
-    expect(detectModelEntitlements().byok?.id).toBe('mistral');
-  });
-
-  it('Tauri + Anthropic key only: no byok group (native models already live in claude-sub)', () => {
-    simulateTauri();
-    mockedHasAnthropicKey.mockReturnValue(true);
-
-    expect(detectModelEntitlements().byok).toBeNull();
   });
 
   it('Tauri + accessMode "cli" with cliTool "codex": claudeSub stays false — Codex is not a Claude subscription', () => {
@@ -365,35 +236,26 @@ describe('detectModelEntitlements', () => {
     expect(detectModelEntitlements().codexManaged).toBe(true);
   });
 
-  it('Tauri + Pro credits active: pro "active"', () => {
+  it('Tauri + devin CLI detected: devin true', () => {
     simulateTauri();
-    setManagedAvailability(true);
+    mockedIsCliBackendAvailable.mockImplementation((tool: string) => tool === 'devin');
 
-    expect(detectModelEntitlements().pro).toBe('active');
+    const e = detectModelEntitlements();
+    expect(e.devin).toBe(true);
+    expect(e.claudeSub).toBe(false);
+    expect(buildModelPickerOptions(e).groups.map((g) => g.id)).toEqual(['local', 'devin']);
   });
 
-  it('Tauri + Pro plan active but no credits: pro "no-credits"', () => {
+  it('Tauri + BOTH a Claude subscription and Devin: both entitlements report true at once', () => {
     simulateTauri();
-    setManagedAvailability(false);
-    setProPlanActive(true);
+    mockedIsCliBackendAvailable.mockImplementation((tool: string) => tool === 'claude' || tool === 'devin');
 
-    expect(detectModelEntitlements().pro).toBe('no-credits');
+    expect(detectModelEntitlements()).toEqual({ claudeSub: true, codexManaged: false, devin: true, local: true });
   });
 
-  it('Tauri + no Pro plan at all: pro "inactive"', () => {
+  it('local is always true, even outside Tauri', () => {
     simulateTauri();
-    setManagedAvailability(false);
-    setProPlanActive(false);
-
-    expect(detectModelEntitlements().pro).toBe('inactive');
-  });
-
-  it('Tauri + BOTH a Claude subscription and Pro credits: both entitlements report true/active at once', () => {
-    simulateTauri();
-    mockedIsCliBackendAvailable.mockImplementation((tool: string) => tool === 'claude');
-    setManagedAvailability(true);
-
-    expect(detectModelEntitlements()).toEqual({ claudeSub: true, pro: 'active', codexManaged: false, byok: null, devin: false });
+    expect(detectModelEntitlements().local).toBe(true);
   });
 });
 
@@ -404,18 +266,18 @@ describe('getModelPickerOptions', () => {
 
   it('wires live entitlement detection into buildModelPickerOptions', () => {
     (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {};
-    setManagedAvailability(true);
+    mockedIsCliBackendAvailable.mockImplementation((tool: string) => tool === 'claude');
 
     const result = getModelPickerOptions();
 
-    expect(result.pro).toBe('active');
-    expect(result.groups.some((g) => g.id === 'pro')).toBe(true);
+    expect(result.claudeSub).toBe(true);
+    expect(result.groups.some((g) => g.id === 'claude-sub')).toBe(true);
   });
 
-  it('outside Tauri: only the free group is selectable (no native Claude ids)', () => {
+  it('outside Tauri: only the local group is selectable (no native Claude ids)', () => {
     const result = getModelPickerOptions();
-    expect(result.groups.map((g) => g.id)).toEqual(['free']);
-    expect(result.defaultModelId).toBe(FREE_OPENROUTER_MODEL_ID);
+    expect(result.groups.map((g) => g.id)).toEqual(['local']);
+    expect(result.defaultModelId).toBe(DEFAULT_LOCAL_MODEL_ID);
     expect(result.groups.flatMap((g) => g.models.map((m) => m.id))).not.toContain('claude-sonnet-5');
   });
 });
@@ -425,16 +287,55 @@ describe('isSelectablePickerModel', () => {
     delete (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'];
   });
 
-  it('outside Tauri: native Sonnet and paid GLM 5.2 are not selectable; the free rail is', () => {
+  it('outside Tauri: native Sonnet and Devin ids are not selectable; the local rail is', () => {
     expect(isSelectablePickerModel('claude-sonnet-5')).toBe(false);
-    expect(isSelectablePickerModel('z-ai/glm-5.2')).toBe(false);
-    expect(isSelectablePickerModel(FREE_OPENROUTER_MODEL_ID)).toBe(true);
-    expect(isSelectablePickerModel('stealth/ox-alpha')).toBe(false);
+    expect(isSelectablePickerModel('swe-2-medium')).toBe(false);
+    expect(isSelectablePickerModel(DEFAULT_LOCAL_MODEL_ID)).toBe(true);
+    expect(isSelectablePickerModel('local/does-not-exist')).toBe(false);
   });
 
   it('Tauri + Claude CLI: native Sonnet is selectable', () => {
     (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {};
     mockedIsCliBackendAvailable.mockImplementation((tool: string) => tool === 'claude');
     expect(isSelectablePickerModel('claude-sonnet-5')).toBe(true);
+  });
+
+  it('Tauri + Devin CLI: swe-2-medium is selectable', () => {
+    (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {};
+    mockedIsCliBackendAvailable.mockImplementation((tool: string) => tool === 'devin');
+    expect(isSelectablePickerModel('swe-2-medium')).toBe(true);
+  });
+});
+
+describe('isModelRailPending', () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'];
+  });
+
+  it('returns false for an empty id', () => {
+    expect(isModelRailPending('')).toBe(false);
+  });
+
+  it('outside Tauri: never pending (the CLI probes never run there)', () => {
+    mockedIsCliBackendAvailable.mockReturnValue(null);
+    expect(isModelRailPending('claude-sonnet-5')).toBe(false);
+    expect(isModelRailPending('swe-2-medium')).toBe(false);
+    expect(isModelRailPending(DEFAULT_LOCAL_MODEL_ID)).toBe(false);
+  });
+
+  it('Tauri + probes unsettled (null): native and Devin ids are pending, local ids never are', () => {
+    (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {};
+    mockedIsCliBackendAvailable.mockReturnValue(null);
+    expect(isModelRailPending('claude-sonnet-5')).toBe(true);
+    expect(isModelRailPending('swe-2-medium')).toBe(true);
+    expect(isModelRailPending(DEFAULT_LOCAL_MODEL_ID)).toBe(false);
+    expect(isModelRailPending('local/custom')).toBe(false);
+  });
+
+  it('Tauri + probes settled: nothing is pending', () => {
+    (window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {};
+    mockedIsCliBackendAvailable.mockImplementation((tool: string) => tool === 'claude');
+    expect(isModelRailPending('claude-sonnet-5')).toBe(false);
+    expect(isModelRailPending('swe-2-medium')).toBe(false);
   });
 });

@@ -1,79 +1,40 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
-vi.mock('../lib/supabase/client', () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn(),
-    },
-  },
-}));
-
-vi.mock('../lib/models/byokProviders', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/models/byokProviders')>();
-  return {
-    ...actual,
-    hasByokKey: vi.fn(),
-  };
-});
-
-import { supabase } from '../lib/supabase/client';
-import { hasByokKey } from '../lib/models/byokProviders';
 import { classifyAgentRail, gateAgentSession } from '../lib/agents/agentSessionGate';
-import { FREE_OPENROUTER_MODEL_ID } from '../lib/models/openrouterCatalog';
-
-const getSession = vi.mocked(supabase.auth.getSession);
 
 describe('classifyAgentRail', () => {
-  it('routes a free OpenRouter id to the free rail', () => {
-    expect(classifyAgentRail(FREE_OPENROUTER_MODEL_ID, 'mock')).toBe('free');
+  it('routes a local/ id to the local rail', () => {
+    expect(classifyAgentRail('local/hermes3', 'mock')).toBe('local');
   });
 
-  it('routes a paid OpenRouter id to Pro', () => {
-    expect(classifyAgentRail('anthropic/claude-sonnet-5', 'managed')).toBe('pro');
+  it('routes local mode to the local rail', () => {
+    expect(classifyAgentRail(undefined, 'local')).toBe('local');
   });
 
   it('routes a native Claude id to CLI', () => {
     expect(classifyAgentRail('claude-sonnet-5', 'claude-code')).toBe('cli');
   });
+
+  it('routes codex / devin modes to CLI', () => {
+    expect(classifyAgentRail(undefined, 'codex')).toBe('cli');
+    expect(classifyAgentRail(undefined, 'devin')).toBe('cli');
+  });
+
+  it('defaults an unclassified pick to CLI', () => {
+    expect(classifyAgentRail(undefined, 'mock')).toBe('cli');
+    expect(classifyAgentRail('claude-sonnet-5', 'mock')).toBe('cli');
+  });
 });
 
 describe('gateAgentSession', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    getSession.mockResolvedValue({ data: { session: null } } as never);
+  it('allows the local rail without any session (no accounts)', async () => {
+    const result = await gateAgentSession({ model: 'local/hermes3', mode: 'mock' });
+    expect(result).toEqual({ ok: true, rail: 'local' });
   });
 
-  it('blocks the free rail without a JWT', async () => {
-    const result = await gateAgentSession({ model: FREE_OPENROUTER_MODEL_ID, mode: 'mock' });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.rail).toBe('free');
-      expect(result.reasonKey).toBe('agents.sessionGate.needSession');
-    }
-  });
-
-  it('allows the free rail when a session exists', async () => {
-    getSession.mockResolvedValue({ data: { session: { access_token: 'jwt' } } } as never);
-    const result = await gateAgentSession({ model: FREE_OPENROUTER_MODEL_ID, mode: 'mock' });
-    expect(result).toEqual({ ok: true, rail: 'free' });
-  });
-
-  it('blocks Pro when the plan is not ready even with a session', async () => {
-    getSession.mockResolvedValue({ data: { session: { access_token: 'jwt' } } } as never);
-    const result = await gateAgentSession({
-      model: 'anthropic/claude-sonnet-5',
-      mode: 'managed',
-      proReady: false,
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.rail).toBe('pro');
-  });
-
-  it('blocks BYOK when the provider key is missing', async () => {
-    vi.mocked(hasByokKey).mockReturnValue(false);
-    const result = await gateAgentSession({ model: 'deepseek-chat', mode: 'live-key' });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reasonKey).toBe('agents.sessionGate.needByok');
+  it('allows local mode without a cliReady signal', async () => {
+    const result = await gateAgentSession({ mode: 'local' });
+    expect(result).toEqual({ ok: true, rail: 'local' });
   });
 
   it('allows CLI without a JWT when the binary is ready', async () => {
@@ -83,7 +44,14 @@ describe('gateAgentSession', () => {
       cliReady: true,
     });
     expect(result).toEqual({ ok: true, rail: 'cli' });
-    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  it('allows CLI when readiness is unknown (optimistic)', async () => {
+    const result = await gateAgentSession({
+      model: 'claude-sonnet-5',
+      mode: 'claude-code',
+    });
+    expect(result).toEqual({ ok: true, rail: 'cli' });
   });
 
   it('blocks CLI when the binary is missing', async () => {
@@ -93,6 +61,9 @@ describe('gateAgentSession', () => {
       cliReady: false,
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reasonKey).toBe('agents.sessionGate.needCli');
+    if (!result.ok) {
+      expect(result.rail).toBe('cli');
+      expect(result.reasonKey).toBe('agents.sessionGate.needCli');
+    }
   });
 });

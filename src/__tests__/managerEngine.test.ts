@@ -25,11 +25,13 @@ vi.mock('../lib/models/claudeCodeProvider', async (importOriginal) => {
   };
 });
 
-vi.mock('../lib/models/managedProvider', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/models/managedProvider')>();
+// ── Mock the local-engine turn streamer (local rail coverage) ──
+const { mockLocalTurn } = vi.hoisted(() => ({ mockLocalTurn: vi.fn() }));
+vi.mock('../lib/models/localProvider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/models/localProvider')>();
   return {
     ...actual,
-    streamManagedAgentTurn: vi.fn(),
+    createLocalAgentTurnStreamer: () => mockLocalTurn,
   };
 });
 
@@ -41,31 +43,8 @@ vi.mock('../lib/models/cliBackendProvider', async (importOriginal) => {
   };
 });
 
-// ── Mock the BYOK live-key raw streamers (FIX 1 rail coverage) — everything
-// else in byokProviders.ts (resolveByokDef, saveByokKey, BYOK_PROVIDER_DEFS,
-// etc.) stays real so the existing BYOK-catalog tests below are unaffected. ──
-vi.mock('../lib/models/byokProviders', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/models/byokProviders')>();
-  return {
-    ...actual,
-    streamOpenAICompatRaw: vi.fn(),
-    streamAnthropicCompatRaw: vi.fn(),
-  };
-});
-
-// ── Mock runtime.ts's mode-independent engine-readiness signals (BUG-2) —
-// isManagedModelReady/isNativeModelReady default to their REAL implementation
-// (both resolve false outside a Tauri runtime, matching every pre-existing
-// resolveManagerModelId test's expectations unchanged); the new "BUG-2
-// fallback" describe block below overrides them per-test. ──
-vi.mock('../lib/agents/runtime', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/agents/runtime')>();
-  return {
-    ...actual,
-    isManagedModelReady: vi.fn(actual.isManagedModelReady),
-    isNativeModelReady: vi.fn(actual.isNativeModelReady),
-  };
-});
+// ── No hosted rails remain (managed ai-proxy, BYOK, OpenRouter catalog,
+// Supabase): only the local Ollama engine + CLI tools. ──
 
 // ── Mock platform (brain recall) — runManagerTurn's recall is best-effort
 // and swallowed on error, but stub it so tests are fast and deterministic. ──
@@ -96,8 +75,6 @@ import {
   MODEL_CATALOG_MAX_CHARS,
   UnknownManagerModelIdError,
   resolveBareRailModelId,
-  findOpenRouterAliasHint,
-  findByokHomeHint,
   findAlternateRailMatches,
   runManagerTurn,
   detectUserActionRequest,
@@ -118,28 +95,21 @@ import type { ManagerContext, ManagerTurnOptions } from '../lib/agents/managerEn
 import type { Mission, ManagerMessage } from '../lib/agents/types';
 import type { StoredAgent } from '../lib/agents/agentsStorage';
 import { DEFAULT_MODEL } from '../lib/models/registry';
-import { DEFAULT_OPENROUTER_MODEL_ID, OPENROUTER_MODELS } from '../lib/models/openrouterCatalog';
+import { DEFAULT_LOCAL_MODEL_ID } from '../lib/models/localProvider';
 import { getProviderMode } from '../lib/models/index';
 import { streamClaudeCodeTurn } from '../lib/models/claudeCodeProvider';
-import { streamManagedAgentTurn } from '../lib/models/managedProvider';
 import { cliBackendProvider } from '../lib/models/cliBackendProvider';
 import type { StreamChatRequest } from '../lib/models/types';
 import { RECALL_TEACHING } from '../lib/models/systemPrompts';
 import { formatCredits } from '../lib/billing/credits';
-import { isManagedModelReady, isNativeModelReady } from '../lib/agents/runtime';
-import { streamOpenAICompatRaw, streamAnthropicCompatRaw, saveByokKey } from '../lib/models/byokProviders';
 
 const mockedGetProviderMode = getProviderMode as ReturnType<typeof vi.fn>;
 const mockedStreamClaudeCodeTurn = streamClaudeCodeTurn as ReturnType<typeof vi.fn>;
-const mockedStreamManagedAgentTurn = streamManagedAgentTurn as ReturnType<typeof vi.fn>;
+const mockedLocalTurn = mockLocalTurn as unknown as ReturnType<typeof vi.fn>;
 const mockedCliBackendProvider = cliBackendProvider as ReturnType<typeof vi.fn>;
-const mockedIsManagedModelReady = isManagedModelReady as ReturnType<typeof vi.fn>;
-const mockedIsNativeModelReady = isNativeModelReady as ReturnType<typeof vi.fn>;
-const mockedStreamOpenAICompatRaw = streamOpenAICompatRaw as ReturnType<typeof vi.fn>;
-const mockedStreamAnthropicCompatRaw = streamAnthropicCompatRaw as ReturnType<typeof vi.fn>;
 
 /** Yield each given chunk from an async generator — the shape every
- *  streaming backend (streamClaudeCodeTurn / streamManagedAgentTurn /
+ *  streaming backend (streamClaudeCodeTurn / the local turn streamer /
  *  cliBackendProvider(...).streamChat) returns. */
 async function* fakeStream(...chunks: string[]): AsyncIterable<string> {
   for (const chunk of chunks) yield chunk;
@@ -1116,15 +1086,16 @@ describe('buildCompactModelCatalog', () => {
 
   it('lists every catalog id verbatim (never abbreviated)', () => {
     const catalog = buildCompactModelCatalog();
-    for (const m of OPENROUTER_MODELS) {
-      expect(catalog).toContain(m.id);
-    }
+    expect(catalog).toContain(DEFAULT_LOCAL_MODEL_ID);
+    expect(catalog).toContain(DEFAULT_MODEL.id);
+    expect(catalog).toContain('swe-2-medium');
   });
 
-  it('groups by tier, not by provider', () => {
+  it('groups by rail (local engine, native CLI ids, Devin ids)', () => {
     const catalog = buildCompactModelCatalog();
-    expect(catalog).toMatch(/^fast:/m);
-    expect(catalog).toMatch(/^balanced:/m);
+    expect(catalog).toMatch(/^local:/m);
+    expect(catalog).toMatch(/^cli:/m);
+    expect(catalog).toMatch(/^devin:/m);
   });
 });
 
@@ -1462,33 +1433,18 @@ describe('createMessageId', () => {
 // M15 from dying at the execution layer with "Modèle non supporté".
 
 describe('resolveManagerModelId', () => {
-  const anthropicOpenRouterIds = OPENROUTER_MODELS.filter((m) => m.provider === 'Anthropic').map((m) => m.id);
-
-  it('falls back to the mode default when no tier is given (managed mode -> OpenRouter id)', () => {
-    expect(resolveManagerModelId(undefined, 'managed')).toBe(DEFAULT_OPENROUTER_MODEL_ID);
+  it('falls back to the mode default when no tier is given (local mode -> local id)', () => {
+    expect(resolveManagerModelId(undefined, 'local')).toBe(DEFAULT_LOCAL_MODEL_ID);
   });
 
   it('falls back to the mode default when no tier is given (claude-code mode -> native id)', () => {
     expect(resolveManagerModelId(undefined, 'claude-code')).toBe(DEFAULT_MODEL.id);
   });
 
-  it('resolves "haiku" to a valid OpenRouter id in managed mode', () => {
-    const id = resolveManagerModelId('haiku', 'managed');
-    expect(id).toContain('/');
-    expect(anthropicOpenRouterIds).toContain(id);
-    expect(id.toLowerCase()).toContain('haiku');
-  });
-
-  it('resolves "sonnet" to a valid OpenRouter id in pro mode', () => {
-    const id = resolveManagerModelId('sonnet', 'pro');
-    expect(anthropicOpenRouterIds).toContain(id);
-    expect(id.toLowerCase()).toContain('sonnet');
-  });
-
-  it('resolves "opus" to a valid OpenRouter id in managed mode', () => {
-    const id = resolveManagerModelId('opus', 'managed');
-    expect(anthropicOpenRouterIds).toContain(id);
-    expect(id.toLowerCase()).toContain('opus');
+  it('degrades a tier hint to the local default on the local rail (no tier words there)', () => {
+    for (const tier of ['haiku', 'sonnet', 'opus']) {
+      expect(resolveManagerModelId(tier, 'local')).toBe(DEFAULT_LOCAL_MODEL_ID);
+    }
   });
 
   it('resolves "haiku" to the native Anthropic id in claude-code mode', () => {
@@ -1507,15 +1463,15 @@ describe('resolveManagerModelId', () => {
     expect(resolveManagerModelId('haiku', 'codex')).toBe(resolveManagerModelId('haiku', 'claude-code'));
   });
 
-  it('never returns a native id for a managed-mode tier (would 400 "Modèle non supporté" at the ai-proxy)', () => {
+  it('never returns a native id for a local-mode tier (the local rail only serves local/ ids)', () => {
     for (const tier of ['haiku', 'sonnet', 'opus']) {
-      expect(resolveManagerModelId(tier, 'managed')).toContain('/');
+      expect(resolveManagerModelId(tier, 'local')).toContain('local/');
     }
   });
 
-  it('never returns an OpenRouter id for a claude-code-mode tier', () => {
+  it('never returns a local/ id for a claude-code-mode tier', () => {
     for (const tier of ['haiku', 'sonnet', 'opus']) {
-      expect(resolveManagerModelId(tier, 'claude-code')).not.toContain('/');
+      expect(resolveManagerModelId(tier, 'claude-code')).not.toContain('local/');
     }
   });
 
@@ -1524,101 +1480,39 @@ describe('resolveManagerModelId', () => {
   });
 
   it('falls back to the mode default for an unrecognised tier string', () => {
-    expect(resolveManagerModelId('turbo', 'managed')).toBe(DEFAULT_OPENROUTER_MODEL_ID);
+    expect(resolveManagerModelId('turbo', 'local')).toBe(DEFAULT_LOCAL_MODEL_ID);
   });
 });
 
-// ── resolveManagerModelId — BUG-2 fleet routing fallback ─────────────
-// Fleet workers must not blindly land on the metered managed pool when the
-// managed wallet is known-empty AND a native CLI subscription is detected —
-// see managerEngine.ts's isManagedModelReady/isNativeModelReady import from
-// runtime.ts (the same mode-independent readiness signals runtime.ts's own
-// per-mission dispatch already uses).
+// ── resolveManagerModelId — engineOverride ──
+// A user can hold a CLI subscription AND use the local engine at once —
+// the manager targets EITHER family per mission via the action's own
+// "engine" field ("cli" | "local"), never silently re-resolving.
+// (The old BUG-2 managed-readiness rescue is gone with the hosted rails:
+// resolveManagerModelId consults no readiness signals at all.)
 
-describe('resolveManagerModelId — BUG-2 fallback to native when managed is unready', () => {
+describe('resolveManagerModelId — engineOverride', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('resolves a tier hint to the NATIVE id family when mode is managed but Pro is not usable and a CLI subscription is detected', () => {
-    mockedIsManagedModelReady.mockReturnValueOnce(false);
-    mockedIsNativeModelReady.mockReturnValueOnce(true);
-
-    const id = resolveManagerModelId('sonnet', 'managed');
-
+  it('engine "cli" resolves to the native id family even while mode is local', () => {
+    const id = resolveManagerModelId('sonnet', 'local', 'cli');
     expect(id).toBe('claude-sonnet-5');
-    expect(id).not.toContain('/');
+    expect(id).not.toContain('local/');
   });
 
-  it('resolves the no-tier default to the native id family under the same fallback conditions', () => {
-    mockedIsManagedModelReady.mockReturnValueOnce(false);
-    mockedIsNativeModelReady.mockReturnValueOnce(true);
-
-    expect(resolveManagerModelId(undefined, 'pro')).toBe(DEFAULT_MODEL.id);
-  });
-
-  it('stays on the managed pool when Pro IS usable, even if a native CLI is also detected', () => {
-    mockedIsManagedModelReady.mockReturnValueOnce(true);
-
-    const id = resolveManagerModelId('haiku', 'managed');
-
-    expect(id).toContain('/');
-    expect(mockedIsNativeModelReady).not.toHaveBeenCalled();
-  });
-
-  it('stays on the managed pool when Pro is unready but no native CLI is detected either (nothing to fall back to)', () => {
-    mockedIsManagedModelReady.mockReturnValueOnce(false);
-    mockedIsNativeModelReady.mockReturnValueOnce(false);
-
-    const id = resolveManagerModelId('opus', 'managed');
-
-    expect(id).toContain('/');
-  });
-
-  it('never consults readiness signals for a non-managed mode (claude-code/codex are unaffected)', () => {
-    resolveManagerModelId('sonnet', 'claude-code');
-
-    expect(mockedIsManagedModelReady).not.toHaveBeenCalled();
-    expect(mockedIsNativeModelReady).not.toHaveBeenCalled();
-  });
-});
-
-// ── resolveManagerModelId — engineOverride (STACK fix, bidirectional) ──
-// A user can hold both a Claude CLI subscription and an active Lazy Pro plan
-// at once — the manager must be able to deliberately target EITHER family
-// per mission via the action's own "engine" field, not just be rescued
-// one-directionally out of managed by BUG-2 above.
-
-describe('resolveManagerModelId — engineOverride (STACK fix)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('engine "cli" resolves to the native id family even while mode is managed', () => {
-    const id = resolveManagerModelId('sonnet', 'managed', 'cli');
-    expect(id).toBe('claude-sonnet-5');
-    expect(id).not.toContain('/');
-  });
-
-  it('engine "pro" resolves to the managed (OpenRouter) id family even while mode is claude-code — the reverse direction BUG-2 alone could not do', () => {
-    const id = resolveManagerModelId('haiku', 'claude-code', 'pro');
-    expect(id).toContain('/');
-    expect(id.toLowerCase()).toContain('haiku');
+  it('engine "local" resolves to the local id family even while mode is claude-code', () => {
+    const id = resolveManagerModelId('haiku', 'claude-code', 'local');
+    expect(id).toBe(DEFAULT_LOCAL_MODEL_ID);
   });
 
   it('engine "cli" with no tier hint falls back to the native default model id', () => {
-    expect(resolveManagerModelId(undefined, 'managed', 'cli')).toBe(DEFAULT_MODEL.id);
+    expect(resolveManagerModelId(undefined, 'local', 'cli')).toBe(DEFAULT_MODEL.id);
   });
 
-  it('engine "pro" with no tier hint falls back to the managed default model id', () => {
-    expect(resolveManagerModelId(undefined, 'codex', 'pro')).toBe(DEFAULT_OPENROUTER_MODEL_ID);
-  });
-
-  it('a deliberate engine choice is never second-guessed by the BUG-2 automatic rescue — readiness signals are not even consulted', () => {
-    resolveManagerModelId('sonnet', 'managed', 'cli');
-
-    expect(mockedIsManagedModelReady).not.toHaveBeenCalled();
-    expect(mockedIsNativeModelReady).not.toHaveBeenCalled();
+  it('engine "local" with no tier hint falls back to the local default model id', () => {
+    expect(resolveManagerModelId(undefined, 'codex', 'local')).toBe(DEFAULT_LOCAL_MODEL_ID);
   });
 
   it('respects the configured CLI tool for engine "cli" — codex, not always claude-code', () => {
@@ -1631,7 +1525,7 @@ describe('resolveManagerModelId — engineOverride (STACK fix)', () => {
     const original = localStorage.getItem('lazy.accessSettings');
     try {
       localStorage.setItem('lazy.accessSettings', JSON.stringify({ cliTool: 'codex' }));
-      expect(resolveManagerModelId(undefined, 'managed', 'cli')).toBe('');
+      expect(resolveManagerModelId(undefined, 'local', 'cli')).toBe('');
     } finally {
       if (original === null) localStorage.removeItem('lazy.accessSettings');
       else localStorage.setItem('lazy.accessSettings', original);
@@ -1639,7 +1533,7 @@ describe('resolveManagerModelId — engineOverride (STACK fix)', () => {
   });
 
   it('omitting engineOverride keeps today\'s default mode-based behavior unchanged', () => {
-    expect(resolveManagerModelId('opus', 'managed')).toBe(resolveManagerModelId('opus', 'managed', undefined));
+    expect(resolveManagerModelId('opus', 'local')).toBe(resolveManagerModelId('opus', 'local', undefined));
   });
 });
 
@@ -1655,9 +1549,9 @@ describe('resolveManagerModelId — modelId (exact catalog id)', () => {
     vi.clearAllMocks();
   });
 
-  it('an exact id is recognized and takes priority over a tier hint on the managed/Pro rail', () => {
-    const id = resolveManagerModelId('haiku', 'managed', undefined, 'openai/gpt-5.6-luna');
-    expect(id).toBe('openai/gpt-5.6-luna');
+  it('an exact id is recognized and takes priority over a tier hint on the local rail', () => {
+    const id = resolveManagerModelId('haiku', 'local', undefined, 'local/custom-7b');
+    expect(id).toBe('local/custom-7b');
   });
 
   it('an exact id is recognized and takes priority over a tier hint on the native/CLI rail', () => {
@@ -1665,17 +1559,14 @@ describe('resolveManagerModelId — modelId (exact catalog id)', () => {
     expect(id).toBe(DEFAULT_MODEL.id);
   });
 
-  it('the full OpenRouter catalog is now reachable on the Pro rail, not just the 4 Anthropic entries', () => {
-    // Pre-fix, the managed pool was filtered to managedAnthropicModels() —
-    // a non-Anthropic id like this one would have been unreachable even via
-    // the tier-word path, let alone an exact modelId.
-    const id = resolveManagerModelId(undefined, 'pro', undefined, 'deepseek/deepseek-v4-flash');
-    expect(id).toBe('deepseek/deepseek-v4-flash');
+  it('any local/ id is accepted as-is on the local rail (Ollama availability is async)', () => {
+    const id = resolveManagerModelId(undefined, 'local', undefined, 'local/some-new-model');
+    expect(id).toBe('local/some-new-model');
   });
 
-  it('an unknown modelId on the Pro rail throws instead of silently falling back to the default', () => {
-    expect(() => resolveManagerModelId(undefined, 'managed', undefined, 'not-a-real/model-id')).toThrow(
-      /not-a-real\/model-id/,
+  it('an unknown modelId on the local rail throws instead of silently falling back to the default', () => {
+    expect(() => resolveManagerModelId(undefined, 'local', undefined, 'not-a-real-id')).toThrow(
+      /not-a-real-id/,
     );
   });
 
@@ -1699,11 +1590,7 @@ describe('resolveManagerModelId — modelId (exact catalog id)', () => {
     // Genuinely unknown — stripping the vendor prefix finds no same-rail
     // match, and the inferred-rail-switch wave (see the dedicated describe
     // block below) finds no OTHER rail either, so this stays a plain,
-    // unchanged rejection, never a silent guess. (A real OpenRouter id like
-    // "openai/gpt-5.6-luna" requested on the CLI rail is now a SWITCH to the
-    // Pro rail instead of a rejection — see "resolveManagerModelId —
-    // inferred model rail switch" below; it is intentionally no longer an
-    // example here.)
+    // unchanged rejection, never a silent guess.
     expect(() => resolveManagerModelId(undefined, 'claude-code', undefined, 'openai/totally-bogus-model')).toThrow(
       /openai\/totally-bogus-model/,
     );
@@ -1718,23 +1605,27 @@ describe('resolveManagerModelId — modelId (exact catalog id)', () => {
     );
   });
 
-  it('a valid CLI-rail (native) id requested on the Pro rail now switches to CLI (inferred-rail-switch wave) instead of being rejected', () => {
-    // Pre-inferred-rail-switch this threw ("never reinterpreted"); now that
-    // DEFAULT_MODEL.id has exactly one other real home (the CLI rail, no
-    // BYOK provider configured in this test), it silently switches there —
-    // see "resolveManagerModelId — inferred model rail switch" below for
-    // the dedicated coverage of this wave, including the ambiguous/
-    // not-found-anywhere cases that DO still reject.
-    expect(resolveManagerModelId(undefined, 'managed', undefined, DEFAULT_MODEL.id)).toBe(DEFAULT_MODEL.id);
+  it('a valid CLI-rail (native) id requested on the local rail switches to CLI (inferred-rail-switch wave) instead of being rejected', () => {
+    // DEFAULT_MODEL.id has exactly one other real home (the CLI rail), so it
+    // silently switches there — see "resolveManagerModelId — inferred model
+    // rail switch" below for the dedicated coverage of this wave, including
+    // the not-found-anywhere cases that DO still reject.
+    expect(resolveManagerModelId(undefined, 'local', undefined, DEFAULT_MODEL.id)).toBe(DEFAULT_MODEL.id);
+  });
+
+  it('a local/ id requested on the CLI rail switches to the local rail instead of being rejected', () => {
+    expect(resolveManagerModelId(undefined, 'claude-code', undefined, 'local/custom-7b')).toBe(
+      'local/custom-7b',
+    );
   });
 
   it('an unknown modelId error is a typed UnknownManagerModelIdError naming the rail actually checked', () => {
     try {
-      resolveManagerModelId(undefined, 'managed', undefined, 'nope');
+      resolveManagerModelId(undefined, 'local', undefined, 'nope');
       expect.unreachable();
     } catch (err) {
       expect(err).toBeInstanceOf(UnknownManagerModelIdError);
-      expect((err as UnknownManagerModelIdError).rail).toBe('pro');
+      expect((err as UnknownManagerModelIdError).rail).toBe('local');
       expect((err as UnknownManagerModelIdError).modelId).toBe('nope');
     }
     try {
@@ -1746,27 +1637,27 @@ describe('resolveManagerModelId — modelId (exact catalog id)', () => {
     }
   });
 
-  it('respects a deliberate engine override when validating modelId (engine "cli" checks the native catalog even while mode is managed)', () => {
+  it('respects a deliberate engine override when validating modelId (engine "cli" checks the native catalog even while mode is local)', () => {
     // Still checks the REAL native catalog, not "anything goes" — an id with
     // no presence ANYWHERE (same rail OR any other rail, so the
     // inferred-rail-switch wave finds nothing to rescue it with either)
     // stays rejected...
-    expect(() => resolveManagerModelId(undefined, 'managed', 'cli', 'openai/totally-bogus-model')).toThrow();
-    // ...while an OpenRouter-style id for a model that IS on this rail is
+    expect(() => resolveManagerModelId(undefined, 'local', 'cli', 'openai/totally-bogus-model')).toThrow();
+    // ...while a vendor-style id for a model that IS on this rail is
     // tolerated through the override path too (same resolveBareRailModelId
     // normalization as the ambient-mode case above).
-    expect(resolveManagerModelId(undefined, 'managed', 'cli', 'anthropic/claude-sonnet-5')).toBe('claude-sonnet-5');
-    expect(resolveManagerModelId(undefined, 'managed', 'cli', DEFAULT_MODEL.id)).toBe(DEFAULT_MODEL.id);
+    expect(resolveManagerModelId(undefined, 'local', 'cli', 'anthropic/claude-sonnet-5')).toBe('claude-sonnet-5');
+    expect(resolveManagerModelId(undefined, 'local', 'cli', DEFAULT_MODEL.id)).toBe(DEFAULT_MODEL.id);
   });
 
   it('omitting modelId keeps the existing tier-only behavior unchanged', () => {
-    expect(resolveManagerModelId('sonnet', 'managed')).toBe(resolveManagerModelId('sonnet', 'managed', undefined, undefined));
+    expect(resolveManagerModelId('sonnet', 'local')).toBe(resolveManagerModelId('sonnet', 'local', undefined, undefined));
   });
 });
 
 // ── Tolerant modelId normalization — pure helpers (2026-08-05 fix) ───────
-// Unit-tested directly against SYNTHETIC catalogs (not the real ALL_MODELS/
-// OPENROUTER_MODELS content), so these prove the normalization LOGIC in
+// Unit-tested directly against SYNTHETIC catalogs (not the real ALL_MODELS
+// content), so these prove the normalization LOGIC in
 // isolation; the resolveManagerModelId describe blocks above already prove
 // the real-catalog wiring end-to-end (e.g. "anthropic/claude-sonnet-5" on
 // the CLI rail).
@@ -1800,161 +1691,102 @@ describe('resolveBareRailModelId', () => {
   });
 });
 
-describe('findOpenRouterAliasHint', () => {
-  it('proposes the real OpenRouter equivalent for the curated DeepSeek alias — the Pro-rail branch of the reported bug', () => {
-    expect(findOpenRouterAliasHint('deepseek/deepseek-chat')).toContain('deepseek/deepseek-v4-flash');
-  });
-
-  it('works from the bare native id too (no vendor prefix supplied)', () => {
-    expect(findOpenRouterAliasHint('deepseek-chat')).toContain('deepseek/deepseek-v4-flash');
-  });
-
-  it('returns undefined for deepseek-reasoner — R1 left the managed catalog, and a near-miss must not be proposed', () => {
-    // The alias table maps ids that are the SAME model spelled differently.
-    // Pointing 'deepseek-reasoner' at V4 Pro would propose a DIFFERENT model.
-    expect(findOpenRouterAliasHint('deepseek-reasoner')).toBeUndefined();
-  });
-
-  it('returns undefined for an id with no curated alias — the "unknown -> unchanged" case for this helper', () => {
-    expect(findOpenRouterAliasHint('not-a-real-id')).toBeUndefined();
-  });
-});
-
-describe('findByokHomeHint', () => {
-  it('finds a real id on its BYOK provider catalog and names the provider', () => {
-    expect(findByokHomeHint('claude-haiku-4-5')).toContain('Anthropic BYOK rail');
-  });
-
-  it('strips a vendor prefix before searching', () => {
-    expect(findByokHomeHint('deepseek/deepseek-chat')).toContain('DeepSeek BYOK rail');
-  });
-
-  it('returns undefined when the id is not on ANY BYOK provider catalog', () => {
-    expect(findByokHomeHint('not-a-real-id')).toBeUndefined();
-  });
-});
-
 describe('resolveManagerModelId — tolerant normalization integration (real catalogs)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('Pro rail: "deepseek/deepseek-chat" is rejected but the message proposes the real OpenRouter equivalent', () => {
-    expect(() => resolveManagerModelId(undefined, 'managed', undefined, 'deepseek/deepseek-chat')).toThrow(
-      /deepseek\/deepseek-v4-flash/,
-    );
-  });
-
-  it('BYOK rail: an OpenRouter-style id for the SAME selected provider strips and is silently accepted, tagged via console.warn', () => {
-    const original = localStorage.getItem('lazy.accessSettings');
+  it('CLI rail: "anthropic/claude-sonnet-5" strips and is silently accepted, tagged via console.warn', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      localStorage.setItem('lazy.accessSettings', JSON.stringify({ byokProvider: 'deepseek' }));
+      const id = resolveManagerModelId(undefined, 'claude-code', undefined, 'anthropic/claude-sonnet-5');
 
-      const id = resolveManagerModelId(undefined, 'live-key', undefined, 'deepseek/deepseek-chat');
-
-      expect(id).toBe('deepseek-chat');
+      expect(id).toBe('claude-sonnet-5');
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[manager-model-id-normalize]'));
     } finally {
       warnSpy.mockRestore();
-      if (original === null) localStorage.removeItem('lazy.accessSettings');
-      else localStorage.setItem('lazy.accessSettings', original);
+    }
+  });
+
+  it('local rail: any local/ id is accepted as-is, tagged via console.warn when it switches rails', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const id = resolveManagerModelId(undefined, 'local', undefined, 'local/custom-7b');
+
+      expect(id).toBe('local/custom-7b');
+    } finally {
+      warnSpy.mockRestore();
     }
   });
 });
 
-// ── resolveManagerModelId — inferred model rail (2026-08-05 night 2) ──
+// ── resolveManagerModelId — inferred model rail ──
 // When a modelId is not on the rail actually requested but is real on
-// EXACTLY ONE other rail the user can plausibly run on right now (a
-// configured BYOK provider, the CLI rail, or the Pro rail), the effective
-// rail is silently switched instead of rejecting. Two or more candidate
-// rails, or none at all, still fall through to the honest rejection. Global
-// afterEach (setup.ts) clears localStorage after every test, so each test
-// below starts from a clean, unconfigured slate.
+// EXACTLY ONE other rail, the effective rail is silently switched instead
+// of rejecting. Zero or 2+ candidates still fall through to the honest
+// rejection.
 
 describe('resolveManagerModelId — inferred model rail switch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('deepseek-chat requested on the Pro/managed rail switches to the configured DeepSeek BYOK rail', () => {
-    localStorage.setItem('lazy.apikey.deepseek', 'sk-test-key');
+  it('a native id requested on the local rail switches to the CLI rail', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const id = resolveManagerModelId(undefined, 'managed', undefined, 'deepseek-chat');
-
-    expect(id).toBe('deepseek-chat');
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[manager-model-rail-switch]'));
-    warnSpy.mockRestore();
-  });
-
-  it('claude-sonnet-5 requested on the BYOK DeepSeek rail switches to the CLI/native rail', () => {
-    localStorage.setItem('lazy.accessSettings', JSON.stringify({ byokProvider: 'deepseek' }));
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    const id = resolveManagerModelId(undefined, 'live-key', undefined, 'claude-sonnet-5');
+    const id = resolveManagerModelId(undefined, 'local', undefined, 'claude-sonnet-5');
 
     expect(id).toBe('claude-sonnet-5');
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[manager-model-rail-switch]'));
     warnSpy.mockRestore();
   });
 
-  it('a modelId real on 2 OTHER rails at once (Pro + a configured BYOK provider) is rejected as ambiguous, never guessed', () => {
-    // "deepseek/deepseek-v4-flash" is a real Pro/OpenRouter catalog id AND a
-    // real id on a configured BYOK OpenRouter rail — two equally valid other
-    // homes, so this must stay a rejection.
-    localStorage.setItem('lazy.apikey.openrouter', 'sk-test-key');
+  it('a local/ id requested on the CLI rail resolves on the local rail (the id itself carries the rail)', () => {
+    // resolveExactManagerModelId routes ANY local/ id to resolveExactOnLocalRail
+    // before the CLI rail is ever consulted — no cross-rail switch notice fires.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    expect(() => resolveManagerModelId(undefined, 'claude-code', undefined, 'deepseek/deepseek-v4-flash')).toThrow(
-      /exists on 2 different rails/,
-    );
+    const id = resolveManagerModelId(undefined, 'claude-code', undefined, 'local/custom-7b');
+
+    expect(id).toBe('local/custom-7b');
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('[manager-model-rail-switch]'));
+    warnSpy.mockRestore();
   });
 
-  it('a modelId with no home on ANY rail is rejected outright, even with a BYOK provider configured', () => {
-    localStorage.setItem('lazy.apikey.deepseek', 'sk-test-key');
-
-    expect(() => resolveManagerModelId(undefined, 'managed', undefined, 'totally-bogus-id')).toThrow(
-      UnknownManagerModelIdError,
-    );
-  });
-
-  it('never switches to an UNCONFIGURED BYOK provider (no key set) — 0 candidates stays a plain rejection', () => {
-    // Same id as the first test above, but this time no DeepSeek key is
-    // configured — the BYOK rail is not something the user can actually run
-    // on right now, so it must never be silently offered as a switch target.
-    expect(() => resolveManagerModelId(undefined, 'managed', undefined, 'deepseek-chat')).toThrow(
+  it('a modelId with no home on ANY rail is rejected outright', () => {
+    expect(() => resolveManagerModelId(undefined, 'local', undefined, 'totally-bogus-id')).toThrow(
       UnknownManagerModelIdError,
     );
   });
 });
 
 describe('findAlternateRailMatches', () => {
-  it('finds the CLI rail as the sole alternate for a native id requested on a configured BYOK rail', () => {
-    const matches = findAlternateRailMatches('claude-sonnet-5', 'byok', undefined);
+  it('finds the CLI rail as the sole alternate for a native id requested on the local rail', () => {
+    const matches = findAlternateRailMatches('claude-sonnet-5', 'local');
     expect(matches).toEqual([{ rail: 'cli', id: 'claude-sonnet-5', label: 'cli' }]);
   });
 
-  it('excludes the anthropic BYOK def so a native id never manufactures a false cli/byok ambiguity', () => {
-    // Even though BYOK_PROVIDER_DEFS has its own 'anthropic' entry carrying
-    // 'claude-sonnet-5' too, it must never be offered as a second candidate.
-    const matches = findAlternateRailMatches('claude-sonnet-5', 'pro', undefined);
-    expect(matches).toEqual([{ rail: 'cli', id: 'claude-sonnet-5', label: 'cli' }]);
+  it('finds the local rail as the sole alternate for a local/ id requested on the CLI rail', () => {
+    const matches = findAlternateRailMatches('local/custom-7b', 'cli');
+    expect(matches).toEqual([{ rail: 'local', id: 'local/custom-7b', label: 'local' }]);
   });
 
   it('returns no candidates for a rail the caller already requested (never re-offers it to itself)', () => {
-    expect(findAlternateRailMatches('claude-sonnet-5', 'cli', undefined)).toEqual([]);
+    expect(findAlternateRailMatches('claude-sonnet-5', 'cli')).toEqual([]);
+    expect(findAlternateRailMatches('local/custom-7b', 'local')).toEqual([]);
   });
 
-  it('returns no candidates when a matching BYOK provider exists but has no key configured', () => {
-    expect(findAlternateRailMatches('deepseek-chat', 'pro', undefined)).toEqual([]);
+  it('returns no candidates for a genuinely unknown id', () => {
+    expect(findAlternateRailMatches('totally-bogus-id', 'local')).toEqual([]);
   });
 });
 
 // ── runManagerTurn — provider-mode routing ──────────────────────────
-// The manager's single planning turn must route to the backend matching the
-// CURRENT provider mode: streamClaudeCodeTurn for claude-code,
-// cliBackendProvider('codex').streamChat for codex, streamManagedAgentTurn
-// (the managed/pro ai-proxy) otherwise. Regression coverage: codex used to
+// The manager's single planning turn routes through streamManagerCompletion:
+// an explicit `local/…` or Devin-catalog model pick wins over the ambient
+// mode; otherwise the CURRENT provider mode decides (streamClaudeCodeTurn
+// for claude-code, cliBackendProvider('codex').streamChat for codex, the
+// local Ollama streamer for local). Regression coverage: codex used to
 // fall into the "else" branch and silently hit the managed proxy, which
 // requires a Supabase session and is unrelated to the codex CLI, so the
 // LazyManager turn failed outright for codex-only users.
@@ -1983,7 +1815,7 @@ describe('runManagerTurn — provider mode routing', () => {
     vi.clearAllMocks();
   });
 
-  it('claude-code mode routes to streamClaudeCodeTurn with a native model id, never the codex or managed backends (unchanged)', async () => {
+  it('claude-code mode routes to streamClaudeCodeTurn with a native model id, never the codex or local backends (unchanged)', async () => {
     mockedGetProviderMode.mockReturnValue('claude-code');
     mockedStreamClaudeCodeTurn.mockImplementation(() => fakeStream('info from claude-code'));
 
@@ -1992,109 +1824,74 @@ describe('runManagerTurn — provider mode routing', () => {
     expect(mockedStreamClaudeCodeTurn).toHaveBeenCalledTimes(1);
     expect(mockedStreamClaudeCodeTurn.mock.calls[0][0].model).toBe('claude-sonnet-5');
     expect(result.rawResponse).toContain('info from claude-code');
-    expect(mockedStreamManagedAgentTurn).not.toHaveBeenCalled();
+    expect(mockedLocalTurn).not.toHaveBeenCalled();
     expect(mockedCliBackendProvider).not.toHaveBeenCalled();
   });
 
-  it('managed mode routes to streamManagedAgentTurn, never the codex backend (unchanged)', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('info from managed'));
+  it('local mode routes to the local turn streamer, never the codex or claude backends', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
+    mockedLocalTurn.mockImplementation(() => fakeStream('info from local'));
 
-    const result = await runManagerTurn(baseOpts('anthropic/claude-sonnet-5'));
+    const result = await runManagerTurn(baseOpts('local/hermes3'));
 
-    expect(mockedStreamManagedAgentTurn).toHaveBeenCalledTimes(1);
-    expect(result.rawResponse).toContain('info from managed');
+    expect(mockedLocalTurn).toHaveBeenCalledTimes(1);
+    expect(mockedLocalTurn.mock.calls[0][0].model).toBe('hermes3');
+    expect(result.rawResponse).toContain('info from local');
     expect(mockedStreamClaudeCodeTurn).not.toHaveBeenCalled();
     expect(mockedCliBackendProvider).not.toHaveBeenCalled();
   });
 
-  it('pro mode also routes to streamManagedAgentTurn, never the codex backend (unchanged)', async () => {
-    mockedGetProviderMode.mockReturnValue('pro');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('info from pro'));
+  it('an explicit local/ pick wins over the ambient mode (model-driven short-circuit)', async () => {
+    mockedGetProviderMode.mockReturnValue('claude-code');
+    mockedLocalTurn.mockImplementation(() => fakeStream('ok from local'));
 
-    await runManagerTurn(baseOpts('anthropic/claude-haiku-4.5'));
+    const result = await runManagerTurn(baseOpts('local/hermes3'));
 
-    expect(mockedStreamManagedAgentTurn).toHaveBeenCalledTimes(1);
-    expect(mockedCliBackendProvider).not.toHaveBeenCalled();
-  });
-
-  it('web mock mode + GLM 5.2 still uses the managed proxy (needs a session, not the CLI)', async () => {
-    mockedGetProviderMode.mockReturnValue('mock');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok from ox'));
-
-    const result = await runManagerTurn(baseOpts('z-ai/glm-5.2'));
-
-    expect(mockedStreamManagedAgentTurn).toHaveBeenCalledTimes(1);
-    expect(result.rawResponse).toContain('ok from ox');
+    expect(mockedLocalTurn).toHaveBeenCalledTimes(1);
+    expect(result.rawResponse).toContain('ok from local');
     expect(mockedStreamClaudeCodeTurn).not.toHaveBeenCalled();
   });
 
-  it('web mock mode + native Sonnet does not pretend to be managed — measured LazyManager error 2026-08-28', async () => {
+  it('web mock mode rejects with an honest no-engine error instead of running anywhere', async () => {
     mockedGetProviderMode.mockReturnValue('mock');
 
-    await expect(runManagerTurn(baseOpts('claude-sonnet-5'))).rejects.toThrow(/GLM 5\.2|desktop/i);
-    expect(mockedStreamManagedAgentTurn).not.toHaveBeenCalled();
+    await expect(runManagerTurn(baseOpts('z-ai/glm-5.2'))).rejects.toThrow(/desktop/i);
+    expect(mockedLocalTurn).not.toHaveBeenCalled();
     expect(mockedStreamClaudeCodeTurn).not.toHaveBeenCalled();
   });
 
-  // F1 regression (post-e2e fix wave): AnalysisDesk/LazyManagerRail's model
-  // picker (buildModelPickerOptions) can offer a native-id option (claude-sub
-  // entitlement group) at the same time as an OpenRouter-id option (Pro
-  // entitlement group) — a user can hold both entitlements at once even
-  // though getProviderMode() only ever resolves to ONE active backend (see
-  // modelPickerOptions.ts's module doc comment). Selecting the native-id
-  // option while the resolved mode is 'managed'/'pro' used to forward that
-  // native id straight to the ai-proxy unmodified, which rejected it as an
-  // unrecognized model: "ManagedUnavailableError: Modèle non supporté".
-  it('managed mode normalizes a native-id model selection to a valid OpenRouter id — the "Modèle non supporté" bug this fixes', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok'));
+  it('web mock mode + native Sonnet does not pretend to be served — measured LazyManager error 2026-08-28', async () => {
+    mockedGetProviderMode.mockReturnValue('mock');
+
+    await expect(runManagerTurn(baseOpts('claude-sonnet-5'))).rejects.toThrow(/desktop/i);
+    expect(mockedLocalTurn).not.toHaveBeenCalled();
+    expect(mockedStreamClaudeCodeTurn).not.toHaveBeenCalled();
+  });
+
+  // The manager's model picker can offer a native-id option and a local/
+  // option at once even though getProviderMode() only ever resolves to ONE
+  // active backend. A native id picked while the resolved mode is 'local'
+  // still reaches the local streamer unmangled (the local engine receives
+  // whatever id it was given — availability fails honestly at run time,
+  // never as a silent substitution here).
+  it('local mode forwards a native-id model selection to the local streamer unmangled', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
+    mockedLocalTurn.mockImplementation(() => fakeStream('ok'));
 
     await runManagerTurn(baseOpts('claude-haiku-4-5'));
 
-    const sentModel = mockedStreamManagedAgentTurn.mock.calls[0][0].model as string;
-    expect(sentModel).toBe('anthropic/claude-haiku-4.5');
-    expect(sentModel).toContain('/');
+    const sentModel = mockedLocalTurn.mock.calls[0][0].model as string;
+    expect(sentModel).toBe('claude-haiku-4-5');
   });
 
-  it('pro mode also normalizes a native-id model selection to a valid OpenRouter id', async () => {
-    mockedGetProviderMode.mockReturnValue('pro');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok'));
-
-    await runManagerTurn(baseOpts('claude-sonnet-5'));
-
-    const sentModel = mockedStreamManagedAgentTurn.mock.calls[0][0].model as string;
-    expect(sentModel).toBe('anthropic/claude-sonnet-5');
-  });
-
-  it('managed mode normalizes a bare tier word the same way as a native id', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok'));
+  it('local mode forwards a bare tier word the same way (no silent substitution)', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
+    mockedLocalTurn.mockImplementation(() => fakeStream('ok'));
 
     await runManagerTurn(baseOpts('opus'));
 
-    const sentModel = mockedStreamManagedAgentTurn.mock.calls[0][0].model as string;
-    expect(sentModel).toBe('anthropic/claude-opus-5');
-  });
-
-  it('managed mode leaves an already-valid OpenRouter id untouched, including non-Anthropic managed models', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok'));
-
-    await runManagerTurn(baseOpts('deepseek/deepseek-v4-flash'));
-
-    const sentModel = mockedStreamManagedAgentTurn.mock.calls[0][0].model as string;
-    expect(sentModel).toBe('deepseek/deepseek-v4-flash');
-  });
-
-  it('managed mode falls back to the catalog default for an unrecognized model value', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok'));
-
-    await runManagerTurn(baseOpts('some-unknown-model'));
-
-    const sentModel = mockedStreamManagedAgentTurn.mock.calls[0][0].model as string;
-    expect(sentModel).toBe(DEFAULT_OPENROUTER_MODEL_ID);
+    const sentModel = mockedLocalTurn.mock.calls[0][0].model as string;
+    expect(sentModel).toBe('opus');
   });
 
   it('codex mode routes to cliBackendProvider("codex"), never the managed proxy — the bug this fixes', async () => {
@@ -2114,7 +1911,7 @@ describe('runManagerTurn — provider mode routing', () => {
     // Routes to codex — never the managed proxy (the bug) nor the
     // claude-code-specific helper.
     expect(mockedCliBackendProvider).toHaveBeenCalledWith('codex');
-    expect(mockedStreamManagedAgentTurn).not.toHaveBeenCalled();
+    expect(mockedLocalTurn).not.toHaveBeenCalled();
     expect(mockedStreamClaudeCodeTurn).not.toHaveBeenCalled();
 
     // The codex stream's output flows through the same parsing as every
@@ -2957,7 +2754,7 @@ describe('runManagerTurn — engineOverride (STACK fix)', () => {
     ];
   }
 
-  function baseOpts(model: string, engineOverride?: 'cli' | 'pro') {
+  function baseOpts(model: string, engineOverride?: 'cli' | 'local') {
     return {
       messages: makeMessages(),
       context: { agents: [], missions: [] },
@@ -2970,35 +2767,25 @@ describe('runManagerTurn — engineOverride (STACK fix)', () => {
     vi.clearAllMocks();
   });
 
-  it('engineOverride "cli" routes to streamClaudeCodeTurn even though the ambient mode is "managed"', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
+  it('engineOverride "cli" routes to streamClaudeCodeTurn even though the ambient mode is "local"', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
     mockedStreamClaudeCodeTurn.mockImplementation(() => fakeStream('info from claude-code'));
 
-    const result = await runManagerTurn(baseOpts('anthropic/claude-sonnet-5', 'cli'));
+    const result = await runManagerTurn(baseOpts('claude-sonnet-5', 'cli'));
 
     expect(mockedStreamClaudeCodeTurn).toHaveBeenCalledTimes(1);
     expect(result.rawResponse).toContain('info from claude-code');
-    expect(mockedStreamManagedAgentTurn).not.toHaveBeenCalled();
+    expect(mockedLocalTurn).not.toHaveBeenCalled();
   });
 
-  it('engineOverride "cli" routes to streamClaudeCodeTurn even though the ambient mode is "pro" (selected-but-inactive)', async () => {
-    mockedGetProviderMode.mockReturnValue('pro');
-    mockedStreamClaudeCodeTurn.mockImplementation(() => fakeStream('ok'));
-
-    await runManagerTurn(baseOpts('haiku', 'cli'));
-
-    expect(mockedStreamClaudeCodeTurn).toHaveBeenCalledTimes(1);
-    expect(mockedStreamManagedAgentTurn).not.toHaveBeenCalled();
-  });
-
-  it('engineOverride "pro" routes to streamManagedAgentTurn even though the ambient mode is "claude-code"', async () => {
+  it('engineOverride "local" routes to the local streamer even though the ambient mode is "claude-code"', async () => {
     mockedGetProviderMode.mockReturnValue('claude-code');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('info from managed'));
+    mockedLocalTurn.mockImplementation(() => fakeStream('info from local'));
 
-    const result = await runManagerTurn(baseOpts('claude-sonnet-5', 'pro'));
+    const result = await runManagerTurn(baseOpts('claude-sonnet-5', 'local'));
 
-    expect(mockedStreamManagedAgentTurn).toHaveBeenCalledTimes(1);
-    expect(result.rawResponse).toContain('info from managed');
+    expect(mockedLocalTurn).toHaveBeenCalledTimes(1);
+    expect(result.rawResponse).toContain('info from local');
     expect(mockedStreamClaudeCodeTurn).not.toHaveBeenCalled();
   });
 
@@ -3010,7 +2797,7 @@ describe('runManagerTurn — engineOverride (STACK fix)', () => {
       listModels: () => [],
       streamChat: streamChatMock,
     });
-    mockedGetProviderMode.mockReturnValue('managed');
+    mockedGetProviderMode.mockReturnValue('local');
     const original = localStorage.getItem('lazy.accessSettings');
     try {
       localStorage.setItem('lazy.accessSettings', JSON.stringify({ cliTool: 'codex' }));
@@ -3018,7 +2805,7 @@ describe('runManagerTurn — engineOverride (STACK fix)', () => {
       await runManagerTurn(baseOpts('haiku', 'cli'));
 
       expect(mockedCliBackendProvider).toHaveBeenCalledWith('codex');
-      expect(mockedStreamManagedAgentTurn).not.toHaveBeenCalled();
+      expect(mockedLocalTurn).not.toHaveBeenCalled();
       expect(mockedStreamClaudeCodeTurn).not.toHaveBeenCalled();
     } finally {
       if (original === null) localStorage.removeItem('lazy.accessSettings');
@@ -3026,19 +2813,19 @@ describe('runManagerTurn — engineOverride (STACK fix)', () => {
     }
   });
 
-  it('omitting engineOverride keeps the unchanged, pure mode-based routing (managed stays managed)', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok'));
+  it('omitting engineOverride keeps the unchanged, pure mode-based routing (local stays local)', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
+    mockedLocalTurn.mockImplementation(() => fakeStream('ok'));
 
-    await runManagerTurn(baseOpts('anthropic/claude-haiku-4.5'));
+    await runManagerTurn(baseOpts('claude-haiku-4-5'));
 
-    expect(mockedStreamManagedAgentTurn).toHaveBeenCalledTimes(1);
+    expect(mockedLocalTurn).toHaveBeenCalledTimes(1);
     expect(mockedStreamClaudeCodeTurn).not.toHaveBeenCalled();
   });
 });
 
 // ── runManagerTurn — RECALL_TEACHING wiring (per provider-mode branch) ──
-// claude-code/managed send `system` straight to the model, so RECALL_
+// claude-code/local send `system` straight to the model, so RECALL_
 // TEACHING must be appended explicitly for those two. The codex branch
 // threads `system` through rulesContext into cliBackendProvider's own
 // buildSystemPrompt('ask', ...) call, which appends RECALL_TEACHING itself
@@ -3083,13 +2870,13 @@ describe('runManagerTurn — RECALL_TEACHING wiring', () => {
     expect(sentSystem.split(RECALL_TEACHING).length - 1).toBe(1);
   });
 
-  it('managed mode: appends RECALL_TEACHING to the system prompt sent to streamManagedAgentTurn', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok'));
+  it('local mode: appends RECALL_TEACHING to the system prompt sent to the local streamer', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
+    mockedLocalTurn.mockImplementation(() => fakeStream('ok'));
 
-    await runManagerTurn(baseOpts('anthropic/claude-sonnet-5'));
+    await runManagerTurn(baseOpts('local/hermes3'));
 
-    const sentSystem = mockedStreamManagedAgentTurn.mock.calls[0][0].system as string;
+    const sentSystem = mockedLocalTurn.mock.calls[0][0].system as string;
     expect(sentSystem).toContain(RECALL_TEACHING);
     expect(sentSystem.split(RECALL_TEACHING).length - 1).toBe(1);
   });
@@ -3149,23 +2936,16 @@ describe('runManagerTurn — ACTION FORMAT reminder (FIX 1, last-position)', () 
     expect(sentSystem).toContain(RECALL_TEACHING);
   });
 
-  it('managed mode: system AND cacheableSystem.dynamic sent to streamManagedAgentTurn both end with ACTION_FORMAT_REMINDER, core untouched', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok'));
+  it('local mode: system sent to the local streamer ends with ACTION_FORMAT_REMINDER', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
+    mockedLocalTurn.mockImplementation(() => fakeStream('ok'));
 
-    await runManagerTurn(baseOpts('anthropic/claude-sonnet-5'));
+    await runManagerTurn(baseOpts('local/hermes3'));
 
-    const call = mockedStreamManagedAgentTurn.mock.calls[0][0] as {
-      system: string;
-      cacheableSystem?: { core: string; dynamic: string };
-    };
+    const call = mockedLocalTurn.mock.calls[0][0] as { system: string };
     expect(call.system.endsWith(ACTION_FORMAT_REMINDER)).toBe(true);
-    expect(call.cacheableSystem).toBeDefined();
-    expect(call.cacheableSystem!.dynamic.endsWith(ACTION_FORMAT_REMINDER)).toBe(true);
-    expect(call.cacheableSystem!.core).toBe(buildManagerCorePrompt());
-    // The core+dynamic reconstruction invariant (see the cacheableSystem
-    // wiring describe block below) must still hold with the reminder in place.
-    expect(`${call.cacheableSystem!.core}${call.cacheableSystem!.dynamic}`).toBe(call.system);
+    // Still after RECALL_TEACHING, not replacing it.
+    expect(call.system).toContain(RECALL_TEACHING);
   });
 
   it('codex mode: rulesContext sent to cliBackendProvider ends with ACTION_FORMAT_REMINDER (RECALL_TEACHING still excluded — added downstream)', async () => {
@@ -3187,19 +2967,21 @@ describe('runManagerTurn — ACTION FORMAT reminder (FIX 1, last-position)', () 
     expect(req.rulesContext).not.toContain(RECALL_TEACHING);
   });
 
-  it('live-key mode: system sent to the BYOK raw streamer ends with ACTION_FORMAT_REMINDER', async () => {
-    mockedGetProviderMode.mockReturnValue('live-key');
-    localStorage.setItem('lazy.accessSettings', JSON.stringify({ byokProvider: 'deepseek' }));
-    saveByokKey('deepseek', 'sk-test-key');
-    mockedStreamOpenAICompatRaw.mockImplementation(() => fakeStream('ok'));
+  it('devin mode: rulesContext sent to cliBackendProvider ends with ACTION_FORMAT_REMINDER (RECALL_TEACHING still excluded — added downstream)', async () => {
+    const streamChatMock = vi.fn((_req: StreamChatRequest) => fakeStream('ok'));
+    mockedCliBackendProvider.mockReturnValue({
+      id: 'cli-devin',
+      label: 'Devin (CLI)',
+      listModels: () => [],
+      streamChat: streamChatMock,
+    });
+    mockedGetProviderMode.mockReturnValue('devin');
 
-    await runManagerTurn(baseOpts('deepseek-chat'));
+    await runManagerTurn(baseOpts('swe-2-medium'));
 
-    expect(mockedStreamOpenAICompatRaw).toHaveBeenCalledTimes(1);
-    expect(mockedStreamAnthropicCompatRaw).not.toHaveBeenCalled();
-    const sentSystem = mockedStreamOpenAICompatRaw.mock.calls[0][0].system as string;
-    expect(sentSystem.endsWith(ACTION_FORMAT_REMINDER)).toBe(true);
-    expect(sentSystem).toContain(RECALL_TEACHING);
+    const req = streamChatMock.mock.calls[0][0] as StreamChatRequest;
+    expect((req.rulesContext as string).endsWith(ACTION_FORMAT_REMINDER)).toBe(true);
+    expect(req.rulesContext).not.toContain(RECALL_TEACHING);
   });
 
   it('the LAYER 2 repair call also ends its own short system prompt with ACTION_FORMAT_REMINDER', async () => {
@@ -3222,28 +3004,13 @@ describe('runManagerTurn — ACTION FORMAT reminder (FIX 1, last-position)', () 
   });
 });
 
-// ── runManagerTurn — BYOK-catalog model wins over the ambient mode ─────────
-// Real repro (2026-08-12, live desktop app, authenticated Pro session, real
-// BYOK DeepSeek key configured): picking "DeepSeek Chat (V4 Flash)"
-// (deepseek-chat) from the LazyManager's own model picker and sending any
-// message always failed with the Claude CLI's own "model may not exist"
-// rejection (modelsIndex.test.ts:306-309 documents that exact wording).
-//
-// Root cause: modelPickerOptions.ts's detectModelEntitlements() computes
-// "is a BYOK model selectable" INDEPENDENTLY of getProviderMode() on purpose
-// (see that module's own header doc comment — a user can hold a Claude
-// subscription/Pro plan AND a keyed BYOK provider at once, and the picker
-// must offer both). But streamManagerCompletion's dispatch used to key
-// PURELY off the ambient `mode` (getProviderMode()) — so a keyed BYOK model
-// picked from that SAME independent picker was silently forwarded to
-// whichever rail the ambient mode happened to resolve to instead (here,
-// 'claude-code' — toNativeModelId('deepseek-chat') sent straight to the CLI,
-// which of course has never heard of it).
-//
-// Fixed by resolveByokDefForModel: a keyed BYOK-catalog id now always wins
-// over the ambient mode, checked BEFORE the mode branches — matching what
-// the picker already promised the user it would do.
-describe('runManagerTurn — BYOK-catalog model wins over the ambient mode (DeepSeek-always-fails fix)', () => {
+// ── runManagerTurn — local-model pick wins over the ambient mode ─────
+// The model picker offers local/ ids alongside native CLI ids even though
+// getProviderMode() only ever resolves to ONE active backend. An explicit
+// local/ pick always wins over the ambient mode (the model-driven
+// short-circuit in streamManagerCompletion), matching what the picker
+// already promised the user it would do.
+describe('runManagerTurn — local-model pick wins over the ambient mode', () => {
   function makeMessages(): ManagerMessage[] {
     return [{ id: 'm1', role: 'user', content: 'salut', timestamp: new Date().toISOString() }];
   }
@@ -3252,64 +3019,44 @@ describe('runManagerTurn — BYOK-catalog model wins over the ambient mode (Deep
     vi.clearAllMocks();
   });
 
-  it('claude-code mode + a keyed DeepSeek model: routes to the BYOK raw streamer, never the CLI', async () => {
+  it('claude-code mode + a local/ model: routes to the local streamer, never the CLI', async () => {
     mockedGetProviderMode.mockReturnValue('claude-code');
-    saveByokKey('deepseek', 'sk-test-key');
-    mockedStreamOpenAICompatRaw.mockImplementation(() => fakeStream('ok'));
+    mockedLocalTurn.mockImplementation(() => fakeStream('ok'));
 
-    await runManagerTurn({ messages: makeMessages(), context: { agents: [], missions: [] }, model: 'deepseek-chat' });
+    await runManagerTurn({ messages: makeMessages(), context: { agents: [], missions: [] }, model: 'local/hermes3' });
 
-    expect(mockedStreamOpenAICompatRaw).toHaveBeenCalledTimes(1);
+    expect(mockedLocalTurn).toHaveBeenCalledTimes(1);
     expect(mockedStreamClaudeCodeTurn).not.toHaveBeenCalled();
-    const call = mockedStreamOpenAICompatRaw.mock.calls[0][0] as { model: string; baseUrl: string };
-    expect(call.model).toBe('deepseek-chat');
-    expect(call.baseUrl).toBe('https://api.deepseek.com');
+    const call = mockedLocalTurn.mock.calls[0][0] as { model: string };
+    expect(call.model).toBe('hermes3');
   });
 
-  it('managed/Pro mode + a keyed DeepSeek model: still routes to the BYOK raw streamer, never the managed proxy', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    saveByokKey('deepseek', 'sk-test-key');
-    mockedStreamOpenAICompatRaw.mockImplementation(() => fakeStream('ok'));
+  it('local mode + a local/ model: still routes to the local streamer, never the CLI', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
+    mockedLocalTurn.mockImplementation(() => fakeStream('ok'));
 
-    await runManagerTurn({ messages: makeMessages(), context: { agents: [], missions: [] }, model: 'deepseek-reasoner' });
+    await runManagerTurn({ messages: makeMessages(), context: { agents: [], missions: [] }, model: 'local/hermes3' });
 
-    expect(mockedStreamOpenAICompatRaw).toHaveBeenCalledTimes(1);
-    expect(mockedStreamManagedAgentTurn).not.toHaveBeenCalled();
-    const call = mockedStreamOpenAICompatRaw.mock.calls[0][0] as { model: string };
-    expect(call.model).toBe('deepseek-reasoner');
+    expect(mockedLocalTurn).toHaveBeenCalledTimes(1);
+    expect(mockedStreamClaudeCodeTurn).not.toHaveBeenCalled();
   });
 
-  it('claude-code mode + "deepseek-chat" with NO DeepSeek key configured: unchanged, still routes to the CLI', async () => {
+  it('claude-code mode + a native id: still routes to the CLI (no false-positive hijack)', async () => {
     mockedGetProviderMode.mockReturnValue('claude-code');
-    // No saveByokKey call — the picker would never have offered this model
-    // in the first place, but the dispatch itself must degrade exactly as
-    // before this fix when asked to anyway (no key = not a real BYOK route).
-    mockedStreamClaudeCodeTurn.mockImplementation(() => fakeStream('ok'));
-
-    await runManagerTurn({ messages: makeMessages(), context: { agents: [], missions: [] }, model: 'deepseek-chat' });
-
-    expect(mockedStreamClaudeCodeTurn).toHaveBeenCalledTimes(1);
-    expect(mockedStreamOpenAICompatRaw).not.toHaveBeenCalled();
-  });
-
-  it('claude-code mode + a native Anthropic id, DeepSeek key ALSO configured: still routes to the CLI (no false-positive hijack)', async () => {
-    mockedGetProviderMode.mockReturnValue('claude-code');
-    saveByokKey('deepseek', 'sk-test-key');
     mockedStreamClaudeCodeTurn.mockImplementation(() => fakeStream('ok'));
 
     await runManagerTurn({ messages: makeMessages(), context: { agents: [], missions: [] }, model: 'claude-sonnet-5' });
 
     expect(mockedStreamClaudeCodeTurn).toHaveBeenCalledTimes(1);
-    expect(mockedStreamOpenAICompatRaw).not.toHaveBeenCalled();
+    expect(mockedLocalTurn).not.toHaveBeenCalled();
   });
 });
 
 // ── runManagerTurn — cacheableSystem wiring (chantier 2, prompt caching) ──
-// The managed branch must hand streamManagedAgentTurn a `cacheableSystem`
-// split whose `core` is buildManagerCorePrompt()'s OWN output (stable
-// across turns — the cache-control-eligible prefix) and whose `dynamic`
-// reconstructs the exact same flat `system` text the claude-code branch
-// still sends as one string — never a lossy or reordered rewrite.
+// `cacheableSystem` is still threaded into streamManagerCompletion (call-site
+// compat), but no rail consumes it anymore — the hosted ai-proxy rail that
+// honored it as a cache_control block is gone. Both live rails receive a
+// plain flat `system` string with no block-level caching field.
 
 describe('runManagerTurn — cacheableSystem wiring (chantier 2)', () => {
   function makeMessages(): ManagerMessage[] {
@@ -3326,60 +3073,14 @@ describe('runManagerTurn — cacheableSystem wiring (chantier 2)', () => {
     vi.clearAllMocks();
   });
 
-  it('passes a cacheableSystem whose core+dynamic reconstructs the exact flat system string sent as `system`', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok'));
+  it('local branch has no cacheableSystem field (no block-level caching mechanism for the local rail)', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
+    mockedLocalTurn.mockImplementation(() => fakeStream('ok'));
 
-    await runManagerTurn(baseOpts('anthropic/claude-sonnet-5'));
+    await runManagerTurn(baseOpts('local/hermes3'));
 
-    const call = mockedStreamManagedAgentTurn.mock.calls[0][0] as {
-      system: string;
-      cacheableSystem?: { core: string; dynamic: string };
-    };
-    expect(call.cacheableSystem).toBeDefined();
-    const { core, dynamic } = call.cacheableSystem!;
-    expect(`${core}${dynamic}`).toBe(call.system);
-  });
-
-  it('core is byte-identical to buildManagerCorePrompt() — the cache-eligible static prefix', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok'));
-
-    await runManagerTurn(baseOpts('anthropic/claude-sonnet-5'));
-
-    const call = mockedStreamManagedAgentTurn.mock.calls[0][0] as {
-      cacheableSystem?: { core: string; dynamic: string };
-    };
-    expect(call.cacheableSystem!.core).toBe(buildManagerCorePrompt());
-  });
-
-  it('core stays IDENTICAL across two turns with different mission/agent state (cache-hit precondition), while dynamic changes', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok'));
-
-    await runManagerTurn({
-      messages: makeMessages(),
-      context: { agents: [], missions: [] },
-      model: 'anthropic/claude-sonnet-5',
-    });
-    const firstCall = mockedStreamManagedAgentTurn.mock.calls[0][0] as {
-      cacheableSystem?: { core: string; dynamic: string };
-    };
-
-    await runManagerTurn({
-      messages: makeMessages(),
-      context: {
-        agents: [],
-        missions: [{ id: 'M1', title: 'Test mission', status: 'running', model: 'sonnet' } as Mission],
-      },
-      model: 'anthropic/claude-sonnet-5',
-    });
-    const secondCall = mockedStreamManagedAgentTurn.mock.calls[1][0] as {
-      cacheableSystem?: { core: string; dynamic: string };
-    };
-
-    expect(secondCall.cacheableSystem!.core).toBe(firstCall.cacheableSystem!.core);
-    expect(secondCall.cacheableSystem!.dynamic).not.toBe(firstCall.cacheableSystem!.dynamic);
+    const call = mockedLocalTurn.mock.calls[0][0] as { cacheableSystem?: unknown };
+    expect(call.cacheableSystem).toBeUndefined();
   });
 
   it('claude-code branch has no cacheableSystem field (no block-level caching mechanism for the CLI rail)', async () => {
@@ -3391,22 +3092,6 @@ describe('runManagerTurn — cacheableSystem wiring (chantier 2)', () => {
     const call = mockedStreamClaudeCodeTurn.mock.calls[0][0] as { cacheableSystem?: unknown };
     expect(call.cacheableSystem).toBeUndefined();
   });
-
-  it('follow-up "ok" on sonnet uses the compact core — greetings still keep the full cache prefix', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() => fakeStream('ok'));
-
-    await runManagerTurn({
-      messages: [{ id: 'm1', role: 'user', content: 'ok', timestamp: new Date().toISOString() }],
-      context: { agents: [], missions: [] },
-      model: 'anthropic/claude-sonnet-5',
-    });
-    const followUp = mockedStreamManagedAgentTurn.mock.calls[0][0] as {
-      cacheableSystem?: { core: string };
-    };
-    expect(followUp.cacheableSystem!.core).toBe(buildManagerCorePrompt({ compact: true }));
-    expect(followUp.cacheableSystem!.core).not.toBe(buildManagerCorePrompt());
-  });
 });
 
 describe('runManagerTurn — D91 stamps omitted brain_query.sessionId', () => {
@@ -3415,8 +3100,8 @@ describe('runManagerTurn — D91 stamps omitted brain_query.sessionId', () => {
   });
 
   it('stamps conversationId when the model omits sessionId', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() =>
+    mockedGetProviderMode.mockReturnValue('local');
+    mockedLocalTurn.mockImplementation(() =>
       fakeStream('Je lis.\n<lazy_actions>\n[{"type":"brain_query","query":"auth"}]\n</lazy_actions>'),
     );
 
@@ -3430,8 +3115,8 @@ describe('runManagerTurn — D91 stamps omitted brain_query.sessionId', () => {
   });
 
   it('keeps an explicit sessionId', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    mockedStreamManagedAgentTurn.mockImplementation(() =>
+    mockedGetProviderMode.mockReturnValue('local');
+    mockedLocalTurn.mockImplementation(() =>
       fakeStream('<lazy_actions>[{"type":"brain_query","query":"auth","sessionId":"sess-1"}]</lazy_actions>'),
     );
 
@@ -3763,47 +3448,37 @@ describe('formatCreditsSummary', () => {
   });
 });
 
-// ── formatEntitlementsSummary — STACK fix ────────────────────────────
-// A Claude CLI/BYOK subscription and Lazy Pro managed credits are two
-// INDEPENDENT rails (modelPickerOptions.ts's ModelEntitlements) — this
-// formatter reports BOTH, distinct from formatCreditsSummary's single
-// "how many credits" answer (which stays unchanged, see the describe block
-// above — every one of its existing assertions still passes untouched).
+// ── formatEntitlementsSummary ───────────────────────────────────────
+// Reports the live engine rails (Claude CLI, Devin CLI, local Ollama) from
+// a real ModelEntitlements snapshot (modelPickerOptions.ts) — the compact
+// status embedded in the manager's system prompt. Deliberately terse
+// (token cost, injected every turn).
 
 describe('formatEntitlementsSummary', () => {
   it('returns undefined when no entitlements snapshot is supplied', () => {
     expect(formatEntitlementsSummary(undefined, undefined)).toBeUndefined();
   });
 
-  it('reports both rails ready — Claude subscription detected and Pro active with the real remaining credits', () => {
-    const summary = formatEntitlementsSummary({ claudeSub: true, pro: 'active', codexManaged: false }, 4200);
+  it('reports the Claude subscription as ready when claudeSub is true', () => {
+    const summary = formatEntitlementsSummary({ claudeSub: true, codexManaged: false, local: true }, undefined);
     expect(summary).toMatch(/claude subscription.*ready/i);
-    expect(summary).toMatch(/lazy pro.*active/i);
-    expect(summary).toContain(formatCredits(4200));
-  });
-
-  it('reports Pro active with 0 credits distinctly from Pro inactive (the exact bug this fixes: 0 credits must never read as "no Pro")', () => {
-    const noCredits = formatEntitlementsSummary({ claudeSub: true, pro: 'no-credits', codexManaged: false }, 0);
-    const inactive = formatEntitlementsSummary({ claudeSub: true, pro: 'inactive', codexManaged: false }, undefined);
-    expect(noCredits).toMatch(/0 credits left/i);
-    expect(inactive).toMatch(/no active plan/i);
-    expect(noCredits).not.toBe(inactive);
   });
 
   it('reports the Claude subscription as not detected when claudeSub is false', () => {
-    const summary = formatEntitlementsSummary({ claudeSub: false, pro: 'active', codexManaged: false }, 100);
+    const summary = formatEntitlementsSummary({ claudeSub: false, codexManaged: false, local: true }, undefined);
     expect(summary).toMatch(/claude subscription.*not detected/i);
   });
 
-  it('reports both rails at once — a user can hold a Claude subscription AND active Pro credits simultaneously', () => {
-    const summary = formatEntitlementsSummary({ claudeSub: true, pro: 'active', codexManaged: false }, 500);
-    expect(summary).toContain('Claude subscription');
-    expect(summary).toContain('Lazy Pro');
+  it('reports the Devin CLI line only when devin is detected', () => {
+    const withDevin = formatEntitlementsSummary({ claudeSub: false, codexManaged: false, devin: true, local: true }, undefined);
+    expect(withDevin).toMatch(/devin cli.*ready/i);
+    const withoutDevin = formatEntitlementsSummary({ claudeSub: false, codexManaged: false, local: true }, undefined);
+    expect(withoutDevin).not.toMatch(/devin cli/i);
   });
 
-  it('is compact — two short lines, no verbose explanation (token cost: injected every turn)', () => {
-    const summary = formatEntitlementsSummary({ claudeSub: true, pro: 'no-credits', codexManaged: false }, 0);
-    expect(summary?.split('\n')).toHaveLength(2);
+  it('always reports the local engine line (optimistic — Ollama reachability is async)', () => {
+    const summary = formatEntitlementsSummary({ claudeSub: false, codexManaged: false, local: true }, undefined);
+    expect(summary).toMatch(/local engine.*ollama/i);
   });
 });
 

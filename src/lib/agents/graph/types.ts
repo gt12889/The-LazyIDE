@@ -71,7 +71,7 @@ export interface StepContract {
    *  more than one resolved upstream branch and no explicit `baseBranch`. */
   mergeBranches?: string[];
   effort?: Effort;
-  engine?: 'cli' | 'pro' | 'auto';
+  engine?: 'cli' | 'local' | 'auto';
   permissionMode?: 'plan' | 'acceptEdits' | 'full';
   budgetCapUsd?: number;
   maxDurationMs?: number;
@@ -98,7 +98,7 @@ export function defaultStepContract(overrides?: Partial<StepContract>): StepCont
 
 export interface GraphDefaults {
   autonomyLevel: 'manual' | 'supervised' | 'yolo' | 'custom';
-  engine?: 'cli' | 'pro' | 'auto';
+  engine?: 'cli' | 'local' | 'auto';
   modelTier?: 'haiku' | 'sonnet' | 'opus' | string;
   permissionMode?: 'plan' | 'acceptEdits' | 'full';
   budgetCapUsd?: number;

@@ -553,16 +553,15 @@ describe('GraphProposalCard', () => {
     expect(screen.getByTestId('graph-proposal-estimated-credits')).toHaveTextContent(/~200 credits/);
   });
 
-  // Item 7 fix — the owner's standing rule: a plan running via a CLI
-  // subscription (Claude/Codex) must say explicitly it costs no credits,
-  // never show a dollar figure or a credits number that was never charged.
+  // Forge has no metered engine: every plan says explicitly it costs no
+  // credits AND shows the informational estimate (never a dollar figure).
   it('states explicitly that a subscription-routed plan costs no credits', () => {
     mockedGetProviderMode.mockReturnValue('claude-code');
     const msg = makeProposalMessage();
     renderCard(msg);
     const notice = screen.getByTestId('graph-proposal-no-credits');
     expect(notice).toHaveTextContent(/no credits/i);
-    expect(screen.queryByTestId('graph-proposal-estimated-credits')).not.toBeInTheDocument();
+    expect(screen.getByTestId('graph-proposal-estimated-credits')).toHaveTextContent(/~250 credits/);
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
   });
 
@@ -872,23 +871,23 @@ describe('GraphProposalCard', () => {
       expect(chipB.textContent?.toLowerCase()).toContain('haiku');
     });
 
-    it('lists ONLY the rails actually available — jsdom default (Claude CLI detected, Pro inactive, no BYOK key) shows the free group plus the Claude group, and no disabled/locked option is ever rendered — 2026-08-06 (founder: "je devrais juste voir les options quand elles sont selectionnable, exemple claude cli seulement si je suis connecte")', () => {
+    it('lists ONLY the rails actually available — jsdom default shows the always-present local group, and no disabled/locked option is ever rendered', () => {
       const msg = makeProposalMessage('pending');
       msg.proposal!.steps = [{ id: 'step-1', description: 'Do the thing' }];
       renderWithStepModelHandler(msg);
       fireEvent.click(screen.getByTestId('graph-proposal-step-model-step-1'));
-      // jsdom/non-Tauri default entitlements: claudeSub=true, pro='inactive',
-      // byok=null — the Claude subscription rail is available, PLUS the
-      // always-present free group (ox alpha, no entitlement required — see
-      // modelPickerOptions.ts). No Pro/BYOK rail: those stay absent.
+      // jsdom/non-Tauri default entitlements: only the local group (the
+      // Forge default, always offered — see modelPickerOptions.ts). No
+      // other rail: those stay absent. Searching ignores group collapse,
+      // so 'hermes' must surface the local option.
+      fireEvent.change(screen.getByTestId('model-picker-search'), { target: { value: 'hermes' } });
       const options = screen.getAllByTestId('graph-proposal-step-model-option');
       expect(options.length).toBeGreaterThan(0);
       // No disabled/locked option anywhere — an unavailable rail is absent,
       // never shown greyed out.
       expect(screen.queryAllByTestId('graph-proposal-step-model-option-locked').length).toBe(0);
       const labels = options.map((o) => o.textContent ?? '');
-      expect(labels.some((l) => l.includes('Claude'))).toBe(true);
-      expect(labels.some((l) => l.toLowerCase().includes('glm') || l.toLowerCase().includes('free'))).toBe(true);
+      expect(labels.some((l) => l.toLowerCase().includes('hermes'))).toBe(true);
     });
   });
 });

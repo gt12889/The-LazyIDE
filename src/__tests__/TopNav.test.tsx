@@ -59,7 +59,7 @@ function settingsPill(): HTMLElement {
 /** Every real nav pill's testid (nav-pill-<SpaceId>), matching TopNav.tsx's
  *  own NAV_PILL_ITEMS + the settings gear — used to assert "exactly one
  *  current" across the whole segmented group, not just the space pills. */
-const ALL_NAV_PILL_TESTIDS = ['nav-pill-agents', 'nav-pill-code', 'nav-pill-brain', 'nav-pill-team', 'nav-pill-settings'];
+const ALL_NAV_PILL_TESTIDS = ['nav-pill-agents', 'nav-pill-code', 'nav-pill-brain', 'nav-pill-settings'];
 
 describe('TopNav — update-available dot on the Settings pill', () => {
   it('shows no dot, but still a real (non-emoji) aria-label, when idle', () => {
@@ -133,7 +133,7 @@ describe('TopNav — nav pill accessibility (data-testid, accessible name, curre
     expect(gear.getAttribute('aria-label')).not.toBe('⚙');
   });
 
-  it.each<SpaceId>(['agents', 'code', 'brain', 'team', 'settings', 'account', 'models'])(
+  it.each<SpaceId>(['agents', 'code', 'brain', 'settings', 'account', 'models'])(
     'exactly one pill is aria-current for activeSpace=%s, and it matches the displayed space',
     (activeSpace) => {
       mockUseUpdateStore.mockReturnValue({ phase: 'idle' });
@@ -151,36 +151,22 @@ describe('TopNav — nav pill accessibility (data-testid, accessible name, curre
     },
   );
 
-  it('regression: Settings open never leaves Team (or any other pill) marked current too', () => {
+  it('regression: Settings open never leaves another pill marked current too', () => {
     mockUseUpdateStore.mockReturnValue({ phase: 'idle' });
     renderTopNav('settings');
 
-    expect(screen.getByTestId('nav-pill-team').getAttribute('aria-current')).toBeNull();
+    expect(screen.getByTestId('nav-pill-agents').getAttribute('aria-current')).toBeNull();
     expect(screen.getByTestId('nav-pill-settings').getAttribute('aria-current')).toBe('page');
   });
 });
 
-// ── Regression guard (investigated 2026-08-15) ───────────────────────────
+// ── Team pill removed ────────────────────────────────────────────────────
 //
-// A field report claimed the Team pill had vanished entirely from the DOM
-// after a rebuild 14 commits past 83e67ef, with a real "Acme" test org
-// present. Investigation found none of those 14 commits touch TopNav.tsx,
-// AppShell.tsx, AppContext.tsx, or ActiveTeamContext.tsx — the only files
-// that could gate this pill — and a from-source production build still
-// contains {id:"team",labelKey:"nav.team"} unconditionally inside
-// NAV_PILL_ITEMS. The report was environmental (stale build artifact/
-// webview cache), not a code regression.
-//
-// This test locks in the invariant that made that diagnosis possible:
-// TopNav takes no team/org data as a prop or context dependency at all
-// (renderTopNav below mounts no ActiveTeamProvider), so the Team pill can
-// never depend on an async org/membership fetch succeeding. If a future
-// change wires the pill to such a fetch, this test starts failing the
-// moment that data is unavailable — the fix then is an explicit
-// disabled/error state on the pill (per this investigation's brief), never
-// letting it silently disappear again.
-describe('TopNav — Team pill has no data dependency (regression guard)', () => {
-  it('renders nav-pill-team for every SpaceId, with no team/org context provided at all', () => {
+// The Team space is gone with Solari cloud (see AppShell.tsx) — TopNav no
+// longer renders a nav-pill-team at all. This block locks in that removal:
+// no team pill for any SpaceId.
+describe('TopNav — Team pill removed', () => {
+  it('renders no nav-pill-team for any SpaceId', () => {
     mockUseUpdateStore.mockReturnValue({ phase: 'idle' });
     const allSpaceIds: SpaceId[] = [
       'home', 'code', 'agents', 'brain', 'review', 'terminals', 'models', 'settings', 'account', 'team',
@@ -189,7 +175,7 @@ describe('TopNav — Team pill has no data dependency (regression guard)', () =>
     for (const space of allSpaceIds) {
       cleanup();
       renderTopNav(space);
-      expect(screen.getByTestId('nav-pill-team')).toBeInTheDocument();
+      expect(screen.queryByTestId('nav-pill-team')).toBeNull();
     }
   });
 });

@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { emit, on } from '../lib/bus';
 import {
   remapBotDeliverablePath,
-  remapBotCloudDeliverablePath,
   registerBotToolHandlers,
   resetBotToolHandlers,
   handleBotRequestIntervention,
@@ -11,17 +10,11 @@ import { getTool } from '../lib/agents/toolRegistry';
 import { toolHandlers } from '../lib/tools/handlers/index';
 import { botIdForMission, registerBotRun, resetBotEngineState } from '../lib/bots/botEngine';
 import { resetInterventions } from '../lib/bots/botRequestIntervention';
-import { emitCdpPageView } from '../lib/solari/cdpBrowser';
 
 vi.mock('../lib/bus', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/bus')>();
   return { ...actual, emit: vi.fn(actual.emit) };
 });
-
-vi.mock('../lib/solari/solariSessions', () => ({
-  missionIdForBrowserSession: vi.fn((sessionId: string) => (sessionId === 'sess_1' ? 'M1' : undefined)),
-  registerRunArtifactStamper: vi.fn(),
-}));
 
 describe('remapBotDeliverablePath', () => {
   it('prefixes relative writes under .lazy/bot-deliverables/<botId>/', () => {
@@ -32,12 +25,6 @@ describe('remapBotDeliverablePath', () => {
   it('does not double-prefix an already-remapped path', () => {
     const p = '.lazy/bot-deliverables/bot_1/out.txt';
     expect(remapBotDeliverablePath('bot_1', p)).toBe(p);
-  });
-
-  it('remaps cloud writes under /workspace/bot-deliverables/<botId>/ (C83)', () => {
-    expect(remapBotCloudDeliverablePath('bot_1', 'out.txt')).toBe('/workspace/bot-deliverables/bot_1/out.txt');
-    expect(remapBotCloudDeliverablePath('bot_1', '/workspace/bot-deliverables/bot_1/out.txt'))
-      .toBe('/workspace/bot-deliverables/bot_1/out.txt');
   });
 });
 
@@ -92,38 +79,22 @@ describe('bot tool handler wiring', () => {
     );
   });
 
-  it('solari:approvalRequest on a bot mission surfaces approval in the header channel', () => {
-    emit('solari:approvalRequest', {
-      missionId: 'M1',
-      tool: 'cloud_browser_click',
-      args: {},
-      klass: 'browse',
-      reason: 'class',
-      page: { url: 'https://example.com/checkout' },
-      requestedAt: Date.now(),
-    });
-    expect(vi.mocked(emit)).toHaveBeenCalledWith(
-      'bot:intervention',
-      expect.objectContaining({
-        botId: 'bot_1',
-        reason: 'approval',
-        detail: 'cloud_browser_click @ https://example.com/checkout',
-      }),
+  it('write_file on a bot mission remaps into the bot deliverables silo', async () => {
+    const inner = vi.fn(async () => 'ok');
+    toolHandlers.write_file = inner as never;
+    // Re-register so the wrapper captures the current inner handler.
+    resetBotToolHandlers();
+    toolHandlers.write_file = inner as never;
+    registerBotToolHandlers();
+    await toolHandlers.write_file({ path: 'out.txt', content: 'hi' }, { missionId: 'M1' } as never);
+    expect(inner).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '.lazy/bot-deliverables/bot_1/out.txt' }),
+      expect.anything(),
     );
   });
 
-  it('CDP page views on login walls auto-request intervention', () => {
-    emitCdpPageView({ sessionId: 'sess_1', url: 'https://github.com/login', title: 'Sign in to GitHub' });
-    expect(vi.mocked(emit)).toHaveBeenCalledWith(
-      'bot:intervention',
-      expect.objectContaining({ botId: 'bot_1', reason: 'login', detail: 'https://github.com/login' }),
-    );
-  });
-
-  it('ignores CDP page views when the session is not a bot mission', () => {
-    const before = vi.mocked(emit).mock.calls.length;
-    emitCdpPageView({ sessionId: 'sess_other', url: 'https://github.com/login', title: 'Sign in' });
-    expect(vi.mocked(emit).mock.calls.length).toBe(before);
+  it('ignores unknown missions for bot ownership', () => {
     expect(botIdForMission('M1')).toBe('bot_1');
+    expect(botIdForMission('M-other')).toBeUndefined();
   });
 });

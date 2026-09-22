@@ -15,7 +15,7 @@ export function resolveManagerTurnMode(
   nativeMode: ProviderMode,
 ): ProviderMode {
   if (engineOverride === 'cli') return nativeMode;
-  if (engineOverride === 'pro') return 'managed';
+  if (engineOverride === 'local') return 'local';
   return rawMode;
 }
 

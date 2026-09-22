@@ -1,14 +1,13 @@
 /* managedAgentTurnError.ts — in-loop stream-error classification extracted
    from planAndActManaged.
 
-   Measured 2026-08-28: planAndActManaged cyclomatic complexity was 71 after
-   the prepare/final/execute split (ESLint ceiling 12). This module owns the
-   money-incident AbortError path, BUG-1 no_credits, the 2026-08-05 DeepSeek
-   402 definitive-provider path, and V4 transient retry. Behavior is copied,
-   not redesigned. Does not import managedAgent.ts (cycle). */
+   Forge: no hosted backend, so there is no wallet to exhaust and no
+   provider key to revoke server-side. The 'no_credits' and 'provider'
+   classifications below survive as message-shape matchers (the loop,
+   recovery.ts, and settle still speak that reason vocabulary) for engines
+   that report quota/auth failures in-band (Ollama 404 = model not pulled,
+   CLI auth errors). Does not import managedAgent.ts (cycle). */
 
-import { ManagedUnavailableError } from '../models/managedProvider.js';
-import { classifyDefinitiveProviderError } from '../models/byokProviders.js';
 import type { ActionEvent } from './types.js';
 import { agentErrorEvent } from './agentError.js';
 import type { TFunc } from './runtime.js';
@@ -19,12 +18,19 @@ export type ClassifiedTurnError =
   | { kind: 'provider'; providerId: string; shortReason: string }
   | { kind: 'transient' };
 
+/** Definitive engine rejections: retrying the IDENTICAL request can never
+ *  succeed (bad credentials, HTTP 401/402/403/404, unknown model). */
+const DEFINITIVE_PATTERN = /\b(401|402|403|404)\b|no_credits|insufficient balance|invalid api key|model not found/i;
+
+/** Quota-shaped failures: the engine is reachable but refuses this run. */
+const QUOTA_PATTERN = /no_credits|crédits pro épuisés|insufficient balance|quota exceeded/i;
+
 export function classifyManagedTurnError(err: unknown): ClassifiedTurnError {
   if (err instanceof Error && err.name === 'AbortError') return { kind: 'abort' };
-  if (err instanceof ManagedUnavailableError && err.code === 'no_credits') return { kind: 'no_credits' };
-  const definitive = classifyDefinitiveProviderError(err);
-  if (definitive) {
-    return { kind: 'provider', providerId: definitive.providerId, shortReason: definitive.shortReason };
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  if (QUOTA_PATTERN.test(message)) return { kind: 'no_credits' };
+  if (DEFINITIVE_PATTERN.test(message)) {
+    return { kind: 'provider', providerId: 'engine', shortReason: message.slice(0, 200) };
   }
   return { kind: 'transient' };
 }

@@ -1330,6 +1330,8 @@ export const fr: TranslationDict = {
   'settings.access.autoActive': 'AUTO · ACTIF',
   'settings.access.cli.title': 'Abonnement (CLI d\'agent)',
   'settings.access.cli.desc': 'Utilise ton propre abonnement CLI — aucune clé API requise, aucun coût Lazy.',
+  'settings.access.local.title': 'Moteur local (Ollama / LM Studio)',
+  'settings.access.local.desc': 'Z�ro co�t, z�ro compte � Hermes 3 sur ta propre machine.',
   'settings.access.cli.claudeDesc': 'Anthropic — modèle par défaut : Haiku',
   'settings.access.cli.codexDesc': 'OpenAI codex-cli — nécessite un compte OpenAI',
   'settings.access.cli.devinDesc': 'Cognition — SWE-2 et le catalogue de ton compte via ACP',
@@ -1344,11 +1346,16 @@ export const fr: TranslationDict = {
   'settings.engine.pro': 'Pro (géré par Lazy) — abonnement requis',
   'settings.engine.pro.detail': 'Abonne-toi dans l\'onglet Compte pour activer l\'accès géré.',
   'settings.engine.mock': 'Aucun fournisseur détecté',
+  'settings.engine.local': 'Moteur local (Ollama)',
+  'settings.engine.local.detail': 'Hermes 3 sur ta propre machine � z�ro co�t, z�ro compte.',
   'settings.engine.mock.detail': 'Ajoute une clé API ou connecte-toi via Claude Code.',
 
   // ── Settings — models by mode ─────────────────────────────────
   'settings.models.byMode': 'Modèles par mode',
   'settings.models.byokLocalNote': 'Clés BYOK stockées localement, jamais envoyées ailleurs.',
+  'settings.models.localNote': 'Local d�abord : Ollama sur localhost sert {default}, sans co�t ni compte.',
+  'settings.models.localModel': 'Mod�le Ollama',
+  'settings.models.useLocal': 'Utiliser',
 
   // ── Settings — billing extras ─────────────────────────────────
   'settings.billing.creditsManaged': 'Crédits gérés (Pro)',
@@ -1368,6 +1375,7 @@ export const fr: TranslationDict = {
 
   // ── Omnibar — account chip & popover ──────────────────────────
   'account.chip.label': 'Compte et abonnement',
+  'account.chip.models': 'Mod�les',
   'account.chip.pro': 'Pro',
   'account.chip.free': 'Gratuit',
   'account.chip.goPro': 'Passer Pro',
@@ -1463,6 +1471,8 @@ export const fr: TranslationDict = {
   'settings.readiness.codex.notFound': 'Binaire codex introuvable sur PATH.',
   'settings.readiness.codex.howToEnable': 'Installe OpenAI Codex CLI (npm i -g @openai/codex), puis redémarre Lazy.',
   'settings.readiness.detectingCli': 'Détection CLI en cours...',
+  'settings.readiness.local.label': 'LLM local (Ollama / LM Studio)',
+  'settings.readiness.local.howToEnable': 'Lance Ollama (ollama serve) � Hermes 3 est inclus avec Forge.',
   'settings.readiness.byok.label': 'Clé API {provider} (BYOK)',
   'settings.readiness.byok.noKey': 'Aucune clé API {provider} configurée.',
   'settings.readiness.byok.howToEnable': 'Ajoute ta clé dans Réglages > Modèles, puis clique « Utiliser {provider} ».',
@@ -1746,6 +1756,7 @@ export const fr: TranslationDict = {
   'assistant.engine.managed': 'Pro · géré',
   'assistant.engine.pro': 'Pro · non configuré',
   'assistant.engine.mock': 'Aucun fournisseur',
+  'assistant.engine.local': 'Local',
   'assistant.brainUnavailable': 'Mémoire indisponible',
   'assistant.timeoutError': "Le modèle n'a pas répondu dans le temps imparti. Réessaie ou vérifie ton moteur dans Réglages.",
   'assistant.generationError': 'Erreur lors de la génération.',

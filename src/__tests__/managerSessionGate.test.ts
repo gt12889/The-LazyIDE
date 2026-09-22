@@ -1,32 +1,32 @@
 /**
- * managerSessionGate.test.ts — unsigned free GLM must not hit the ai-proxy.
+ * managerSessionGate.test.ts — Forge: no hosted backend, so no turn ever
+ * needs a session. managerTurnNeedsSession is always false.
  */
 import { describe, it, expect } from 'vitest';
 import {
   managerTurnNeedsSession,
+  hasManagedSession,
   formatManagerUserError,
 } from '../lib/agents/managerSessionGate';
-import { FREE_OPENROUTER_MODEL_ID } from '../lib/models/openrouterCatalog';
 
 describe('managerTurnNeedsSession', () => {
-  it('web mock + free rail tier needs a session (free rail rides the ai-proxy; id updated to the live default after the 2026-09-11 upstream pull)', () => {
-    expect(managerTurnNeedsSession(FREE_OPENROUTER_MODEL_ID, 'mock')).toBe(true);
+  it('never needs a session for a local id', () => {
+    expect(managerTurnNeedsSession('local/hermes3', 'local')).toBe(false);
   });
 
-  it('web mock + native Claude id does not use the proxy', () => {
+  it('never needs a session for a native Claude id', () => {
     expect(managerTurnNeedsSession('claude-sonnet-5', 'mock')).toBe(false);
   });
 
-  it('web mock + paid OpenRouter id does not use this gate (not offered unsigned)', () => {
-    expect(managerTurnNeedsSession('openai/gpt-5.6-luna', 'mock')).toBe(false);
-    // The bare z-ai/glm-5.2 id became a PAID catalog entry in the
-    // 2026-09-02 split — the free rail is the :free variant above.
-    expect(managerTurnNeedsSession('z-ai/glm-5.2', 'mock')).toBe(false);
+  it('never needs a session on cli modes', () => {
+    expect(managerTurnNeedsSession('claude-sonnet-5', 'claude-code')).toBe(false);
+    expect(managerTurnNeedsSession('local/hermes3', 'local')).toBe(false);
   });
+});
 
-  it('desktop managed/cli modes are not this gate (other rails)', () => {
-    expect(managerTurnNeedsSession('z-ai/glm-5.2', 'managed')).toBe(false);
-    expect(managerTurnNeedsSession('z-ai/glm-5.2', 'claude-code')).toBe(false);
+describe('hasManagedSession', () => {
+  it('is always true (no session to check)', async () => {
+    expect(await hasManagedSession()).toBe(true);
   });
 });
 

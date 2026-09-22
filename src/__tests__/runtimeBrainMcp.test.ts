@@ -163,11 +163,11 @@ describe('planAndActLive task prompt — brain-everywhere mid-mission hint', () 
     expect(closingIdx).toBeGreaterThan(hintIdx);
   });
 
-  it('does not add the hint to the managed (Pro) loop prompt — Rust MCP wiring is native-claude only', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
+  it('does not add the hint to the local-loop prompt — Rust MCP wiring is native-claude only', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
     const { planAndActManaged } = await import('../lib/agents/managedAgent');
 
-    await planAndAct(makeOpts({ managedModel: 'openrouter/some-model' }));
+    await planAndAct(makeOpts({ managedModel: 'local/hermes3' }));
 
     expect(planAndActManaged).toHaveBeenCalledTimes(1);
     const [managedOpts] = (planAndActManaged as ReturnType<typeof vi.fn>).mock.calls[0] as [{ missionTask?: string; missionTitle: string }];

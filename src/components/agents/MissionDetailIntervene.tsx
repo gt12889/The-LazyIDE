@@ -20,12 +20,12 @@ import { useToast } from '../ui';
 interface MissionDetailInterveneProps {
   mission: Mission;
   /** Whether this mission's engine is the managed (Pro) loop — computed
-   *  once in MissionDetail.tsx via isManagedAgentAvailable() and passed down
+   *  once in MissionDetail.tsx via isLocalLoopAvailable() and passed down
    *  so every consumer of the honesty distinction agrees on one answer. */
-  isManagedEngine: boolean;
+  isLoopEngine: boolean;
 }
 
-export function MissionDetailIntervene({ mission, isManagedEngine }: MissionDetailInterveneProps) {
+export function MissionDetailIntervene({ mission, isLoopEngine }: MissionDetailInterveneProps) {
   const { interveneMission } = useAgentsStoreActions();
   const { t } = useI18n();
   const { toast } = useToast();
@@ -38,21 +38,21 @@ export function MissionDetailIntervene({ mission, isManagedEngine }: MissionDeta
     interveneMission(mission.id, text);
     setInterventionText('');
     toast(
-      isManagedEngine
+      isLoopEngine
         ? t('agents.detail.interventionQueuedManaged')
         : t('agents.detail.interventionQueuedNative'),
       'info',
     );
     setTimeout(() => containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
-  }, [interventionText, mission.id, interveneMission, isManagedEngine, toast, t]);
+  }, [interventionText, mission.id, interveneMission, isLoopEngine, toast, t]);
 
   if (mission.status !== 'running') return null;
 
-  const disclaimer = isManagedEngine
+  const disclaimer = isLoopEngine
     ? t('agents.detail.liveSteeringConnected')
     : t('agents.detail.liveSteeringUnavailable');
 
-  const submitTitle = isManagedEngine
+  const submitTitle = isLoopEngine
     ? t('agents.detail.sendAtNextStep')
     : t('agents.detail.queueForNextRun');
 

@@ -32,10 +32,6 @@ vi.mock('../lib/models/claudeCodeProvider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/models/claudeCodeProvider')>();
   return { ...actual, streamClaudeCodeTurn: vi.fn() };
 });
-vi.mock('../lib/models/managedProvider', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/models/managedProvider')>();
-  return { ...actual, streamManagedAgentTurn: vi.fn() };
-});
 vi.mock('../lib/models/cliBackendProvider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/models/cliBackendProvider')>();
   return { ...actual, cliBackendProvider: vi.fn() };

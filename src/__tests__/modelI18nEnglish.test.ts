@@ -1,21 +1,20 @@
 /* modelI18nEnglish.test.ts — regression test for hardcoded French.
-
-   2026-08 i18n pass: several lib/models + lib/billing functions used to
-   return hardcoded French copy unconditionally (BYOK "no key configured"
-   errors, provider readiness reasons, the model-picker group headers and
-   empty-state fallback, billing-portal errors) — the exact bug class
-   RulesPanelI18nEnglish.test.tsx / HealthPanelI18nEnglish.test.tsx /
-   CommandPaletteI18n.test.tsx guard for on the React side, and
-   readinessI18nEnglish.test.ts (lib/models/readiness.ts) guards for on the
-   non-React side. This file extends that same non-React coverage to the
-   functions this pass added an optional `t` translator to.
-
-   Every function under test accepts an optional translator (defaulting to
-   the ORIGINAL hardcoded French when omitted — see each module's own doc
-   comment). This test builds a translator from the real `en` locale
-   dictionary and asserts the English copy comes out, with none of the
-   previously-hardcoded French leaking through.
-*/
+ *
+ * 2026-08 i18n pass: several lib/models functions used to return hardcoded
+ * French copy unconditionally (provider readiness reasons, the model-picker
+ * group headers and empty-state fallback) — the exact bug class
+ * RulesPanelI18nEnglish.test.tsx / HealthPanelI18nEnglish.test.tsx /
+ * CommandPaletteI18n.test.tsx guard for on the React side, and
+ * readinessI18nEnglish.test.ts (lib/models/readiness.ts) guards for on the
+ * non-React side. This file extends that same non-React coverage to the
+ * functions this pass added an optional `t` translator to.
+ *
+ * Every function under test accepts an optional translator (defaulting to
+ * the hardcoded English copy — see each module's own doc comment). This
+ * test builds a translator from the real `en` locale dictionary and
+ * asserts the English copy comes out, with none of the previously
+ * hardcoded French leaking through.
+ */
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { en } from '../i18n/locales/en';
@@ -43,33 +42,6 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-describe('byokProviders.ts — createOpenAICompatProvider localizes to English', () => {
-  it('label uses the English "(BYOK)" copy', async () => {
-    const { createOpenAICompatProvider, resolveByokDef } = await import('../lib/models/byokProviders');
-    const def = resolveByokDef('deepseek')!;
-    const provider = createOpenAICompatProvider(def, tEn);
-    expect(provider.label).toBe('DeepSeek (BYOK)');
-    expect(provider.label).not.toMatch(FRENCH_LEAK_PATTERN);
-  });
-
-  it('the missing-key streamChat error renders in English, not French', async () => {
-    const { createOpenAICompatProvider, resolveByokDef } = await import('../lib/models/byokProviders');
-    const def = resolveByokDef('deepseek')!;
-    const provider = createOpenAICompatProvider(def, tEn);
-    const chunks: string[] = [];
-    for await (const c of provider.streamChat({
-      mode: 'ask',
-      model: { id: 'deepseek-chat', label: 'DeepSeek Chat', provider: 'deepseek' },
-      messages: [],
-    } as never)) {
-      chunks.push(c);
-    }
-    const text = chunks.join('');
-    expect(text).toMatch(/No DeepSeek API key configured/);
-    expect(text).not.toMatch(FRENCH_LEAK_PATTERN);
-  });
-});
-
 describe('models/index.ts — describeProviderReadiness localizes to English', () => {
   it('mock mode reason is English', async () => {
     const { describeProviderReadiness } = await import('../lib/models/index');
@@ -79,22 +51,31 @@ describe('models/index.ts — describeProviderReadiness localizes to English', (
     expect(r.reason).not.toMatch(FRENCH_LEAK_PATTERN);
   });
 
-  it('pro mode reason is English', async () => {
+  it('falls back to the hardcoded English when no translator is supplied', async () => {
     const { describeProviderReadiness } = await import('../lib/models/index');
-    const r = describeProviderReadiness('pro', tEn);
+    const r = describeProviderReadiness('mock');
     expect(r.ready).toBe(false);
+    expect(r.reason).toMatch(/No engine detected/);
     expect(r.reason).not.toMatch(FRENCH_LEAK_PATTERN);
-    expect(r.reason).toMatch(/Pro subscription required/);
+  });
+
+  it('ready engines carry no reason in any locale', async () => {
+    const { describeProviderReadiness } = await import('../lib/models/index');
+    for (const mode of ['claude-code', 'codex', 'devin', 'local'] as const) {
+      const r = describeProviderReadiness(mode, tEn);
+      expect(r.ready).toBe(true);
+      expect(r.reason).toBeUndefined();
+    }
   });
 });
 
 describe('modelPickerOptions.ts — group labels and fallback messages localize to English', () => {
-  it('buildModelPickerOptions labels the Claude-subscription and Pro groups in English', async () => {
+  it('buildModelPickerOptions labels the Claude-subscription and Devin groups in English', async () => {
     const { buildModelPickerOptions } = await import('../lib/models/modelPickerOptions');
-    const result = buildModelPickerOptions({ claudeSub: true, pro: 'active', codexManaged: false }, tEn);
+    const result = buildModelPickerOptions({ claudeSub: true, codexManaged: false, devin: true, local: true }, tEn);
     const labels = result.groups.map((g) => g.label);
     expect(labels).toContain('Claude Subscription');
-    expect(labels).toContain('LazyPro / Managed');
+    expect(labels).toContain('Devin CLI');
     for (const label of labels) {
       expect(label).not.toMatch(FRENCH_LEAK_PATTERN);
     }
@@ -108,9 +89,11 @@ describe('modelPickerOptions.ts — group labels and fallback messages localize 
     expect(modelManagedByCodexMessage(tEn)).not.toMatch(FRENCH_LEAK_PATTERN);
   });
 
-  it('falls back to the original French when no translator is supplied (unchanged default behavior)', async () => {
-    const { noModelFallbackMessage } = await import('../lib/models/modelPickerOptions');
-    expect(noModelFallbackMessage()).toMatch(/Aucun modèle disponible/);
+  it('falls back to the hardcoded English when no translator is supplied (unchanged default behavior)', async () => {
+    const { noModelFallbackMessage, NO_MODEL_FALLBACK_MESSAGE } = await import('../lib/models/modelPickerOptions');
+    expect(noModelFallbackMessage()).toBe(NO_MODEL_FALLBACK_MESSAGE);
+    expect(noModelFallbackMessage()).toMatch(/No model available/);
+    expect(noModelFallbackMessage()).not.toMatch(FRENCH_LEAK_PATTERN);
   });
 });
 

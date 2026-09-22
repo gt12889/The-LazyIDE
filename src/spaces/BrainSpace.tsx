@@ -45,7 +45,6 @@ import { useState, useEffect, useCallback, useRef, useId, useMemo, lazy, Suspens
 import { useI18n } from '../i18n';
 import { BrainControls, BrainWiki, IndexingBanner, TimelineScrubber, WikiTab } from '../components/brain';
 import { BrainFilters } from '../components/brain/BrainFilters';
-import { SyncStatusBanner } from '../components/brain/SyncStatusBanner';
 import { BrainTimeline } from '../components/brain/BrainTimeline';
 import { LateJoinerTour } from '../components/brain/LateJoinerTour';
 import { getPlatform } from '../lib/platform';
@@ -1533,7 +1532,6 @@ export function BrainSpace() {
         onPublish={() => setShowPublishDialog(true)}
       />
 
-      <SyncStatusBanner />
       <BrainTimeline nodes={brainData.nodes} />
 
       {/* Filter bar — Kind / Project / Author */}

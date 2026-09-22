@@ -1,15 +1,15 @@
 /* ProvidersPanel — per-backend readiness status + active indicator.
 
-   Renders one card per backend (Claude CLI, Codex CLI, BYOK Anthropic, Pro managed)
-   showing:
+   Renders one card per backend (Claude CLI, Codex CLI, local Ollama
+   engine) showing:
    - ready / not-ready indicator (green dot / red dot)
    - reason text when not ready
    - actionable "how to enable" instruction when not ready
-   - "ACTIF" badge on the currently active backend
+   - "ACTIVE" badge on the currently active backend
 
    NOTE: readiness data depends on module-level state populated by
-   initProviderMode() (CLI detection) and setManagedAvailability() (billing).
-   This panel reads that state synchronously; a page-reload re-checks CLIs.
+   initProviderMode() (CLI detection). This panel reads that state
+   synchronously; a page-reload re-checks CLIs.
 */
 
 import { getAllBackendsReadiness, activeBackendId } from '../../lib/models/readiness';
@@ -153,7 +153,6 @@ export function ProvidersPanel() {
   const backends = getAllBackendsReadiness(t);
   const mode = getProviderMode();
   const activeId = activeBackendId(mode);
-  const isProMode = mode === 'pro' || mode === 'managed';
 
   return (
     <div
@@ -192,8 +191,8 @@ export function ProvidersPanel() {
         {t('settings.providers.cliDetectionNote')}
       </p>
 
-      {/* Model picker: only shown in Pro / Managed mode */}
-      {isProMode && <ModelPicker />}
+      {/* Model picker — always shown: the model choice applies to every rail */}
+      <ModelPicker />
     </div>
   );
 }

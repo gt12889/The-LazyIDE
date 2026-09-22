@@ -1,35 +1,25 @@
-/* sweepBoot.test.ts — unit tests for the orphan sweep at boot. */
+/* sweepBoot.test.ts — boot hook is a no-op (Forge: no cloud sessions to sweep). */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { bootSweepOrphans, resetSweepBoot } from '../lib/bots/sweepBoot';
-
-vi.mock('../lib/solari/solariSessions', () => ({
-  sweepOrphans: vi.fn().mockResolvedValue(undefined),
-  registerRunArtifactStamper: vi.fn(),
-}));
 
 beforeEach(() => {
   resetSweepBoot();
-  vi.clearAllMocks();
 });
 
 describe('bootSweepOrphans', () => {
-  it('calls sweepOrphans once', async () => {
-    const { sweepOrphans } = await import('../lib/solari/solariSessions');
-    await bootSweepOrphans();
-    expect(sweepOrphans).toHaveBeenCalledTimes(1);
+  it('resolves without doing anything', async () => {
+    await expect(bootSweepOrphans()).resolves.toBeUndefined();
   });
 
-  it('is idempotent — subsequent calls do not sweep again', async () => {
-    const { sweepOrphans } = await import('../lib/solari/solariSessions');
+  it('is idempotent — subsequent calls are also no-ops', async () => {
     await bootSweepOrphans();
-    await bootSweepOrphans();
-    expect(sweepOrphans).toHaveBeenCalledTimes(1);
+    await expect(bootSweepOrphans()).resolves.toBeUndefined();
   });
 
-  it('does not throw when sweepOrphans fails', async () => {
-    const { sweepOrphans } = await import('../lib/solari/solariSessions');
-    vi.mocked(sweepOrphans).mockRejectedValueOnce(new Error('network'));
+  it('resetSweepBoot allows calling again', async () => {
+    await bootSweepOrphans();
+    resetSweepBoot();
     await expect(bootSweepOrphans()).resolves.toBeUndefined();
   });
 });

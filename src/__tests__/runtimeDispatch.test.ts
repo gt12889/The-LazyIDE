@@ -1,14 +1,12 @@
 /**
  * Tests for the planAndAct routing table (mode -> engine) in runtime.ts.
  *
- * Bug being regression-tested: isManagedAgentAvailable() used to also return
- * true for 'claude-code', and was checked BEFORE isLiveAgentAvailable() in
- * planAndAct, so real claude-code missions were silently routed onto the
- * managed (ai-proxy) ReAct loop in managedAgent.ts instead of the native
- * agent_run loop (planAndActLive). Separately, 'pro' / 'live-key' / 'mock' on
- * the Tauri desktop runtime used to silently fall through to the scripted
- * placeholder loop (which fakes success by writing LAZY_AGENT_NOTES.md)
- * instead of failing the mission explicitly.
+ * Per-mission dispatch is keyed off the mission's CHOSEN model
+ * (classifyMissionModel): a `local/` id routes to planAndActManaged with the
+ * local turn streamer, a native CLI id routes to planAndActLive, each gated
+ * on that engine's own readiness. With no classifiable model, routing falls
+ * back to the active provider mode. On the desktop runtime with no usable
+ * engine, the mission fails explicitly instead of faking success.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -21,6 +19,15 @@ vi.mock('../lib/models/index', async (importOriginal) => {
   return {
     ...actual,
     getProviderMode: vi.fn(),
+  };
+});
+
+// ── Mock CLI-backend availability so isNativeModelReady() is controllable ──
+vi.mock('../lib/models/cliBackendProvider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/models/cliBackendProvider')>();
+  return {
+    ...actual,
+    isCliBackendAvailable: vi.fn(() => true),
   };
 });
 
@@ -54,7 +61,7 @@ vi.mock('../lib/brain/context', () => ({
 
 import {
   planAndAct,
-  isManagedAgentAvailable,
+  isLocalLoopAvailable,
   isLiveAgentAvailable,
 } from '../lib/agents/runtime';
 import type { PlanStep } from '../lib/agents/types';
@@ -110,55 +117,58 @@ afterEach(() => {
   setTauriRuntime(false);
 });
 
-// ── Pure gating helpers: the exact functions the original bug lived in ────
+// ── Pure gating helpers ────
 
-describe('isManagedAgentAvailable / isLiveAgentAvailable routing table', () => {
-  const cases: Array<{ mode: ProviderMode; managed: boolean; live: boolean }> = [
-    { mode: 'claude-code', managed: false, live: true },
-    { mode: 'codex', managed: false, live: true },
-    { mode: 'managed', managed: true, live: false },
-    { mode: 'pro', managed: false, live: false },
-    { mode: 'live-key', managed: false, live: false },
-    { mode: 'mock', managed: false, live: false },
+describe('isLocalLoopAvailable / isLiveAgentAvailable routing table', () => {
+  const cases: Array<{ mode: ProviderMode; local: boolean; live: boolean }> = [
+    { mode: 'claude-code', local: true, live: true },
+    { mode: 'codex', local: true, live: true },
+    { mode: 'devin', local: true, live: false },
+    { mode: 'local', local: true, live: false },
+    { mode: 'mock', local: true, live: false },
   ];
 
-  for (const { mode, managed, live } of cases) {
-    it(`mode="${mode}" (Tauri) -> managed=${managed}, live=${live}`, () => {
+  for (const { mode, local, live } of cases) {
+    it(`mode="${mode}" (Tauri) -> local=${local}, live=${live}`, () => {
       mockedGetProviderMode.mockReturnValue(mode);
-      expect(isManagedAgentAvailable()).toBe(managed);
+      expect(isLocalLoopAvailable()).toBe(local);
       expect(isLiveAgentAvailable()).toBe(live);
     });
   }
 
-  it('every mode is false for both helpers outside the Tauri runtime', () => {
+  it('both helpers are false outside the Tauri runtime', () => {
     setTauriRuntime(false);
     for (const { mode } of cases) {
       mockedGetProviderMode.mockReturnValue(mode);
-      expect(isManagedAgentAvailable()).toBe(false);
+      expect(isLocalLoopAvailable()).toBe(false);
       expect(isLiveAgentAvailable()).toBe(false);
     }
   });
-
-  it('claude-code and managed are mutually exclusive (regression for the original bug)', () => {
-    mockedGetProviderMode.mockReturnValue('claude-code');
-    // The bug: isManagedAgentAvailable() used to ALSO return true here, and
-    // was checked before isLiveAgentAvailable() in planAndAct, so claude-code
-    // missions silently ran on the managed ReAct loop instead of the native one.
-    expect(isManagedAgentAvailable()).toBe(false);
-    expect(isLiveAgentAvailable()).toBe(true);
-  });
 });
 
-// ── planAndAct dispatcher: end-to-end routing per mode ─────────────────────
+// ── planAndAct dispatcher: routing by chosen model first ───────────────────
 
 describe('planAndAct dispatcher', () => {
-  it('claude-code routes to the native live loop (invokes agent_run, not managedAgent)', async () => {
+  it('a local/ model routes to planAndActManaged (local streamer), never agent_run', async () => {
     mockedGetProviderMode.mockReturnValue('claude-code');
+    const opts = makeOpts({ managedModel: 'local/hermes3' });
+
+    await planAndAct(opts);
+
+    expect(mockedPlanAndActManaged).toHaveBeenCalledTimes(1);
+    expect(mockedPlanAndActManaged).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'local/hermes3' }),
+    );
+    expect(mockedInvoke).not.toHaveBeenCalledWith('agent_run', expect.anything());
+  });
+
+  it('a native model routes to the native live loop (invokes agent_run, not managedAgent)', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
     // stopSignal=true lets planAndActLive's wait loop resolve immediately
     // (agent_run_kill) instead of hanging on the mocked listen() that never
     // fires its done/error handlers — the routing proof (invoke('agent_run'))
     // already happened earlier in the same synchronous-until-first-await run.
-    const opts = makeOpts({ tool: 'claude', model: 'haiku', stopSignal: vi.fn(() => true) });
+    const opts = makeOpts({ managedModel: 'claude-sonnet-5', tool: 'claude', model: 'haiku', stopSignal: vi.fn(() => true) });
 
     await planAndAct(opts);
 
@@ -171,52 +181,31 @@ describe('planAndAct dispatcher', () => {
     expect(mockedPlanAndActManaged).not.toHaveBeenCalled();
   });
 
-  it('codex routes to the native live loop (unchanged)', async () => {
-    mockedGetProviderMode.mockReturnValue('codex');
-    const opts = makeOpts({ tool: 'codex', model: 'haiku', stopSignal: vi.fn(() => true) });
-
-    await planAndAct(opts);
-
-    expect(mockedInvoke).toHaveBeenCalledWith(
-      'agent_run',
-      expect.objectContaining({
-        req: expect.objectContaining({ id: 'test-mission-1', tool: 'codex' }),
-      }),
-    );
-    expect(mockedPlanAndActManaged).not.toHaveBeenCalled();
-  });
-
-  it('managed routes to planAndActManaged, unchanged', async () => {
-    mockedGetProviderMode.mockReturnValue('managed');
-    const opts = makeOpts({ managedModel: 'openrouter/some-model' });
+  it('mode="local" with no classifiable model falls back to planAndActManaged', async () => {
+    mockedGetProviderMode.mockReturnValue('local');
+    const opts = makeOpts();
 
     await planAndAct(opts);
 
     expect(mockedPlanAndActManaged).toHaveBeenCalledTimes(1);
-    expect(mockedPlanAndActManaged).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'openrouter/some-model' }),
-    );
     expect(mockedInvoke).not.toHaveBeenCalledWith('agent_run', expect.anything());
   });
 
-  it.each(['pro', 'live-key', 'mock'] as const)(
-    'mode="%s" on the desktop runtime fails explicitly instead of faking success',
-    async (mode) => {
-      mockedGetProviderMode.mockReturnValue(mode);
-      const opts = makeOpts();
+  it('mode="mock" on the desktop runtime fails explicitly instead of faking success', async () => {
+    mockedGetProviderMode.mockReturnValue('mock');
+    const opts = makeOpts();
 
-      await planAndAct(opts);
+    await planAndAct(opts);
 
-      expect(mockedPlanAndActManaged).not.toHaveBeenCalled();
-      expect(mockedInvoke).not.toHaveBeenCalledWith('agent_run', expect.anything());
-      expect(mockedInvoke).not.toHaveBeenCalledWith('write_file', expect.anything());
+    expect(mockedPlanAndActManaged).not.toHaveBeenCalled();
+    expect(mockedInvoke).not.toHaveBeenCalledWith('agent_run', expect.anything());
+    expect(mockedInvoke).not.toHaveBeenCalledWith('write_file', expect.anything());
 
-      expect(opts.onAction).toHaveBeenCalledWith(
-        expect.objectContaining({ text: expect.stringContaining('Erreur agent:') }),
-      );
-      expect(opts.onProgress).toHaveBeenCalledWith(100);
-    },
-  );
+    expect(opts.onAction).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'error' }),
+    );
+    expect(opts.onProgress).toHaveBeenCalledWith(100);
+  });
 
   it('mode="mock" outside the Tauri runtime (web demo) keeps the scripted placeholder loop', async () => {
     vi.useFakeTimers();

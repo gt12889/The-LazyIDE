@@ -24,16 +24,14 @@ vi.mock('../lib/models/entitlement', async (importOriginal) => {
   return { ...actual, getEngineReadiness: vi.fn() };
 });
 
-// Unsigned web only offers the free GLM. This modal test is about Claude CLI
-// preflight (cli-not-found / selected native id), so entitlements match a
-// desktop Claude subscription — same rails the assertions pick.
+// Desktop build offers CLI + local rails — same rails the assertions pick.
 vi.mock('../lib/models/modelPickerOptions', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/models/modelPickerOptions')>();
   return {
     ...actual,
     getModelPickerOptions: (t?: Parameters<typeof actual.getModelPickerOptions>[0]) =>
       actual.buildModelPickerOptions(
-        { claudeSub: true, pro: 'inactive', codexManaged: false, byok: null },
+        { claudeSub: true, codexManaged: false, devin: false, local: true },
         t,
       ),
   };
@@ -90,33 +88,16 @@ describe('NewMissionModal — engine preflight', () => {
     const panel = screen.getByTestId('mission-preflight-panel');
     expect(panel).toHaveTextContent(fr['engine.reason.cli-not-found']);
     expect(screen.getByTestId('preflight-configure')).toBeInTheDocument();
-    expect(screen.queryByTestId('preflight-go-pro')).not.toBeInTheDocument();
   });
 
-  it('byok-no-key: panel shows the BYOK reason without the Pro action', () => {
-    mockedReadiness.mockReturnValue({ mode: 'byok', ready: false, reason: 'byok-no-key' });
+  it('local-unreachable: panel shows the local reason', () => {
+    mockedReadiness.mockReturnValue({ mode: 'local', ready: false, reason: 'local-unreachable' });
     renderModal();
 
     fillTitleAndSubmit();
 
     expect(mockAddMission).not.toHaveBeenCalled();
-    expect(screen.getByTestId('mission-preflight-panel')).toHaveTextContent(
-      fr['engine.reason.byok-no-key'],
-    );
-    expect(screen.queryByTestId('preflight-go-pro')).not.toBeInTheDocument();
-  });
-
-  it('pro-no-credits: panel shows the credits reason plus the Passer Pro action', () => {
-    mockedReadiness.mockReturnValue({ mode: 'pro', ready: false, reason: 'pro-no-credits' });
-    renderModal();
-
-    fillTitleAndSubmit();
-
-    expect(mockAddMission).not.toHaveBeenCalled();
-    expect(screen.getByTestId('mission-preflight-panel')).toHaveTextContent(
-      fr['engine.reason.pro-no-credits'],
-    );
-    expect(screen.getByTestId('preflight-go-pro')).toBeInTheDocument();
+    expect(screen.getByTestId('mission-preflight-panel')).toBeInTheDocument();
   });
 
   it('"Configurer le moteur" navigates to Settings > Models (space id models)', () => {
@@ -127,17 +108,6 @@ describe('NewMissionModal — engine preflight', () => {
     fireEvent.click(screen.getByTestId('preflight-configure'));
 
     expect(mockedEmit).toHaveBeenCalledWith('nav:navigateSpace', 'models');
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it('"Passer Pro" navigates to Settings > Account (space id account)', () => {
-    mockedReadiness.mockReturnValue({ mode: 'pro', ready: false, reason: 'pro-inactive' });
-    const onClose = renderModal();
-
-    fillTitleAndSubmit();
-    fireEvent.click(screen.getByTestId('preflight-go-pro'));
-
-    expect(mockedEmit).toHaveBeenCalledWith('nav:navigateSpace', 'account');
     expect(onClose).toHaveBeenCalled();
   });
 

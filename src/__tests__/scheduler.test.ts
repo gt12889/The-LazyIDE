@@ -127,81 +127,29 @@ describe('resolveProvider', () => {
     expect(resolveProvider(makeMission({ model: 'claude-sonnet-5' }))).toBe('claude-cli');
   });
 
-  it('resolves an OpenRouter-shaped ("/") model id to managed', () => {
-    expect(resolveProvider(makeMission({ model: 'anthropic/claude-sonnet-5' }))).toBe('managed');
+  it('resolves a local/ model id to the local pool', () => {
+    expect(resolveProvider(makeMission({ model: 'local/hermes3' }))).toBe('local');
   });
 
-  it('resolves a native model id to a byok:<hash> pool when accessMode is byok', () => {
-    localStorage.setItem('lazy.accessSettings', JSON.stringify({ accessMode: 'byok', byokProvider: 'anthropic' }));
-    localStorage.setItem('lazy.apikey.anthropic', 'sk-ant-secret-key-value');
-
-    const pool = resolveProvider(makeMission({ model: 'claude-sonnet-5' }));
-
-    expect(pool).toMatch(/^byok:[0-9a-f]{8}$/);
-    expect(pool).not.toContain('sk-ant-secret-key-value');
+  it('resolves a legacy OpenRouter-shaped ("/") id to claude-cli (native rail)', () => {
+    expect(resolveProvider(makeMission({ model: 'claude-sonnet-5' }))).toBe('claude-cli');
   });
 
-  it('derives a stable hash: the same BYOK key always maps to the same pool', () => {
-    localStorage.setItem('lazy.accessSettings', JSON.stringify({ accessMode: 'byok', byokProvider: 'anthropic' }));
-    localStorage.setItem('lazy.apikey.anthropic', 'sk-ant-same-key');
-
-    const first = resolveProvider(makeMission({ model: 'claude-sonnet-5' }));
-    const second = resolveProvider(makeMission({ model: 'claude-haiku-4-5' }));
-
-    expect(first).toBe(second);
+  it('resolves a Devin catalog id to claude-cli', () => {
+    expect(resolveProvider(makeMission({ model: 'swe-2-medium' }))).toBe('claude-cli');
   });
 
-  it('derives DIFFERENT pools for different BYOK keys', () => {
-    localStorage.setItem('lazy.accessSettings', JSON.stringify({ accessMode: 'byok', byokProvider: 'anthropic' }));
+  it('routes a NEW mission to the claude-cli pool once the CLI rail is explicitly selected in Settings', () => {
+    localStorage.setItem('forge.accessSettings', JSON.stringify({ accessMode: 'cli', cliTool: 'claude' }));
 
-    localStorage.setItem('lazy.apikey.anthropic', 'key-one');
-    const poolOne = resolveProvider(makeMission({ model: 'claude-sonnet-5' }));
-
-    localStorage.setItem('lazy.apikey.anthropic', 'key-two');
-    const poolTwo = resolveProvider(makeMission({ model: 'claude-sonnet-5' }));
-
-    expect(poolOne).not.toBe(poolTwo);
-  });
-
-  // Money incident (2026-08-14) — Settings > Modeles "Abonnement (CLI
-  // d'agent)" claims "aucun coute Lazy" the instant it shows ACTIF. A NEW
-  // mission created after that switch must be scheduled against the
-  // claude-cli pool, never the billed 'managed' pool this exact scheduler
-  // uses to gate/charge Lazy Pro credits — this is the concurrency layer
-  // that actually decides which provider a launch bills against, downstream
-  // of resolveManagerModelId's own id resolution (see managerEngine.test.ts's
-  // "resolveManagerModelId" describe block for that layer's coverage).
-  it('routes a NEW mission to the claude-cli pool, never managed, once the CLI rail is explicitly selected in Settings', () => {
-    localStorage.setItem('lazy.accessSettings', JSON.stringify({ accessMode: 'cli', cliTool: 'claude' }));
-
-    // A bare native id is exactly what resolveManagerModelId (managerEngine.ts)
-    // hands a launch_mission action once the ambient mode reads 'claude-code'
-    // (this rail) — see that module's mode === 'claude-code' branch.
     const pool = resolveProvider(makeMission({ model: 'claude-sonnet-5' }));
 
     expect(pool).toBe('claude-cli');
-    expect(pool).not.toBe('managed');
   });
 
-  // Live repro (2026-09-02): a deepseek-chat LazyBot, CLI selected in
-  // Settings, landed in 'claude-cli' and waited behind a pool it never used.
-  it('routes a BYOK-catalog model (its provider key set) to that key\'s own byok pool, whatever the ambient mode', () => {
-    localStorage.setItem('lazy.accessSettings', JSON.stringify({ accessMode: 'cli', cliTool: 'claude' }));
-    localStorage.setItem('lazy.apikey.deepseek', 'sk-deepseek-secret');
-
-    const pool = resolveProvider(makeMission({ model: 'deepseek-chat', botId: 'bot_1' }));
-
-    expect(pool).toMatch(/^byok:[0-9a-f]{8}$/);
-    expect(pool).not.toContain('sk-deepseek-secret');
-    // Same key → same pool as any other deepseek model; a different key → a different pool.
-    expect(resolveProvider(makeMission({ model: 'deepseek-reasoner' }))).toBe(pool);
-    localStorage.setItem('lazy.apikey.deepseek', 'sk-other');
-    expect(resolveProvider(makeMission({ model: 'deepseek-chat' }))).not.toBe(pool);
-  });
-
-  it('a BYOK-catalog model WITHOUT its key stays on the native/CLI route (nothing to run it on the key)', () => {
-    localStorage.setItem('lazy.accessSettings', JSON.stringify({ accessMode: 'cli', cliTool: 'claude' }));
-    expect(resolveProvider(makeMission({ model: 'deepseek-chat' }))).toBe('claude-cli');
+  it('routes a local mission to the local pool whatever the ambient mode', () => {
+    localStorage.setItem('forge.accessSettings', JSON.stringify({ accessMode: 'cli', cliTool: 'claude' }));
+    expect(resolveProvider(makeMission({ model: 'local/hermes3' }))).toBe('local');
   });
 });
 
@@ -269,16 +217,14 @@ describe('dispatch — per-pool cap enforcement', () => {
     expect(fn2).not.toHaveBeenCalled();
   });
 
-  it('applies the byok:* wildcard override to every byok:<hash> pool', async () => {
-    localStorage.setItem(LS_AGENTS_POOLS, JSON.stringify({ 'byok:*': 1 }));
-    localStorage.setItem('lazy.accessSettings', JSON.stringify({ accessMode: 'byok', byokProvider: 'anthropic' }));
-    localStorage.setItem('lazy.apikey.anthropic', 'shared-key');
+  it('applies a local pool override from localStorage', async () => {
+    localStorage.setItem(LS_AGENTS_POOLS, JSON.stringify({ local: 1 }));
 
     const fn1 = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     const fn2 = vi.fn().mockReturnValue(new Promise<void>(() => {}));
 
-    await dispatch(makeMission({ id: 'M1', model: 'claude-sonnet-5' }), fn1);
-    await dispatch(makeMission({ id: 'M2', model: 'claude-sonnet-5' }), fn2);
+    await dispatch(makeMission({ id: 'M1', model: 'local/hermes3' }), fn1);
+    await dispatch(makeMission({ id: 'M2', model: 'local/hermes3' }), fn2);
 
     expect(fn1).toHaveBeenCalledTimes(1);
     expect(fn2).not.toHaveBeenCalled();
@@ -290,18 +236,18 @@ describe('dispatch — global cap enforcement across pools', () => {
     localStorage.setItem(LS_AGENTS_MAX_PARALLEL, '2');
 
     const fnNative = vi.fn().mockReturnValue(new Promise<void>(() => {}));
-    const fnManaged1 = vi.fn().mockReturnValue(new Promise<void>(() => {}));
-    const fnManaged2 = vi.fn().mockReturnValue(new Promise<void>(() => {}));
+    const fnLocal1 = vi.fn().mockReturnValue(new Promise<void>(() => {}));
+    const fnLocal2 = vi.fn().mockReturnValue(new Promise<void>(() => {}));
 
     await dispatch(makeMission({ id: 'M1', model: 'claude-sonnet-5' }), fnNative);
-    await dispatch(makeMission({ id: 'M2', model: 'anthropic/claude-sonnet-5' }), fnManaged1);
-    // Managed's OWN pool cap (4) has room, but the GLOBAL cap (2) is already
+    await dispatch(makeMission({ id: 'M2', model: 'local/hermes3' }), fnLocal1);
+    // Local's OWN pool cap (4) has room, but the GLOBAL cap (2) is already
     // saturated by M1+M2 — M3 must queue despite its pool being far from cap.
-    await dispatch(makeMission({ id: 'M3', model: 'anthropic/claude-sonnet-5' }), fnManaged2);
+    await dispatch(makeMission({ id: 'M3', model: 'local/hermes3' }), fnLocal2);
 
     expect(fnNative).toHaveBeenCalledTimes(1);
-    expect(fnManaged1).toHaveBeenCalledTimes(1);
-    expect(fnManaged2).not.toHaveBeenCalled();
+    expect(fnLocal1).toHaveBeenCalledTimes(1);
+    expect(fnLocal2).not.toHaveBeenCalled();
   });
 
   it('0 means unlimited', async () => {
@@ -309,8 +255,8 @@ describe('dispatch — global cap enforcement across pools', () => {
     const fn1 = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     const fn2 = vi.fn().mockReturnValue(new Promise<void>(() => {}));
 
-    await dispatch(makeMission({ id: 'M1', model: 'anthropic/claude-sonnet-5' }), fn1);
-    await dispatch(makeMission({ id: 'M2', model: 'anthropic/claude-sonnet-5' }), fn2);
+    await dispatch(makeMission({ id: 'M1', model: 'claude-sonnet-5' }), fn1);
+    await dispatch(makeMission({ id: 'M2', model: 'claude-sonnet-5' }), fn2);
 
     expect(fn1).toHaveBeenCalledTimes(1);
     expect(fn2).toHaveBeenCalledTimes(1);
@@ -332,7 +278,7 @@ describe('dispatch — hardware default when maxParallel is unset', () => {
       fn.mockReturnValue(new Promise<void>(() => {})),
     );
     for (const [i, fn] of fns.entries()) {
-      await dispatch(makeMission({ id: `M${i}`, model: 'anthropic/claude-sonnet-5' }), fn);
+      await dispatch(makeMission({ id: `M${i}`, model: 'local/hermes3' }), fn);
     }
     expect(fns[0]).toHaveBeenCalledTimes(1);
     expect(fns[1]).toHaveBeenCalledTimes(1);
@@ -490,17 +436,17 @@ describe('dispatch — 429/rate-limit backoff', () => {
 });
 
 describe('dispatch — pools are independent', () => {
-  it('a backed-off claude-cli pool does not block the managed pool', async () => {
+  it('a backed-off claude-cli pool does not block the local pool', async () => {
     const holdA = deferred();
     const fnA = vi.fn().mockReturnValue(holdA.promise);
     await dispatch(makeMission({ id: 'A', model: 'claude-sonnet-5' }), fnA);
     holdA.reject(new Error('429'));
     await flush();
 
-    const fnManaged = vi.fn().mockReturnValue(new Promise<void>(() => {}));
-    await dispatch(makeMission({ id: 'M', model: 'anthropic/claude-sonnet-5' }), fnManaged);
+    const fnLocal = vi.fn().mockReturnValue(new Promise<void>(() => {}));
+    await dispatch(makeMission({ id: 'M', model: 'local/hermes3' }), fnLocal);
 
-    expect(fnManaged).toHaveBeenCalledTimes(1);
+    expect(fnLocal).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -512,7 +458,7 @@ describe('dispatch — conflict pre-flight (T1.6)', () => {
     const fnRunning = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     await dispatch(running, fnRunning);
 
-    const candidate = makeMission({ id: 'C', model: 'anthropic/claude-sonnet-5', contract: makeContract(['src/lib/foo.ts']) });
+    const candidate = makeMission({ id: 'C', model: 'claude-sonnet-5', contract: makeContract(['src/lib/foo.ts']) });
     const fnCandidate = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     // No opts.scopeInfo at all — even though candidate/running scopes DO
     // overlap, dispatch() must never know or care without scopeInfo.
@@ -525,11 +471,11 @@ describe('dispatch — conflict pre-flight (T1.6)', () => {
   });
 
   it('queues a conflicting mission with reason scope_conflict instead of launching it', async () => {
-    const running = makeMission({ id: 'R', model: 'anthropic/claude-sonnet-5', contract: makeContract(['src/lib']) });
+    const running = makeMission({ id: 'R', model: 'claude-sonnet-5', contract: makeContract(['src/lib']) });
     const fnRunning = vi.fn().mockReturnValue(new Promise<void>(() => {}));
-    await dispatch(running, fnRunning); // occupies the managed pool
+    await dispatch(running, fnRunning); // occupies the claude-cli pool
 
-    const candidate = makeMission({ id: 'C', model: 'anthropic/claude-sonnet-5', contract: makeContract(['src/lib/foo.ts']) });
+    const candidate = makeMission({ id: 'C', model: 'claude-sonnet-5', contract: makeContract(['src/lib/foo.ts']) });
     const fnCandidate = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     await dispatch(candidate, fnCandidate, {
       projectId: 'proj-1',
@@ -542,18 +488,18 @@ describe('dispatch — conflict pre-flight (T1.6)', () => {
         type: 'scheduler.queued',
         projectId: 'proj-1',
         missionId: 'C',
-        payload: { reason: 'scope_conflict', pool: 'managed', depth: 1, conflictsWith: ['R'] },
+        payload: { reason: 'scope_conflict', pool: 'claude-cli', depth: 1, conflictsWith: ['R'] },
       }),
     );
   });
 
   it('drains the scope-conflicted mission once the conflicting mission settles', async () => {
     const holdRunning = deferred();
-    const running = makeMission({ id: 'R', model: 'anthropic/claude-sonnet-5', contract: makeContract(['src/lib']) });
+    const running = makeMission({ id: 'R', model: 'claude-sonnet-5', contract: makeContract(['src/lib']) });
     const fnRunning = vi.fn().mockReturnValue(holdRunning.promise);
     await dispatch(running, fnRunning);
 
-    const candidate = makeMission({ id: 'C', model: 'anthropic/claude-sonnet-5', contract: makeContract(['src/lib/foo.ts']) });
+    const candidate = makeMission({ id: 'C', model: 'claude-sonnet-5', contract: makeContract(['src/lib/foo.ts']) });
     const fnCandidate = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     await dispatch(candidate, fnCandidate, { scopeInfo: { runningMissions: [running] } });
     expect(fnCandidate).not.toHaveBeenCalled();
@@ -566,11 +512,11 @@ describe('dispatch — conflict pre-flight (T1.6)', () => {
   });
 
   it('does not queue two disjoint missions against each other', async () => {
-    const running = makeMission({ id: 'R', model: 'anthropic/claude-sonnet-5', contract: makeContract(['docs']) });
+    const running = makeMission({ id: 'R', model: 'claude-sonnet-5', contract: makeContract(['docs']) });
     const fnRunning = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     await dispatch(running, fnRunning);
 
-    const candidate = makeMission({ id: 'C', model: 'anthropic/claude-sonnet-5', contract: makeContract(['src/lib']) });
+    const candidate = makeMission({ id: 'C', model: 'claude-sonnet-5', contract: makeContract(['src/lib']) });
     const fnCandidate = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     await dispatch(candidate, fnCandidate, { scopeInfo: { runningMissions: [running] } });
 
@@ -578,11 +524,11 @@ describe('dispatch — conflict pre-flight (T1.6)', () => {
   });
 
   it('opts.overrideConflicts launches anyway despite a detected overlap', async () => {
-    const running = makeMission({ id: 'R', model: 'anthropic/claude-sonnet-5', contract: makeContract(['src/lib']) });
+    const running = makeMission({ id: 'R', model: 'claude-sonnet-5', contract: makeContract(['src/lib']) });
     const fnRunning = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     await dispatch(running, fnRunning);
 
-    const candidate = makeMission({ id: 'C', model: 'anthropic/claude-sonnet-5', contract: makeContract(['src/lib/foo.ts']) });
+    const candidate = makeMission({ id: 'C', model: 'claude-sonnet-5', contract: makeContract(['src/lib/foo.ts']) });
     const fnCandidate = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     await dispatch(candidate, fnCandidate, {
       scopeInfo: { runningMissions: [running] },
@@ -593,12 +539,12 @@ describe('dispatch — conflict pre-flight (T1.6)', () => {
   });
 
   it('a full pool still queues with reason pool_full, never scope_conflict, even when scopeInfo is present but scopes are disjoint', async () => {
-    localStorage.setItem(LS_AGENTS_POOLS, JSON.stringify({ managed: 1 }));
-    const running = makeMission({ id: 'R', model: 'anthropic/claude-sonnet-5', contract: makeContract(['docs']) });
+    localStorage.setItem(LS_AGENTS_POOLS, JSON.stringify({ 'claude-cli': 1 }));
+    const running = makeMission({ id: 'R', model: 'claude-sonnet-5', contract: makeContract(['docs']) });
     const fnRunning = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     await dispatch(running, fnRunning);
 
-    const candidate = makeMission({ id: 'C', model: 'anthropic/claude-sonnet-5', contract: makeContract(['src/lib']) });
+    const candidate = makeMission({ id: 'C', model: 'claude-sonnet-5', contract: makeContract(['src/lib']) });
     const fnCandidate = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     await dispatch(candidate, fnCandidate, { scopeInfo: { runningMissions: [running] } });
 
@@ -606,7 +552,7 @@ describe('dispatch — conflict pre-flight (T1.6)', () => {
     expect(mockedEmitEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'scheduler.queued',
-        payload: { reason: 'pool_full', pool: 'managed', depth: 1 },
+        payload: { reason: 'pool_full', pool: 'claude-cli', depth: 1 },
       }),
     );
     expect(mockedJournalQuery).not.toHaveBeenCalled(); // never reached the conflict check at all
@@ -653,10 +599,10 @@ describe('dispatch — pressure-aware admission (founder north star)', () => {
     const fnManaged2 = vi.fn().mockReturnValue(new Promise<void>(() => {}));
 
     await dispatch(makeMission({ id: 'M1', model: 'claude-sonnet-5' }), fnNative);
-    await dispatch(makeMission({ id: 'M2', model: 'anthropic/claude-sonnet-5' }), fnManaged1);
+    await dispatch(makeMission({ id: 'M2', model: 'claude-sonnet-5' }), fnManaged1);
     // Effective cap is floor(4/2) = 2, already saturated by M1+M2 despite
     // the managed pool's own cap (4) having plenty of room.
-    await dispatch(makeMission({ id: 'M3', model: 'anthropic/claude-sonnet-5' }), fnManaged2);
+    await dispatch(makeMission({ id: 'M3', model: 'claude-sonnet-5' }), fnManaged2);
 
     expect(fnNative).toHaveBeenCalledTimes(1);
     expect(fnManaged1).toHaveBeenCalledTimes(1);
@@ -682,7 +628,7 @@ describe('dispatch — pressure-aware admission (founder north star)', () => {
     const fnBot = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     const fnAgent = vi.fn().mockReturnValue(new Promise<void>(() => {}));
 
-    await dispatch(makeMission({ id: 'B1', model: 'anthropic/claude-sonnet-5', botId: 'bot_solaritest' }), fnBot);
+    await dispatch(makeMission({ id: 'B1', model: 'claude-sonnet-5', botId: 'bot_solaritest' }), fnBot);
     await dispatch(makeMission({ id: 'M1', model: 'claude-sonnet-5' }), fnAgent);
 
     expect(fnBot).toHaveBeenCalledTimes(1);
@@ -698,8 +644,8 @@ describe('dispatch — pressure-aware admission (founder north star)', () => {
     const fn1 = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     const fn2 = vi.fn().mockReturnValue(new Promise<void>(() => {}));
 
-    await dispatch(makeMission({ id: 'B1', model: 'anthropic/claude-sonnet-5', botId: 'bot_a' }), fn1);
-    await dispatch(makeMission({ id: 'B2', model: 'anthropic/claude-sonnet-5', botId: 'bot_b' }), fn2);
+    await dispatch(makeMission({ id: 'B1', model: 'claude-sonnet-5', botId: 'bot_a' }), fn1);
+    await dispatch(makeMission({ id: 'B2', model: 'claude-sonnet-5', botId: 'bot_b' }), fn2);
 
     expect(fn1).toHaveBeenCalledTimes(1);
     expect(fn2).not.toHaveBeenCalled();
@@ -823,7 +769,7 @@ describe('dispatch — set_missions_active wiring (resilient if the command is m
     mockedInvoke.mockClear();
 
     const fn2 = vi.fn().mockReturnValue(new Promise<void>(() => {}));
-    await dispatch(makeMission({ id: 'M2', model: 'anthropic/claude-sonnet-5' }), fn2);
+    await dispatch(makeMission({ id: 'M2', model: 'claude-sonnet-5' }), fn2);
 
     expect(mockedInvoke).not.toHaveBeenCalledWith('set_missions_active', expect.anything());
   });
@@ -929,7 +875,7 @@ describe('getRunningMissionIds — reconciliation input for the "reverse leak" g
     const fnA = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     const fnB = vi.fn().mockReturnValue(new Promise<void>(() => {}));
     await dispatch(makeMission({ id: 'A', model: 'claude-sonnet-5' }), fnA);
-    await dispatch(makeMission({ id: 'B', model: 'anthropic/claude-sonnet-5' }), fnB);
+    await dispatch(makeMission({ id: 'B', model: 'claude-sonnet-5' }), fnB);
 
     expect(getRunningMissionIds().sort()).toEqual(['A', 'B']);
 

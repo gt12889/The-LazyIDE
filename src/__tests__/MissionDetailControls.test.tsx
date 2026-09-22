@@ -134,7 +134,7 @@ describe('MissionDetailControls — loop controls (DEFECT B)', () => {
         mission={loopMission}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -148,7 +148,7 @@ describe('MissionDetailControls — loop controls (DEFECT B)', () => {
         mission={loopMission}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -167,7 +167,7 @@ describe('MissionDetailControls — loop controls (DEFECT B)', () => {
         mission={pausedLoop}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -183,7 +183,7 @@ describe('MissionDetailControls — loop controls (DEFECT B)', () => {
         mission={loopMission}
         onBack={onBackSpy}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -201,7 +201,7 @@ describe('MissionDetailControls — real repo path (no more DEFAULT_REPO=".")', 
         mission={reviewMission}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -218,7 +218,7 @@ describe('MissionDetailControls — real repo path (no more DEFAULT_REPO=".")', 
         mission={reviewMission}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -237,7 +237,7 @@ describe('MissionDetailControls — real repo path (no more DEFAULT_REPO=".")', 
         mission={reviewMission}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -276,7 +276,7 @@ describe('MissionDetailControls — revert button visible after approve (T1.7 / 
         mission={missionWithSha}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -289,7 +289,7 @@ describe('MissionDetailControls — revert button visible after approve (T1.7 / 
         mission={doneMission}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -305,7 +305,7 @@ describe('MissionDetailControls — revert button visible after approve (T1.7 / 
         mission={missionWithSha}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -321,7 +321,7 @@ describe('MissionDetailControls — revert button visible after approve (T1.7 / 
         mission={{ ...doneMission, mergeSha: 'deadbeef00000000000000000000000000000001', reverted: true } as Mission}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -339,7 +339,7 @@ describe('MissionDetailControls — honesty on real failure (no fake success)', 
         mission={reviewMission}
         onBack={onBackSpy}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -361,7 +361,7 @@ describe('MissionDetailControls — honesty on real failure (no fake success)', 
         mission={reviewMission}
         onBack={onBackSpy}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -394,7 +394,7 @@ describe('MissionDetailControls — retry reachable for a judge-rejected review 
         mission={rejectedReviewMission}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -408,7 +408,7 @@ describe('MissionDetailControls — retry reachable for a judge-rejected review 
         mission={rejectedReviewMission}
         onBack={onBackSpy}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -424,7 +424,7 @@ describe('MissionDetailControls — retry reachable for a judge-rejected review 
         mission={reviewMission}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -442,7 +442,7 @@ describe('MissionDetailControls — retry reachable for a judge-rejected review 
         mission={approvedReviewMission}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -474,7 +474,7 @@ describe('MissionDetailControls â€” retry with edited task (friction fix)',
         mission={failedMission}
         onBack={onBackSpy}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -496,7 +496,7 @@ describe('MissionDetailControls â€” retry with edited task (friction fix)',
         mission={failedMission}
         onBack={onBackSpy}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -513,7 +513,7 @@ describe('MissionDetailControls â€” retry with edited task (friction fix)',
         mission={failedMission}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 
@@ -530,7 +530,7 @@ describe('MissionDetailControls â€” retry with edited task (friction fix)',
         mission={doneMission}
         onBack={vi.fn()}
         onSaveAsAgent={vi.fn()}
-        isManagedEngine={false}
+        isLoopEngine={false}
       />,
     );
 

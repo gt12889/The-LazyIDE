@@ -11,8 +11,8 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { ALL_MODELS } from '../../lib/models/registry';
-import { OPENROUTER_MODELS, findOpenRouterModel } from '../../lib/models/openrouterCatalog';
-import type { ReasoningEffort } from '../../lib/models/openrouterCatalog';
+import { findDevinModel } from '../../lib/models/devinCatalog';
+import type { ReasoningEffort } from '../../lib/models/accessSettings';
 import { getModelPickerOptions, noModelFallbackMessage, modelManagedByCodexMessage } from '../../lib/models/modelPickerOptions';
 import { getEngineReadiness, engineReasonKey } from '../../lib/models/entitlement';
 import type { EngineReadiness } from '../../lib/models/entitlement';
@@ -149,9 +149,8 @@ function resolveMaxDurationMs(optionId: DurationOptionId): number | undefined {
 }
 
 /** Seeds the form's model field with the best default for the user's CURRENT
- *  entitlements (see modelPickerOptions.ts) — the managed catalog's default
- *  when Lazy Pro is actively usable, else the Claude subscription's default,
- *  else the same native fallback as before this fix. */
+ *  entitlements (see modelPickerOptions.ts) — the CLI default when a CLI
+ *  is detected, else the local default. */
 function getInitialModelId(): string {
   return getModelPickerOptions().defaultModelId;
 }
@@ -221,14 +220,10 @@ export function NewMissionModal({ isOpen, onClose }: NewMissionModalProps) {
       immediately, same as quoteResult/preflight. */
   const [conflictTitles, setConflictTitles] = useState<string[]>([]);
 
-  // Grouped model options for the CURRENT entitlements — a Claude
-  // subscription and a Lazy Pro plan are independent and can both be active,
-  // so this offers both catalogs together instead of picking one from the
-  // single resolved provider mode (see modelPickerOptions.ts's header for
-  // the bug this replaces: #nm-model used to only ever render ALL_MODELS,
-  // the 4-model native Claude catalog, unless accessMode alone resolved to
-  // managed/pro — hiding the OpenRouter catalog from a Pro user whose
-  // accessMode preference was 'cli').
+  // Grouped model options for the CURRENT entitlements — CLI and local
+  // rails are independent, so this offers all live groups together instead
+  // of picking one from the single resolved provider mode (see
+  // modelPickerOptions.ts's header).
   const pickerOptions = getModelPickerOptions(t);
   const firstInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -243,7 +238,7 @@ export function NewMissionModal({ isOpen, onClose }: NewMissionModalProps) {
     ignoreRefs: [modelTriggerRef],
   });
   const currentModelLabel =
-    [...pickerOptions.groups, ...(pickerOptions.lockedProGroup ? [pickerOptions.lockedProGroup] : [])]
+    pickerOptions.groups
       .flatMap((g) => g.models)
       .find((m) => m.id === form.modelId)?.label ?? form.modelId;
 
@@ -455,9 +450,8 @@ export function NewMissionModal({ isOpen, onClose }: NewMissionModalProps) {
     }
 
     // Engine preflight — never launch a mission into a void (v0.1.5 W2.2).
-    // BUG-4: pass the model actually selected for this launch so a native
-    // CLI-backed pick never gets false-blocked by a global mode that
-    // happens to be pro/managed with an empty wallet.
+    // BUG-4: pass the model actually selected for this launch so a
+    // CLI-backed pick never gets false-blocked by the global mode.
     const readiness = getEngineReadiness(undefined, form.modelId);
     if (!readiness.ready && readiness.reason) {
       setPreflight(readiness);
@@ -466,19 +460,14 @@ export function NewMissionModal({ isOpen, onClose }: NewMissionModalProps) {
     setPreflight(null);
 
     // Resolve the label from the id's OWN catalog membership, not from the
-    // currently resolved provider mode — the dropdown can now offer BOTH
-    // catalogs at once (see pickerOptions above), so form.modelId may be an
-    // OpenRouter id even while accessMode privileges CLI/BYOK for routing.
-    // Mirrors Composer.tsx's handleModelSelect, which distinguishes the two
-    // id families the same way (OpenRouter ids always carry a '/').
-    const orModel = OPENROUTER_MODELS.find(m => m.id === form.modelId);
+    // currently resolved provider mode — the dropdown can offer several
+    // groups at once (see pickerOptions above). Devin-catalog and local
+    // ids live in NEITHER static catalog — keep the raw id for those (a
+    // wrong-label fallback would misroute: classifyMissionModel() routes
+    // on the raw id).
     const nativeModel = ALL_MODELS.find(m => m.id === form.modelId);
-    // Devin-catalog and BYOK-provider ids live in NEITHER static catalog —
-    // a `(nativeModel ?? DEFAULT_MODEL).label` fallback silently rewrote
-    // them to "Claude Haiku 4.5" and the mission ran the wrong engine
-    // (real repro 2026-09-08: picked swe-2-medium, node showed Claude
-    // Haiku). Keep the raw id — classifyMissionModel() routes on it.
-    const modelLabel = orModel ? orModel.id : (nativeModel?.label ?? form.modelId);
+    const devinModel = findDevinModel(form.modelId);
+    const modelLabel = nativeModel?.label ?? devinModel?.label ?? form.modelId;
 
     // T1.2 note: NewMissionInput (agentsStore.tsx, out of scope for this
     // task) has no `contract` field, and addMission's current
@@ -522,17 +511,9 @@ export function NewMissionModal({ isOpen, onClose }: NewMissionModalProps) {
     onClose();
   }, [onClose]);
 
-  const goPro = useCallback(() => {
-    // Same mechanism: space id 'account' -> SettingsSpace initialTab="account".
-    emit('nav:navigateSpace', 'account');
-    onClose();
-  }, [onClose]);
-
   if (!isOpen) return null;
 
   const worktreePreview = deriveWorktree(form.title);
-  const showProAction =
-    preflight?.reason === 'pro-inactive' || preflight?.reason === 'pro-no-credits';
 
   return createPortal(
     <div
@@ -714,7 +695,6 @@ export function NewMissionModal({ isOpen, onClose }: NewMissionModalProps) {
                 <div ref={modelPopoverRef}>
                   <ModelPickerDropdown
                     groups={pickerOptions.groups}
-                    lockedGroup={pickerOptions.lockedProGroup}
                     currentId={form.modelId}
                     direction="down"
                     onSelect={(id) => updateField('modelId', id)}
@@ -740,31 +720,19 @@ export function NewMissionModal({ isOpen, onClose }: NewMissionModalProps) {
                     : noModelFallbackMessage(t)}
               </span>
             )}
-            {/* Pro-exhausted hint only matters when the SELECTED model is
-                actually credit-metered (managed rail, non-:free) — under a
-                BYOK/CLI/Devin pick it reads as a false blocker (real QA:
-                it rendered under a DeepSeek BYOK selection). */}
-            {pickerOptions.hasOptions &&
-              pickerOptions.proExhausted &&
-              classifyMissionModel(form.modelId) === 'managed' &&
-              !form.modelId.endsWith(':free') && (
-                <span style={S.hint}>{t(engineReasonKey('pro-no-credits'))}</span>
-              )}
           </div>
 
-          {/* Reasoning effort — only shown when the selected model supports
-              reasoning (OpenRouter catalog's `reasoning` flag). 'off' disables
-              it; 'low'/'medium'/'high' control the model's reasoning depth. */}
+          {/* Reasoning effort — only shown for native CLI models (the ones
+              whose backends accept it). 'off' disables it;
+              'low'/'medium'/'high' control the model's reasoning depth. */}
           {(() => {
-            const orModel = findOpenRouterModel(form.modelId);
-            const supportsReasoning = orModel?.reasoning === true;
+            const supportsReasoning = ALL_MODELS.some((m) => m.id === form.modelId);
             if (!supportsReasoning) return null;
             const EFFORT_OPTIONS: Array<{ value: 'off' | ReasoningEffort; label: string }> = [
               { value: 'off', label: t('agents.modal.effort.off') },
               { value: 'low', label: t('agents.modal.effort.low') },
               { value: 'medium', label: t('agents.modal.effort.medium') },
               { value: 'high', label: t('agents.modal.effort.high') },
-              ...(orModel?.maxEffort ? [{ value: 'max' as const, label: t('agents.modal.effort.max') }] : []),
             ];
             return (
               <div style={S.fieldGroup}>
@@ -795,26 +763,15 @@ export function NewMissionModal({ isOpen, onClose }: NewMissionModalProps) {
               after the last relevant change; hidden until the task text is
               non-empty.
 
-              Fix D (2026-08-19 dollar-kill incident, display half) — credits
-              (usdToCredits), never €/$: the previous "~X-Y €" wording spoke
-              in currency regardless of which rail the chosen model would
-              actually route to, the exact "owner's standing rule" defect
-              this modal's own header comment on estimatedCreditsByModel
-              already documents for the manager's plan-proposal card
-              (types.ts). A native-rail pick (classifyMissionModel ===
-              'native') gets an explicit non-debited-equivalent qualifier;
-              every other rail (managed/byok) shows the same credits figure
-              as a real-spend estimate, unqualified. */}
+              Credits (usdToCredits), never €/$ — and every Forge rail is
+              non-debited (no billing), so the quote always carries the
+              non-debited qualifier. */}
           {(quoteComputing || quoteResult) && (
             <div style={S.fieldGroup}>
               <span data-testid="mission-quote-line" style={S.hint}>
                 {quoteResult
                   ? t(
-                      // 'devin' bills the user's own Devin account, never
-                      // Lazy credits — same non-debited qualifier as native.
-                      ['native', 'devin'].includes(classifyMissionModel(form.modelId) ?? '')
-                        ? 'agents.modal.quote.lineNative'
-                        : 'agents.modal.quote.line',
+                      'agents.modal.quote.lineNative',
                       {
                         creditsLo: String(usdToCredits(quoteResult.costUsd[0])),
                         creditsHi: String(usdToCredits(quoteResult.costUsd[1])),
@@ -853,7 +810,7 @@ export function NewMissionModal({ isOpen, onClose }: NewMissionModalProps) {
               style={S.input}
             />
             <span style={S.hint}>
-              {['native', 'devin'].includes(classifyMissionModel(form.modelId) ?? '')
+              {['native', 'devin', 'local'].includes(classifyMissionModel(form.modelId) ?? '')
                 ? t('agents.modal.budgetCapHintNative')
                 : t('agents.modal.budgetCapHint')}
             </span>
@@ -978,16 +935,6 @@ export function NewMissionModal({ isOpen, onClose }: NewMissionModalProps) {
               >
                 {t('engine.preflight.configure')}
               </button>
-              {showProAction && (
-                <button
-                  type="button"
-                  data-testid="preflight-go-pro"
-                  onClick={goPro}
-                  style={S.preflightBtnPrimary}
-                >
-                  {t('engine.preflight.goPro')}
-                </button>
-              )}
             </div>
           </div>
         )}

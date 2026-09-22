@@ -16,5 +16,5 @@
     "strict": true
   },
   "include": ["src/__tests__", "src"],
-  "exclude": ["src/cli"]
+  "exclude": ["src/cli", "src/__screenshots__"]
 }

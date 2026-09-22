@@ -1,7 +1,6 @@
-/* BotBootService - wires Solari orphan sweep and bot routine scheduler
+/* BotBootService - wires bot boot hygiene and bot routine scheduler
    to app boot. Mounts once at app root, INSIDE AgentsStoreProvider (see
-   AppShell.tsx), runs the sweep fire-and-forget, and starts the bot
-   scheduler for due routines.
+   AppShell.tsx), and starts the bot scheduler for due routines.
 
    No UI - returns null. Just side effects on mount.
 */
@@ -49,9 +48,6 @@ export function BotBootService() {
       defaultModel: () => resolveLazyBotRunModel(undefined, [getActiveModel().id]).model,
     });
     void bootSweepOrphans();
-    void import('../../lib/solari/solariClient').then(({ hydrateSolariCdpProxy }) => {
-      void hydrateSolariCdpProxy();
-    });
     void (async () => {
       const root = await waitForProjectRoot();
       if (root) setBotRuntimeRoot(root);

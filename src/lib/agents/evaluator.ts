@@ -4,18 +4,18 @@
    missions themselves run (see runtime.ts's planAndAct):
 
      - claude-code / codex (native CLI, Tauri)  -> evaluateLive, via agent_run
-     - managed (Pro subscription, Tauri)        -> evaluateManaged, via the
-                                                     managed provider + run_shell
-     - pro / live-key / mock (Tauri, no engine) -> evaluateScripted, real test
+     - local engine (Ollama, Tauri)             -> evaluateLocal, via the
+                                                     local turn streamer + run_shell
+     - mock (Tauri, no engine)                  -> evaluateScripted, real test
                                                      runner but no real reviewer
      - no Tauri runtime at all                  -> buildUnavailableVerdict()
 
    HONESTY CONTRACT:
    - Evaluation is NEVER fabricated. Every path either runs a real sub-agent
-     (native CLI or managed LLM) and a real test command, or returns a
+     (native CLI or local LLM) and a real test command, or returns a
      clearly-labelled placeholder verdict with passed=false explaining what's
      missing. No path invents a passing score.
-   - evaluateManaged's tester role never guesses pass/fail counts: it reports
+   - evaluateLocal's tester role never guesses pass/fail counts: it reports
      the real run_shell exit code, and only includes counts when they can be
      parsed from the command's own output.
 */
@@ -25,10 +25,9 @@ import { listen } from '@tauri-apps/api/event';
 import type { Mission } from '../agents/types.js';
 import type { JudgeVerdict, ReviewerVerdict, RiskLevel, VerdictOutcome } from '../agents/types.js';
 import { getPlatform } from '../platform/index.js';
-import { getProviderMode, getDefaultModelIdForMode, DEFAULT_MODEL, findModelById } from '../models/index.js';
+import { getProviderMode, DEFAULT_MODEL, findModelById, createLocalAgentTurnStreamer, toLocalModelName, DEFAULT_LOCAL_MODEL_ID } from '../models/index.js';
 import { loadAccessSettings } from '../models/accessSettings.js';
-import { streamManagedAgentTurn } from '../models/managedProvider.js';
-import { classifyDefinitiveProviderError } from '../models/byokProviders.js';
+import { classifyManagedTurnError } from './managedAgentTurnError.js';
 import { stripReasoningLines } from './reasoningLeak.js';
 import { joinPath, stripVerbatimPrefix, normalizeRepoPathForGit } from '../paths.js';
 import { emitEvent } from '../journal/journal.js';
@@ -57,28 +56,29 @@ function isLiveAgentAvailable(): boolean {
   return mode === 'claude-code' || mode === 'codex' || mode === 'devin';
 }
 
-/** True when the managed (Pro) backend is the active provider mode.
- *  Mirrors runtime.ts's isManagedAgentAvailable — see isLiveAgentAvailable's
- *  comment above for why this is duplicated rather than imported. */
-function isManagedAgentAvailable(): boolean {
+/** True when the local engine is the active provider mode.
+ *  Mirrors runtime.ts's routing — see isLiveAgentAvailable's comment above
+ *  for why this is duplicated rather than imported. Optimistic: Ollama
+ *  reachability is async, so a refused connection fails inside the first
+ *  judge turn, never here. */
+function isLocalLoopAvailable(): boolean {
   if (!isTauriRuntime()) return false;
-  return getProviderMode() === 'managed';
+  return getProviderMode() === 'local';
 }
 
 /**
- * Resolves the model id for managed-mode evaluator sub-agents: the
- * mission's own model when it's already an OpenRouter-format id (contains
- * '/' — the same convention accessSettings.ts documents for
- * AccessSettings.model under accessMode 'pro'), otherwise the user's saved
- * preference, otherwise the mode default. This is the exact fallback chain
- * runtime.ts's planAndAct uses to resolve planAndActManaged's model (see
- * managedModel in runMission/planAndAct) — reused here so the evaluator
- * judges a mission with the same model the mission itself ran with,
- * whenever that's available.
+ * Resolves the model id for local-engine evaluator sub-agents: the
+ * mission's own model when it's already a `local/` id, otherwise the user's
+ * saved local preference, otherwise the bundled default. This is the exact
+ * fallback chain runtime.ts's planAndAct uses to resolve planAndActManaged's
+ * model — reused here so the evaluator judges a mission with the same model
+ * the mission itself ran with, whenever that's available.
  */
-function resolveManagedModel(mission: Mission): string {
-  if (mission.model.includes('/')) return mission.model;
-  return loadAccessSettings().model ?? getDefaultModelIdForMode('managed');
+function resolveLocalModel(mission: Mission): string {
+  if (mission.model.startsWith('local/')) return mission.model;
+  const saved = loadAccessSettings().model;
+  if (saved?.startsWith('local/')) return saved;
+  return DEFAULT_LOCAL_MODEL_ID;
 }
 
 /**
@@ -257,21 +257,23 @@ async function runEvaluatorAgent(opts: {
 }
 
 /**
- * Run a single evaluator sub-agent turn through the managed (Pro) provider.
+ * Run a single evaluator sub-agent turn through the local engine.
  * Unlike runEvaluatorAgent (native CLI path, which gives the sub-agent its
- * own Bash tool via agent_run), the managed proxy only streams one LLM
+ * own Bash tool via agent_run), the local streamer only produces one LLM
  * completion per call — there is no agentic tool-use loop wired up for it
  * here. Any real command output a role needs (e.g. test results) must be
  * gathered beforehand and folded into the task text — see runManagedTester,
  * which is why the tester role never calls this at all.
  */
-async function runManagedEvaluatorAgent(opts: { task: string; model: string }): Promise<string> {
+async function runLocalEvaluatorAgent(opts: { task: string; model: string }): Promise<string> {
+  const streamTurn = createLocalAgentTurnStreamer();
+  const model = toLocalModelName(opts.model);
   let text = '';
-  for await (const chunk of streamManagedAgentTurn({
+  for await (const chunk of streamTurn({
     messages: [{ role: 'user', content: opts.task }],
     system:
       'You are an autonomous evaluator. Assess the given diff/task and output a concise JSON verdict.',
-    model: opts.model,
+    model,
   })) {
     text += chunk;
   }
@@ -1697,24 +1699,21 @@ async function runManagedTester(
 }
 
 /**
- * Managed (Pro) evaluation pipeline. Mirrors evaluateLive's four-role shape
- * (tester, reviewer, security, judge) but dispatches through the managed
- * provider instead of the native CLI agent_run path:
+ * Local-engine evaluation pipeline. Mirrors evaluateLive's four-role shape
+ * (tester, reviewer, security, judge) but dispatches through the local
+ * Ollama engine instead of the native CLI agent_run path:
  *   - tester: real run_shell execution in the worktree (ground truth, no LLM)
- *   - reviewer / security / judge: streamManagedAgentTurn LLM calls, all
- *     using the same model resolution the mission itself ran with
- *     (resolveManagedModel)
- * This replaces the previous behavior where 'managed' fell through to
- * evaluateScripted and never got a real reviewer/judge — see the dispatch
- * table in evaluateMission.
+ *   - reviewer / security / judge: local-streamer LLM calls, all using the
+ *     same model resolution the mission itself ran with (resolveLocalModel)
+ * See the dispatch table in evaluateMission.
  */
-async function evaluateManaged(
+async function evaluateLocal(
   mission: Mission,
   worktreePath: string,
   projectId: string,
   onProgress?: (msg: string) => void,
 ): Promise<JudgeVerdict> {
-  const model = resolveManagedModel(mission);
+  const model = resolveLocalModel(mission);
   const diffContext = mission.diffSnippet
     ? mission.diffSnippet.slice(0, 30).join('\n')
     : `Mission: ${mission.title}`;
@@ -1736,15 +1735,15 @@ async function evaluateManaged(
       emitGateEvent(projectId, mission.id, verdict);
       onProgress?.(`${verdict.role}: ${verdict.verdict}${verdict.inconclusive ? ' (inconclusive)' : ''}`);
     }
-    return evaluateManagedJudge(mission, verificationReviewers, testsResult, projectId, model, onProgress);
+    return evaluateLocalJudge(mission, verificationReviewers, testsResult, projectId, model, onProgress);
   }
 
   let reviewers: ReviewerVerdict[] = [testerVerdict];
 
   // 2. Reviewer — LLM code critique via the managed provider
-  onProgress?.('Running reviewer sub-agent (managed)…');
+  onProgress?.('Running reviewer sub-agent (local)…');
   try {
-    const reviewerRaw = await runManagedEvaluatorAgent({
+    const reviewerRaw = await runLocalEvaluatorAgent({
       task: buildReviewerTask(mission, diffContext),
       model,
     });
@@ -1767,9 +1766,9 @@ async function evaluateManaged(
   }
 
   // 3. Security — LLM security audit via the managed provider
-  onProgress?.('Running security sub-agent (managed)…');
+  onProgress?.('Running security sub-agent (local)…');
   try {
-    const securityRaw = await runManagedEvaluatorAgent({
+    const securityRaw = await runLocalEvaluatorAgent({
       task: buildSecurityTask(mission, diffContext),
       model,
     });
@@ -1791,14 +1790,14 @@ async function evaluateManaged(
     onProgress?.('Security sub-agent failed');
   }
 
-  return evaluateManagedJudge(mission, reviewers, testsResult, projectId, model, onProgress);
+  return evaluateLocalJudge(mission, reviewers, testsResult, projectId, model, onProgress);
 }
 
 /**
  * Stable literal marker for a judge verdict that is `inconclusive` because
- * the judge sub-agent's OWN provider call hit a definitive (never-retry)
- * error (401/402/403/404 — auth/balance/permission/model-not-found; see
- * byokProviders.ts's ProviderDefinitiveError/classifyDefinitiveProviderError),
+ * the judge sub-agent's OWN engine call hit a definitive (never-retry)
+ * error (auth/quota/model-not-found — see managedAgentTurnError.ts's
+ * classifyManagedTurnError),
  * as opposed to any other evaluator-infrastructure failure. Embedded as a
  * `${JUDGE_UNAVAILABLE_PROVIDER_REASON}: ` prefix in the verdict's `summary`
  * (ReviewerVerdict has no separate machine-readable reason field, and
@@ -1816,13 +1815,13 @@ async function evaluateManaged(
 export const JUDGE_UNAVAILABLE_PROVIDER_REASON = 'judge_unavailable_provider';
 
 /**
- * Shared step 4 (judge) for evaluateManaged: runs the LLM judge sub-agent
+ * Shared step 4 (judge) for evaluateLocal: runs the LLM judge sub-agent
  * against `reviewers`' summaries and aggregates into the final JudgeVerdict.
  * Extracted so the normal LLM reviewer/security path and the verification-
  * mission path (buildVerificationMissionReviewers) both funnel through the
  * exact same judge + aggregation logic rather than duplicating it.
  */
-async function evaluateManagedJudge(
+async function evaluateLocalJudge(
   mission: Mission,
   reviewers: ReviewerVerdict[],
   testsResult: { passed: number; failed: number } | undefined,
@@ -1830,13 +1829,13 @@ async function evaluateManagedJudge(
   model: string,
   onProgress?: (msg: string) => void,
 ): Promise<JudgeVerdict> {
-  onProgress?.('Running judge sub-agent (managed)…');
+  onProgress?.('Running judge sub-agent (local)…');
   const reviewerSummaries = formatReviewerSummaries(reviewers);
 
   let judgeVerdictRaw = '';
   let allReviewers = reviewers;
   try {
-    judgeVerdictRaw = await runManagedEvaluatorAgent({
+    judgeVerdictRaw = await runLocalEvaluatorAgent({
       task: buildJudgeTask(mission, reviewerSummaries),
       model,
     });
@@ -1844,15 +1843,21 @@ async function evaluateManagedJudge(
     emitGateEvent(projectId, mission.id, allReviewers[allReviewers.length - 1]);
     onProgress?.(`Judge: ${allReviewers[allReviewers.length - 1].verdict}`);
   } catch (err) {
-    // 2026-08-05 DeepSeek 402 incident — a judge call that hits a definitive
-    // provider error (never-retry: bad key, empty balance, no permission,
-    // unknown model) must NEVER hang, NEVER read as a reject vote, and NEVER
-    // throw out of this pipeline. It already lands here as an ordinary
-    // inconclusive NON-VOTE (same as any other judge sub-agent failure,
-    // below) — this branch only ADDS the distinct, stable reason marker
-    // (JUDGE_UNAVAILABLE_PROVIDER_REASON) so downstream UI can tell "the
-    // judges could not run" apart from "the judges ran and rejected".
-    const providerErr = classifyDefinitiveProviderError(err);
+    // A judge call that hits a definitive engine error (never-retry: bad
+    // credentials, no quota, unknown model) must NEVER hang, NEVER read as
+    // a reject vote, and NEVER throw out of this pipeline. It already lands
+    // here as an ordinary inconclusive NON-VOTE (same as any other judge
+    // sub-agent failure, below) — this branch only ADDS the distinct,
+    // stable reason marker (JUDGE_UNAVAILABLE_PROVIDER_REASON) so
+    // downstream UI can tell "the judges could not run" apart from "the
+    // judges ran and rejected".
+    const classified = classifyManagedTurnError(err);
+    const providerErr =
+      classified.kind === 'provider'
+        ? { providerId: classified.providerId, shortReason: classified.shortReason }
+        : classified.kind === 'no_credits'
+          ? { providerId: 'engine', shortReason: 'quota exhausted' }
+          : undefined;
     allReviewers = [
       ...allReviewers,
       {
@@ -1933,10 +1938,10 @@ export function resolveWorktreePath(
  * evaluateMission — entry point for the judge pipeline.
  *
  * Dispatches to (mirrors runtime.ts's planAndAct routing table):
- *   - evaluateManaged  (managed/Pro subscription via the ai-proxy + run_shell)
+ *   - evaluateLocal    (local Ollama engine, Tauri)
  *   - evaluateLive     (Tauri + claude CLI/codex, native agent_run)
- *   - evaluateScripted (Tauri, no engine — pro/live-key/mock — real test
- *     runner only, no real reviewer/judge)
+ *   - evaluateScripted (Tauri, no engine — real test runner only, no real
+ *     reviewer/judge)
  *   - buildUnavailableVerdict (no Tauri runtime at all)
  *
  * NEVER fabricates a passed=true verdict when a real sub-agent/model
@@ -1989,21 +1994,21 @@ export async function evaluateMission(
   const worktreePath = opts.worktreePath ?? resolveWorktreePath(opts.repoPath, mission);
   const projectId = projectIdFromRoot(opts.repoPath);
 
-  if (isManagedAgentAvailable()) {
-    opts.onProgress?.('Starting managed (Pro) evaluation pipeline…');
-    return evaluateManaged(mission, worktreePath, projectId, opts.onProgress);
-  }
-
   if (isLiveAgentAvailable()) {
     opts.onProgress?.('Starting live evaluation pipeline…');
     return evaluateLive(mission, worktreePath, opts.repoPath, projectId, opts.onProgress);
   }
 
-  // Tauri available but no claude CLI and no managed subscription (pro /
-  // live-key / mock) — scripted mode with real test runner. worktreePath
-  // (not opts.repoPath) so the real test runner grades the mission's own
-  // diff, not the pre-mission base repo — see evaluateScripted's doc comment.
-  opts.onProgress?.('Claude CLI not configured — scripted evaluation with real tests');
+  if (isLocalLoopAvailable()) {
+    opts.onProgress?.('Starting local-engine evaluation pipeline…');
+    return evaluateLocal(mission, worktreePath, projectId, opts.onProgress);
+  }
+
+  // Tauri available but no engine (mock) — scripted mode with real test
+  // runner. worktreePath (not opts.repoPath) so the real test runner grades
+  // the mission's own diff, not the pre-mission base repo — see
+  // evaluateScripted's doc comment.
+  opts.onProgress?.('No engine configured — scripted evaluation with real tests');
   return evaluateScripted(mission, worktreePath, opts.onProgress);
 }
 

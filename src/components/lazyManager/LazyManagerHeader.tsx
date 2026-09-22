@@ -10,13 +10,11 @@ import { useLazyManagerStoreOptional } from './lazyManagerStore';
 import { useDismissable } from '../common/useDismissable';
 import type { ManagerMode } from './lazyManagerStore';
 import { useAgentsStoreOptional } from '../agents/agentsStore';
-import { getProviderMode, hasManagedCreditsActive, resolveByokDef, loadAccessSettings, isCliBackendAvailable } from '../../lib/models';
+import { getProviderMode, isCliBackendAvailable } from '../../lib/models';
 import { detectModelEntitlements, buildModelPickerOptions, isSelectablePickerModel, isModelRailPending, modelManagedByCodexMessage, noModelFallbackMessage } from '../../lib/models/modelPickerOptions';
 import { engineReasonKey } from '../../lib/models/entitlement';
 import { ModelPickerDropdown } from '../common/ModelPickerDropdown';
-import { findOpenRouterModel, isOpenRouterFreeModel, migrateRetiredOpenRouterId } from '../../lib/models/openrouterCatalog';
-import { useSubscriptionContext, formatRenewalDate } from '../../lib/billing';
-import { emit, on } from '../../lib/bus';
+import { on } from '../../lib/bus';
 import { markCaptchaSolved } from '../../lib/bots/botCaptchaResume';
 import type { AutonomyMode } from '../../lib/agents/types';
 import { LazyManagerConversationTabs, OPEN_CONVERSATION_CAP_REASON_ID } from './LazyManagerConversationTabs';
@@ -50,23 +48,19 @@ export interface ManagerConversationTab {
   customTitle?: string;
 }
 
-export type EngineKey = 'claude-code' | 'codex' | 'devin' | 'live-key' | 'managed' | 'pro' | 'mock';
+export type EngineKey = 'claude-code' | 'codex' | 'devin' | 'local' | 'mock';
 
-/** Engine keys that consume Lazy-managed credits — every other key runs
- *  via a CLI subscription (claude-code/codex) or the user's own API key
- *  (live-key), never Lazy's own metered credits. Exported for
- *  GraphProposalCard.tsx's item 7 fix (credits-vs-subscription estimate
- *  display) — same "reuse, never a second classification" rule as the
- *  credits conversion itself. */
-export const CREDIT_METERED_ENGINES: ReadonlySet<EngineKey> = new Set(['managed', 'pro']);
+/** Engine keys that consume metered credits — Forge has no metered rails,
+ *  so this is always empty. Exported for GraphProposalCard.tsx's estimate
+ *  display (same "reuse, never a second classification" rule as the
+ *  credits conversion itself). */
+export const CREDIT_METERED_ENGINES: ReadonlySet<EngineKey> = new Set([]);
 
 export const ENGINE_I18N_KEY: Record<EngineKey, string> = {
   'claude-code': 'assistant.engine.claudeCode',
   'codex':       'assistant.engine.codex',
   'devin':       'assistant.engine.devin',
-  'live-key':    'assistant.engine.liveKey',
-  'managed':     'assistant.engine.managed',
-  'pro':         'assistant.engine.pro',
+  'local':       'assistant.engine.local',
   'mock':        'assistant.engine.mock',
 };
 
@@ -74,9 +68,7 @@ const ENGINE_COLOR: Record<string, string> = {
   'claude-code': 'rgba(124,92,255,0.18)',
   'codex':       'rgba(74,192,252,0.16)',
   'devin':       'rgba(45,212,191,0.16)',
-  'live-key':    'rgba(74,192,252,0.16)',
-  'managed':     'rgba(124,92,255,0.18)',
-  'pro':         'rgba(246,169,69,0.14)',
+  'local':       'rgba(102,226,122,0.16)',
   'mock':        'rgba(255,255,255,0.07)',
 };
 
@@ -84,9 +76,7 @@ const ENGINE_TEXT_COLOR: Record<string, string> = {
   'claude-code': '#A78BFF',
   'codex':       '#74C0FC',
   'devin':       '#2DD4BF',
-  'live-key':    '#74C0FC',
-  'managed':     '#A78BFF',
-  'pro':         '#F6A945',
+  'local':       '#66E27A',
   'mock':        'rgba(255,255,255,0.35)',
 };
 
@@ -189,14 +179,13 @@ export function LazyManagerHeader({
   openConversationCapReached = false,
   tier: tierProp,
 }: LazyManagerHeaderProps) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   // See this prop's own doc comment: `undefined` (no live measurement yet,
   // or a caller/test that never passes it) resolves to the wide layout,
   // never a flash of the compact one on first mount.
   const tier: PanelWidthTier = tierProp ?? getPanelWidthTier(undefined);
   const agents = useAgentsStoreOptional();
   const store = useLazyManagerStoreOptional();
-  const { subscription } = useSubscriptionContext();
   const [showAcceptance, setShowAcceptance] = useState(false);
   const acceptanceTriggerRef = useRef<HTMLButtonElement>(null);
   // LazyBots (A3) — bot → manager human-intervention requests (login/2FA/
@@ -292,19 +281,9 @@ export function LazyManagerHeader({
   const [showMoreActions, setShowMoreActions] = useState(false);
 
   const engineMode = getProviderMode();
-  let engineLabel: string;
-  if (engineMode === 'live-key') {
-    // BYOK wave: the badge shows the SELECTED provider (DeepSeek, OpenRouter,
-    // xAI, ...), not a generic "Claude" label — real-user report 2026-08-03
-    // ("j'ai DeepSeek d'activé et le badge dit encore Claude").
-    const byokDef = resolveByokDef(loadAccessSettings().byokProvider);
-    engineLabel = byokDef ? `${byokDef.label} · clé API` : t(ENGINE_I18N_KEY['live-key']);
-  } else {
-    engineLabel = t(ENGINE_I18N_KEY[engineMode as EngineKey] ?? 'assistant.engine.mock');
-  }
+  const engineLabel = t(ENGINE_I18N_KEY[engineMode as EngineKey] ?? 'assistant.engine.mock');
   const engineBg = ENGINE_COLOR[engineMode] ?? ENGINE_COLOR['mock'];
   const engineColor = ENGINE_TEXT_COLOR[engineMode] ?? ENGINE_TEXT_COLOR['mock'];
-  const showProBadge = hasManagedCreditsActive() && engineMode !== 'managed' && engineMode !== 'pro';
 
   // Orchestrator model picker options
   const entitlements = detectModelEntitlements();
@@ -336,31 +315,13 @@ export function LazyManagerHeader({
     agents.setManagerModel(pickerOptions.defaultModelId);
   }, [agents, agents?.managerModel, pickerOptions.defaultModelId, devinAvail, claudeAvail, codexAvail]);
 
-  // Free OpenRouter ids route through the ai-proxy but never consume
-  // credits (isOpenRouterFreeModel — same exemption the send path applies
-  // at the credits gate) — the exhausted hint must not scare users off a
-  // model that costs nothing.
-  const isSelectedModelProRouted =
-    Boolean(findOpenRouterModel(agents?.managerModel ?? '')) &&
-    !isOpenRouterFreeModel(agents?.managerModel ?? '');
   // Trigger label for the model picker: the selected model's display label
   // when its id is in a picker group, else the raw id (a persisted choice
-  // whose catalog entry is gone) — never blank. migrateRetiredOpenRouterId
-  // first: a retired persisted id (e.g. minimax-m3:free after the 2026-09-11
-  // upstream pull) must render its MIGRATED label, not the dead raw id.
-  const migratedManagerModel = migrateRetiredOpenRouterId(agents?.managerModel ?? '');
+  // whose catalog entry is gone) — never blank.
   const currentModelLabel =
-    pickerOptions.groups.flatMap((g) => g.models).find((m) => m.id === migratedManagerModel)?.label
-    ?? pickerOptions.lockedProGroup?.models.find((m) => m.id === migratedManagerModel)?.label
+    pickerOptions.groups.flatMap((g) => g.models).find((m) => m.id === (agents?.managerModel ?? ''))?.label
     ?? agents?.managerModel
     ?? t('models.picker.noModelFallback');
-  const creditsRenewalDate = formatRenewalDate(subscription?.period_end, locale);
-  const creditsHintText =
-    pickerOptions.proExhausted && isSelectedModelProRouted
-      ? creditsRenewalDate
-        ? t('cockpit.manager.noCreditsHintWithDate', { date: creditsRenewalDate })
-        : t('cockpit.manager.noCreditsHint')
-      : undefined;
 
   // P2-18 fix: overflow:hidden + textOverflow:ellipsis used to let flexbox
   // shrink each flex:1 chip BELOW its own text's min-content width (per the
@@ -570,15 +531,6 @@ export function LazyManagerHeader({
             }} title={t('assistant.engineLabel', { label: engineLabel })}>
               {engineLabel}
             </span>
-            {showProBadge && (
-              <span style={{
-                fontSize: 10, fontWeight: 600, color: '#F6A945', background: 'rgba(246,169,69,0.14)',
-                border: '1px solid rgba(246,169,69,0.32)', borderRadius: 4, padding: '1px 6px',
-                letterSpacing: '0.01em', lineHeight: '16px', whiteSpace: 'nowrap', flexShrink: 0,
-              }}>
-                {t('account.chip.pro')}
-              </span>
-            )}
           </div>
           <div style={{
             fontSize: 11, color: 'var(--color-accent-pale)', overflow: 'hidden',
@@ -974,7 +926,6 @@ export function LazyManagerHeader({
               <div ref={modelPickerPopoverRef}>
                 <ModelPickerDropdown
                   groups={pickerOptions.groups}
-                  lockedGroup={pickerOptions.lockedProGroup}
                   currentId={agents?.managerModel ?? ''}
                   direction="down"
                   onSelect={(id) => agents?.setManagerModel(id)}
@@ -1004,29 +955,6 @@ export function LazyManagerHeader({
           </span>
         )}
       </div>
-
-      {/* Credits hint (orchestrator only) */}
-      {mode === 'orchestrator' && creditsHintText && (
-        <div data-testid="manager-model-credits-hint" style={{ padding: '0 16px 6px', fontSize: 11, color: 'var(--color-text-muted)' }}>
-          {creditsHintText}
-        </div>
-      )}
-
-      {/* Pro upsell (orchestrator only) */}
-      {mode === 'orchestrator' && pickerOptions.lockedProGroup && (
-        <button
-          type="button"
-          data-testid="manager-model-pro-upsell"
-          onClick={() => emit('nav:openAccountPopover', undefined)}
-          style={{
-            alignSelf: 'flex-end', background: 'transparent', border: 'none',
-            color: 'var(--color-accent-pale)', fontSize: 11, fontWeight: 600,
-            cursor: 'pointer', fontFamily: 'inherit', padding: '0 16px 8px', textAlign: 'right',
-          }}
-        >
-          {t('cockpit.manager.proUpsell')}
-        </button>
-      )}
     </div>
   );
 }

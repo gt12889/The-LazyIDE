@@ -29,9 +29,7 @@ import { listBots } from '../../../../lib/bots/botStorage';
 import { getBotRuntimeState } from '../../../../lib/bots/botEngine';
 import { listPendingApprovals } from '../../../../lib/agents/approval/approvalGate';
 import { on } from '../../../../lib/bus';
-import { isBotVmWindowOpen, getBotVmWindowSize, subscribeBotVmWindows } from '../../../../lib/solari/botVmWindows';
 import { canvasStoreVanilla, isPositionsPatchNoop, useCanvasStore, type CanvasViewport } from '../canvasStore';
-import { emitLocalCanvasMove } from '../../../../lib/collab/canvasOpBridge';
 import { zoneAtPoint, zoneGeometriesFromNodes, toZoneRelative, type FlowPoint, type ZoneGeometry } from '../canvasPlacement';
 import { findFreePosition, type Size } from '../placementCollision';
 import { makeRef } from '../canvasTypes';
@@ -128,8 +126,8 @@ export function useCanvasFlowGraph(params: UseCanvasFlowGraphParams): UseCanvasF
 
   const prevReconcileNodesRef = useRef<readonly CanvasReactFlowNode[]>([]);
 
-  // LazyBot wave — load persisted bots + coarse runtime snapshot, feed them
-  // into reconcile() so each bot renders as a `bot` node in the LazyBots zone.
+  // Bot wave — load persisted bots + coarse runtime snapshot, feed them
+  // into reconcile() so each bot renders as a `bot` node in the Bots zone.
   const [botInputs, setBotInputs] = useState<BotNodeInput[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -147,7 +145,6 @@ export function useCanvasFlowGraph(params: UseCanvasFlowGraphParams): UseCanvasF
           status: waiting ? 'waiting' : activeRuns.length > 0 ? 'working' : 'idle',
           activeRuns: activeRuns.length,
           activeRunIds: activeRuns,
-          ...(isBotVmWindowOpen(bot.id) ? { vmOpen: true, vmSize: getBotVmWindowSize(bot.id) } : {}),
         };
       });
     const load = async () => {
@@ -160,28 +157,21 @@ export function useCanvasFlowGraph(params: UseCanvasFlowGraphParams): UseCanvasF
     };
     void load();
     // Keep status halos honest while the canvas is mounted: refresh when a
-    // pending approval appears/resolves, when a bot VM window opens/closes,
-    // and on every bot-runtime mutation (botEngine emits
-    // 'lazybots:runtimeChanged' at each register/finish/stop/slot site —
-    // the 5s polling interval this replaced). A slow 30s safety net stays
-    // for the one uncovered case: a run that died by crash/HMR without
-    // reaching finishBotRun/stopBotRun (its stale entry gets reaped by the
-    // next real event or this net, whichever comes first).
-    const offApproval = on('solari:approvalRequest', () => void load());
-    const offResolved = on('solari:approvalResolved', () => void load());
+    // pending approval appears/resolves and on every bot-runtime mutation
+    // (botEngine emits 'lazybots:runtimeChanged' at each
+    // register/finish/stop/slot site). A slow 30s safety net stays for the
+    // one uncovered case: a run that died by crash/HMR without reaching
+    // finishBotRun/stopBotRun (its stale entry gets reaped by the next real
+    // event or this net, whichever comes first).
     const offRoster = on('lazybots:changed', () => void load());
     const offRuntime = on('lazybots:runtimeChanged', () => void load());
     const offRoot = on('projectRoot:resolved', () => void load());
-    const offVmWindows = subscribeBotVmWindows(() => void load());
     const interval = setInterval(() => void load(), 30_000);
     return () => {
       cancelled = true;
-      offApproval();
-      offResolved();
       offRoster();
       offRuntime();
       offRoot();
-      offVmWindows();
       clearInterval(interval);
     };
   }, []);
@@ -324,17 +314,12 @@ export function useCanvasFlowGraph(params: UseCanvasFlowGraphParams): UseCanvasF
       }
       if (Object.keys(committed).length > 0) {
         setPositions(committed);
-        // fix/canvas-ux R10 â€” this IS the user actively dragging a node this
+        // fix/canvas-ux R10 — this IS the user actively dragging a node this
         // session (a real drag's FINAL frame, not a programmatic setPositions
-        // call elsewhere â€” e.g. CanvasContextMenu.tsx's paste/duplicate) â€”
+        // call elsewhere — e.g. CanvasContextMenu.tsx's paste/duplicate) —
         // mark it so the persisted-position declutter pass never nudges it,
         // even against a more-recently-updated pinned sibling.
         for (const ref of Object.keys(committed)) markSessionDragged(ref);
-        // Live co-editing: broadcast the committed moves to teammates on the
-        // org/project Realtime channel (no-op when no live channel is up).
-        for (const [ref, pos] of Object.entries(committed)) {
-          emitLocalCanvasMove(ref, pos);
-        }
       }
     },
     [setPositions, markSessionDragged],

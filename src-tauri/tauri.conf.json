@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Lazy",
+  "productName": "Forge",
   "version": "0.1.19",
-  "identifier": "com.lazy.app",
+  "identifier": "com.forge.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Lazy",
+        "title": "Forge",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,
@@ -23,14 +23,14 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://*.supabase.co wss://*.supabase.co ipc: http://ipc.localhost https://api.deepseek.com https://api.openai.com https://openrouter.ai https://api.x.ai https://api.groq.com https://api.mistral.ai https://api.anthropic.com https://api.getsolari.com wss://api.getsolari.com https://mcp.getsolari.com; frame-src 'self' http://localhost:* http://127.0.0.1:* https://*.getsolari.com;"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* ipc: http://ipc.localhost; frame-src 'self' http://localhost:* http://127.0.0.1:*;"
     }
   },
   "plugins": {
     "deep-link": {
       "desktop": {
         "schemes": [
-          "lazy"
+          "forge"
         ]
       }
     },

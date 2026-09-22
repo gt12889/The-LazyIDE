@@ -20,7 +20,6 @@ import { JoinNode, JoinNodeCard, type JoinFlowNode } from './JoinNode';
 import { TerminalNode, TerminalNodeCard, type TerminalFlowNode } from './TerminalNode';
 import { PreviewNode, PreviewNodeCard, type PreviewFlowNode } from './PreviewNode';
 import { LazyBotNode, LazyBotNodeCard, type LazyBotFlowNode } from './LazyBotNode';
-import { BotVmNode, BotVmNodeCard, type BotVmFlowNode } from './BotVmNode';
 import { FrameNode, FrameNodeCard, type FrameFlowNode } from './FrameNode';
 // P-SEARCH (additive) — SearchNode.tsx's `PreviewSlotNode` dispatches a
 // 'preview'-typed node to SearchNode or PreviewNode based on
@@ -55,8 +54,6 @@ export {
   FrameNodeCard,
   LazyBotNode,
   LazyBotNodeCard,
-  BotVmNode,
-  BotVmNodeCard,
   SearchNode,
   SearchNodeCard,
   PreviewSlotNode,
@@ -75,7 +72,6 @@ export type {
   PreviewFlowNode,
   FrameFlowNode,
   LazyBotFlowNode,
-  BotVmFlowNode,
   SearchFlowNode,
 };
 
@@ -94,8 +90,7 @@ export type CanvasFlowNode =
   | TerminalFlowNode
   | PreviewFlowNode
   | FrameFlowNode
-  | LazyBotFlowNode
-  | BotVmFlowNode;
+  | LazyBotFlowNode;
 
 export const nodeTypes: NodeTypes = {
   project: ProjectGroupNode,
@@ -114,5 +109,4 @@ export const nodeTypes: NodeTypes = {
   preview: PreviewSlotNode,
   frame: FrameNode,
   bot: LazyBotNode,
-  botVm: BotVmNode,
 };

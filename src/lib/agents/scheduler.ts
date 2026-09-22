@@ -1,14 +1,10 @@
-/* scheduler.ts — provider-aware concurrency scheduler for agent missions
-   (T1.1, spec §7.1).
+/* scheduler.ts — provider-aware concurrency scheduler for agent missions.
 
    Every mission launch routes through ONE "pool" keyed by the engine that
    will run it (resolveProvider): the native CLI subscription tool
    ('claude-cli' — shared by claude-code AND codex, both spawn a real OS
-   process via runtime.ts's planAndActLive, the actual scarce resource), the
-   managed Lazy Pro engine ('managed', via the shared ai-proxy), or a direct
-   BYOK API key ('byok:<8-char-hash>' — one pool per distinct key, so
-   unrelated keys never share a budget and one key's own rate limit is
-   respected).
+   process via runtime.ts's planAndActLive, the actual scarce resource) or
+   the local Ollama engine ('local').
 
    dispatch() launches immediately when a pool AND the global cap
    (lazy.agents.maxParallel) both have a free slot; otherwise it queues the
@@ -93,17 +89,7 @@ import { emitEvent } from '../journal/journal.js';
 import type { Mission } from './types.js';
 import { classifyMissionModel, type ModelRouteKind } from './runtime.js';
 import { getProviderMode, type ProviderMode } from '../models/index.js';
-import { loadAccessSettings, type ByokProvider } from '../models/accessSettings.js';
-// Secret-storage hardening (audit 2026-08-12): BYOK keys now live in the OS
-// credential vault on desktop (see byokProviders.ts's header comment), not
-// always in localStorage — byokPool() below must read through the shared,
-// vault-aware loadByokKey() rather than hitting `lazy.apikey.<provider>` in
-// localStorage directly, or it would silently degrade to "one pool per
-// provider" (hashing the provider name instead of the key) for every user
-// who has migrated.
-import { BYOK_PROVIDER_DEFS, loadByokKey } from '../models/byokProviders.js';
 import { checkConflicts } from './preflight.js';
-import { getRemoteOccupancySnapshot } from '../collab/remoteOccupancy.js';
 import { isOverBudget, wouldExceedBudget, estimateMissionCostCents } from './budgetTracker.js';
 import { isTauri } from '../platform/index.js';
 import { getSystemPressure, subscribeSystemPressure, type PressureLevel } from './systemPressure.js';
@@ -124,89 +110,41 @@ import { LS_AGENTS_MAX_PARALLEL } from './agentSettingsKeys.js';
 // ── Pool identity ────────────────────────────────────────────────
 
 /** localStorage key for per-pool cap overrides — optional JSON object, e.g.
- *  `{"claude-cli": 1, "byok:*": 2}`. Absent/invalid -> built-in defaults. */
-export const LS_AGENTS_POOLS = 'lazy.agents.pools';
+ *  `{"claude-cli": 1, "local": 2}`. Absent/invalid -> built-in defaults. */
+export const LS_AGENTS_POOLS = 'forge.agents.pools';
 
 const DEFAULT_POOL_CAPS: Readonly<Record<string, number>> = {
   'claude-cli': 2,
-  managed: 4,
-  'byok:*': 4,
+  local: 4,
 };
 
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 10 * 60_000;
 
-/** Deterministic, non-cryptographic 32-bit hash (FNV-1a) as 8 hex chars —
- *  derives a stable pool id from a BYOK key's value so the raw secret never
- *  appears in a pool name or journal payload. Not a security boundary: a
- *  collision only merges two keys into one pool, it never leaks key material. */
-function shortHash(input: string): string {
-  let hash = 0x811c9dc5; // FNV-1a 32-bit offset basis
-  for (let i = 0; i < input.length; i += 1) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193); // FNV-1a 32-bit prime
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0');
-}
-
-/** Falls back to hashing the provider name itself when no key is configured
- *  yet, so this never throws and always returns a deterministic pool id. */
-function byokPool(provider: ByokProvider): string {
-  const key = loadByokKey(provider);
-  return `byok:${shortHash(key || provider)}`;
-}
-
 /**
  * Which concurrency pool a mission's engine belongs to. Mirrors runtime.ts's
  * OWN dispatch logic (classifyMissionModel first, then the same
  * getProviderMode()-based fallback planAndAct uses) rather than re-inventing
- * engine selection. 'native' missions (no '/' in the model id) split further
- * by the CURRENT access mode, since classifyMissionModel cannot tell a
- * CLI-subscription id from a BYOK-direct-key id apart by shape alone.
+ * engine selection.
  */
 export function resolveProvider(mission: Mission): string {
   const chosenKind: ModelRouteKind | undefined = classifyMissionModel(mission.model);
 
-  if (chosenKind === 'managed') return 'managed';
-  if (chosenKind === 'native') return resolveNativePool();
-  // A BYOK-catalog model whose provider key is set (deepseek-chat, grok-4,
-  // …) runs on the user's OWN key — its pool is that key's, never the CLI
-  // subscription's. Live repro (2026-09-02): this branch was missing, so a
-  // deepseek-chat LazyBot fell through to resolveModePool → 'claude-cli'
-  // and sat "pool_full" behind a CLI it never used.
-  if (chosenKind === 'byok') return byokPool(byokProviderForModel(mission.model) ?? 'anthropic');
+  if (chosenKind === 'local') return 'local';
+  if (chosenKind === 'native' || chosenKind === 'devin') return 'claude-cli';
 
   // No classifiable model on this mission (legacy/low-level callers) — the
   // same mode-based fallback runtime.ts's planAndAct falls back to.
   return resolveModePool(getProviderMode());
 }
 
-/** The BYOK provider whose catalog lists `model` — the same catalog walk
- *  classifyMissionModel does to decide 'byok' in the first place. */
-function byokProviderForModel(model: string | undefined): ByokProvider | undefined {
-  if (!model) return undefined;
-  for (const def of BYOK_PROVIDER_DEFS) {
-    if (def.id === 'anthropic') continue;
-    if (def.models.some((m) => m.id === model)) return def.id;
-  }
-  return undefined;
-}
-
-function resolveNativePool(): string {
-  const settings = loadAccessSettings();
-  if (settings.accessMode === 'byok') return byokPool(settings.byokProvider ?? 'anthropic');
-  return 'claude-cli';
-}
-
 function resolveModePool(mode: ProviderMode): string {
-  if (mode === 'managed') return 'managed';
+  if (mode === 'local') return 'local';
   if (mode === 'claude-code' || mode === 'codex' || mode === 'devin') return 'claude-cli';
-  if (mode === 'live-key') return byokPool(loadAccessSettings().byokProvider ?? 'anthropic');
-  // 'pro' (selected but inactive) / 'mock' (no real engine at all) — no
-  // engine will actually run this mission (see runtime.ts's
-  // planAndActUnavailable / planAndActScripted), but dispatch() still needs
-  // SOME bucket to count it against; the smallest default cap is the
-  // conservative choice.
+  // 'mock' (no real engine at all) — no engine will actually run this
+  // mission (see runtime.ts's planAndActUnavailable / planAndActScripted),
+  // but dispatch() still needs SOME bucket to count it against; the
+  // smallest default cap is the conservative choice.
   return 'claude-cli';
 }
 
@@ -232,8 +170,7 @@ function loadPoolOverrides(): Record<string, number> {
 function poolCap(pool: string): number {
   const overrides = loadPoolOverrides();
   if (overrides[pool] !== undefined) return overrides[pool];
-  if (pool.startsWith('byok:')) return overrides['byok:*'] ?? DEFAULT_POOL_CAPS['byok:*'];
-  return DEFAULT_POOL_CAPS[pool] ?? DEFAULT_POOL_CAPS['byok:*'];
+  return DEFAULT_POOL_CAPS[pool] ?? 2;
 }
 
 /** Empty/absent → hardware 3–8 (same default the settings panel shows).
@@ -900,7 +837,7 @@ export async function dispatch(
       const { conflictsWith } = await checkConflicts(
         mission,
         opts.scopeInfo.runningMissions,
-        getRemoteOccupancySnapshot(),
+        [],
       );
       if (conflictsWith.length > 0) {
         enqueue(mission, pool, launchFn, opts.priority ?? 0, opts.projectId ?? 'unknown', conflictsWith);

@@ -98,6 +98,12 @@ describe('LazyManagerHeader — "Nouvelle conversation" stays clickable while th
     // attribute (real user report's own "not only a title attribute"
     // requirement). No longer means "clicking this will interrupt it".
     expect(screen.getByTestId('lazy-manager-new-conv-busy-dot')).toBeInTheDocument();
+
+    // Isolation: the pre-turn path (context fetches) outlives this test's
+    // assertions — wait until THIS test's turn actually reaches the mock
+    // (consuming its own Once) so it can't leak into the next test and
+    // steal that test's stubbed call.
+    await waitFor(() => expect(vi.mocked(runManagerTurn)).toHaveBeenCalledTimes(1));
   });
 
   it('clicking it while busy opens a fresh EMPTY conversation WITHOUT stopping the still-running one — that keeps working in the background', async () => {
@@ -135,6 +141,11 @@ describe('LazyManagerHeader — "Nouvelle conversation" stays clickable while th
     expect(tabs.length).toBeGreaterThanOrEqual(2);
     const busyTab = tabs.find((tab) => tab.getAttribute('data-busy') === 'true');
     expect(busyTab).toBeDefined();
+
+    // Isolation (see the first test): make sure THIS test's turn reached
+    // the mock (consuming its own Once) before the test ends, so nothing
+    // leaks into the next test.
+    await waitFor(() => expect(vi.mocked(runManagerTurn)).toHaveBeenCalledTimes(1));
   });
 
   it('clicking it while IDLE still shows the plain (non-interrupted) confirmation — no turn was cut short', async () => {

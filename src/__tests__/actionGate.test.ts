@@ -87,13 +87,11 @@ describe('actionClassifier', () => {
 
   it('classifies the LazyBot lifecycle actions at the right tiers', () => {
     // Live-execution touchers — sensitive, like stop_mission.
-    expect(classifyAction('sweep_solari')).toBe('sensitive');
     expect(classifyAction('resolve_bot_intervention')).toBe('sensitive');
     // Rewrites the bot's systemPrompt on stop — a live config mutation.
     expect(classifyAction('teach_lazybot')).toBe('sensitive');
     // Read/display-only — safe.
     expect(classifyAction('lazybot_runs')).toBe('safe');
-    expect(classifyAction('toggle_bot_vm')).toBe('safe');
   });
 
   it('asks for delete_lazybot even in yolo mode (destructive)', async () => {

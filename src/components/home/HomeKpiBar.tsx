@@ -15,21 +15,11 @@ import {
   formatCost,
 } from '../metrics';
 import type { UsageWindow } from '../../lib/models/usageHistory';
-import { useSubscriptionContext, formatCredits } from '../../lib/billing';
-import { AccountPopover, useAccountPopoverTrigger } from '../account/AccountPopover';
 
 export function HomeKpiBar() {
   const { t } = useI18n();
   const [timeWindow, setTimeWindow] = useState<UsageWindow>('today');
   const m = useUsageMetrics(timeWindow);
-  const { subscription, isPro } = useSubscriptionContext();
-  // QA fix (B1): clicking the credits tile opens the SAME AccountPopover as
-  // the header AccountChip and the Cockpit KPI tile — shared trigger +
-  // popover, not a re-implementation. Unlike the other 3 tiles in this bar
-  // (which show usage/consumption for the selected time window), this one
-  // shows the account's real credit BALANCE, so its label says "restants"
-  // explicitly — no ambiguity between period consumption and balance.
-  const { elRef: creditsRef, anchorRect, toggle, close } = useAccountPopoverTrigger<HTMLDivElement>();
 
   return (
     <section>
@@ -83,18 +73,7 @@ export function HomeKpiBar() {
           accent
           sparklineColor="#66E27A"
         />
-        <MetricTile
-          label={t('metrics.creditsBalance')}
-          value={isPro && subscription ? formatCredits(subscription.credits_remaining_cents) : t('metrics.creditsBalanceFree')}
-          sub={isPro && subscription ? t('metrics.creditsBalanceSub') : undefined}
-          accent
-          sparklineColor="#F6A945"
-          onActivate={toggle}
-          testId="home-kpi-credits"
-          triggerRef={creditsRef}
-        />
       </KpiRow>
-      {anchorRect && <AccountPopover anchorRect={anchorRect} onClose={close} triggerRef={creditsRef} />}
     </section>
   );
 }
