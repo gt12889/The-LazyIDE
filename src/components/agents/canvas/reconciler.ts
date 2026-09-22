@@ -154,9 +154,9 @@ export interface ReconcileInputs {
    *  frame nodes (canvasStore's `frames` slice). */
   frames?: FrameSpec[];
   /**
-   * LazyBot wave (additive, defaults to `[]`): persisted LazyBots (BotConfig
+   * LazyBot wave (additive, defaults to `[]`): persisted lazygt Bots (BotConfig
    * from botStorage) plus their coarse live runtime snapshot (status halo,
-   * active run count, last action). Rendered inside a dedicated "LazyBots"
+   * active run count, last action). Rendered inside a dedicated "lazygt Bots"
    * group zone.
    */
   bots?: BotNodeInput[];
@@ -385,7 +385,7 @@ export function reconcile(inputs: ReconcileInputs): ReconcileResult {
     // particular mission currently renders as a plain mission or a loop
     // node, so a dismissal never needs re-deriving per render kind.
     // LazyBot missions (carrying botId) are rendered as bot nodes in the
-    // dedicated LazyBots zone, NOT as agent mission nodes here — filtering
+    // dedicated lazygt Bots zone, NOT as agent mission nodes here — filtering
     // them avoids the duplicate node (one agent card + one bot card) that
     // confused users into thinking a regular agent was also running.
     missions: project.missions.filter((m) => !m.archived && !m.botId && !dismissedRefs.has(makeRef('mission', m.id))),
@@ -532,13 +532,13 @@ export function reconcile(inputs: ReconcileInputs): ReconcileResult {
   }
 
   // ── LazyBot zone (additive, LazyBot canvas wave) ──────────────────────
-  // A dedicated "LazyBots" group zone (mirroring the synthetic Transverse
+  // A dedicated "lazygt Bots" group zone (mirroring the synthetic Transverse
   // zone) hosting every bot node. Bots are BotConfigs, not FleetMissions, so
   // this is emitted DIRECTLY (not through the project-zone machinery). It is
   // always rendered (even empty) so the surface stays discoverable; bot
   // children sit inside the group at simple grid cells.
   const botVmEdgesFromBots: CanvasReactFlowEdge[] = [];
-  // Canvas always passes `bots` (possibly empty) so the LazyBots zone stays
+  // Canvas always passes `bots` (possibly empty) so the lazygt Bots zone stays
   // visible and distinct from project agent zones. Tests that omit `bots`
   // keep the previous node set (no extra zone).
   if (inputs.bots !== undefined) {
@@ -565,7 +565,7 @@ export function reconcile(inputs: ReconcileInputs): ReconcileResult {
     let botsGroupPos = parkedInTheVoid ? undefined : persistedBotPos;
     if (!botsGroupPos) {
       // Default used to be (0, -340) — off-canvas for a typical viewport, and
-      // `onlyRenderVisibleElements` culled the whole LazyBots zone so bots
+      // `onlyRenderVisibleElements` culled the whole lazygt Bots zone so bots
       // looked like they didn't exist (they are not local agent missions).
       const siblingProjects = out.nodes.filter((n) => n.type === 'project');
       if (siblingProjects.length > 0) {
@@ -580,7 +580,7 @@ export function reconcile(inputs: ReconcileInputs): ReconcileResult {
     const groupData: ProjectNodeData = {
       projectId: LAZYBOTS_PROJECT_ID,
       root: '',
-      name: 'LazyBots',
+      name: 'lazygt Bots',
       color: '#7C5CFF',
       collapsed: collapsed[LAZYBOTS_PROJECT_ID] === true,
       isActive: false,
@@ -625,7 +625,7 @@ export function reconcile(inputs: ReconcileInputs): ReconcileResult {
       // Connected VM window: a `botVm` node shown to the RIGHT of its bot node,
       // tethered by a quiet hierarchy edge (same contract as local agents'
       // connected live windows — TerminalNode/PreviewNode). The node is
-      // top-level (draggable away from the LazyBots zone if the user wants).
+      // top-level (draggable away from the lazygt Bots zone if the user wants).
       if (b.vmOpen) {
         const vmRef = makeRef('botVm', b.bot.id);
         const vmSize = b.vmSize ?? BOT_VM_WINDOW_DEFAULT_SIZE;

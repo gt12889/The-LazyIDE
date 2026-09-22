@@ -1,4 +1,4 @@
-/* botManagerContext — the LazyManager's per-turn view of the saved LazyBots.
+/* botManagerContext — the LazyManager's per-turn view of the saved lazygt Bots.
 
    Pure helpers, no storage and no Tauri: agentsStore.tsx builds the
    summaries from listBots() + getBotRuntimeState(), buildManagerDynamicContext
@@ -81,7 +81,7 @@ export function formatBotLastTimeDigest(botName: string, last: BotLastTime): str
  *  has to guess whether bots exist. */
 export function formatLazyBotsContext(bots: readonly LazyBotSummary[]): string {
   if (bots.length === 0) {
-    return '(no LazyBots saved yet — create_lazybot first, after asking the user for a name)';
+    return '(no lazygt Bots saved yet — create_lazybot first, after asking the user for a name)';
   }
   return formatLazyBotLines(bots).join('\n');
 }

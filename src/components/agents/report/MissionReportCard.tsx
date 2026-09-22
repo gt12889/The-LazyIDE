@@ -47,7 +47,7 @@ export const MissionReportCard = memo(function MissionReportCard({ mission, onOp
   const isApproved = mission.terminalType === 'mission.approved';
   const isEstimated = mission.tokensSource === 'estimated' || mission.tokensSource === 'mixed';
   // Cost-honesty wave: native claude-code/codex CLI missions report an exact
-  // API-list-price EQUIVALENT of their real tokens, never an amount Lazy
+  // API-list-price EQUIVALENT of their real tokens, never an amount lazygt
   // actually billed (see CompletedMissionReport.costIsApiEquivalent's doc
   // comment) — flagged only when there is a real cost figure to qualify.
   const isApiEquivalent = mission.costUsd > 0 && mission.costIsApiEquivalent === true;

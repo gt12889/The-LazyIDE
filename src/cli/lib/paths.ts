@@ -25,7 +25,7 @@ export function resolveLazybrainScript(): string {
   }
 
   // 2. Dev path: sibling LazyBrain repo
-  // __here is src/cli/lib — go up 4 levels: lib -> cli -> src -> Lazy -> cerveau
+  // __here is src/cli/lib — go up 4 levels: lib -> cli -> src -> lazygt -> cerveau
   const devScript = join(_here, '..', '..', '..', '..', 'LazyBrain', 'dist', 'bin', 'lazybrain.js');
   if (existsSync(devScript)) {
     return devScript;

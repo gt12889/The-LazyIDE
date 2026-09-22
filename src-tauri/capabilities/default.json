@@ -12,7 +12,6 @@
     "dialog:allow-confirm",
     "dialog:allow-ask",
     "os:allow-locale",
-    "updater:default",
     "process:allow-restart",
     "shell:allow-open"
   ]

@@ -1,5 +1,5 @@
 /* WelcomeStep — step 1 of 4.
-   Introduces Lazy in one clear sentence. No fluff.
+   Introduces lazygt in one clear sentence. No fluff.
 */
 
 import React from 'react';
@@ -38,7 +38,7 @@ export function WelcomeStep({ onNext, onSkip, userEmail, isNewAccount = true }: 
         </div>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>
-            Lazy IDE
+            lazygt
           </div>
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 1 }}>
             {userEmail ? t(greetingKey, { email: userEmail }) : t('onboarding.welcome.subtitle')}

@@ -3,7 +3,7 @@
    workflow compiler. Each stage has an explicit contract: what it does, its limits,
    its expected outputs, and how it transitions.
 
-   Inspired by Millrace's "compiled plan" concept — adapted for Lazy's TS/Tauri stack
+   Inspired by Millrace's "compiled plan" concept — adapted for lazygt's TS/Tauri stack
    and integrated with LazyBrain for brain-driven plan adaptation.
 */
 

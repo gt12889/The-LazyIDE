@@ -42,7 +42,7 @@ export interface ApprovalModeConfig {
 }
 
 const STORAGE_FILE_NAME = 'approvalModes.json';
-const LOCAL_STORAGE_KEY = 'lazy.agents.approvalModes';
+const LOCAL_STORAGE_KEY = 'lazygt.agents.approvalModes';
 
 const VALID_MODES: readonly ApprovalMode[] = ['manual', 'auto_green', 'full_auto'];
 

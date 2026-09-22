@@ -12,7 +12,7 @@ export interface LazyRules {
 /**
  * Standard onboarding files, in priority order (first match wins). This is
  * the G1 interop fix: users coming from Cursor/Claude Code already have
- * .cursorrules / CLAUDE.md / AGENTS.md — Lazy must read them so the agent
+ * .cursorrules / CLAUDE.md / AGENTS.md — lazygt must read them so the agent
  * starts every session informed (harness artifact #1).
  *
  * Priority: AGENTS.md > CLAUDE.md > .cursorrules > .lazyrules > variants.

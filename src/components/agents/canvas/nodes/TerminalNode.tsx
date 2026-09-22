@@ -43,7 +43,7 @@ import { useI18n } from '../../../../i18n';
 
 // @xterm is ~250KB of terminal emulator + CSS that the canvas only needs
 // when a terminal node actually exists — most sessions never create one.
-// Lazy-loading TerminalView keeps xterm out of the canvas bundle (and out
+// lazygt-loading TerminalView keeps xterm out of the canvas bundle (and out
 // of the startup path entirely when the agents space itself is eager),
 // while preserving the "PTY stays mounted at all times" invariant below:
 // the lazy boundary only defers the FIRST mount, never remounts.

@@ -24,7 +24,7 @@ import type { OrgData } from '../lib/teams/types';
 
 // ── Set locale to French before first render ──────────────────────
 try {
-  localStorage.setItem('lazy.locale', 'fr');
+  localStorage.setItem('lazygt.locale', 'fr');
 } catch { /* noop */ }
 
 // ── Demo data (mirrors supabase-mock.ts) ──────────────────────────
@@ -158,7 +158,7 @@ function HarnessRoot() {
 function DashboardScreen({ initialTab: _initialTab }: { initialTab?: string }) {
   // Set org ID in localStorage so useOrg resolves if needed by child hooks
   useEffect(() => {
-    try { localStorage.setItem('lazy.teams.orgId', DEMO_ORG_ID); } catch { /* noop */ }
+    try { localStorage.setItem('lazygt.teams.orgId', DEMO_ORG_ID); } catch { /* noop */ }
   }, []);
 
   // OrgDashboard is rendered directly with props — bypasses useOrg entirely.

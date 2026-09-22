@@ -1,4 +1,4 @@
-/* byokProviders — first-class BYOK providers for Lazy.
+/* byokProviders — first-class BYOK providers for lazygt.
 
    Every provider a user can bring their own key to, with the same ease as
    the Claude CLI / LazyPro rails: a card in ProvidersPanel, a key field in
@@ -12,7 +12,7 @@
                   Anthropic-compatible gateways, e.g. DeepSeek's
                   https://api.deepseek.com/anthropic).
 
-   Persistence — never sent to Lazy, but the API key's storage differs by
+   Persistence — never sent to lazygt, but the API key's storage differs by
    platform (audit 2026-08-12: the old scheme stored the raw key in
    localStorage, a plain SQLite file readable by any process running as the
    same OS user):
@@ -27,10 +27,10 @@
      migration) and kept in sync on every save.
    - Browser / Playwright (non-Tauri): there is no OS credential vault
      inside a browser tab, so this is an EXPLICIT, intentional fallback —
-     the key still lives in localStorage under `lazy.apikey.<provider>`,
+     the key still lives in localStorage under `lazygt.apikey.<provider>`,
      unchanged from before this file's vault integration.
-   - lazy.baseurl.<provider>  : base URL override (default = provider default)
-   - lazy.model.<provider>    : model override (default = provider default)
+   - lazygt.baseurl.<provider>  : base URL override (default = provider default)
+   - lazygt.model.<provider>    : model override (default = provider default)
    (baseUrl/model overrides are not secrets — left in localStorage on every
    platform, desktop included.)
 
@@ -173,9 +173,9 @@ export function resolveByokDef(provider: ByokProvider | undefined): ByokProvider
 
 // ── API key persistence (vault on desktop, localStorage on web) ───
 
-const KEY_PREFIX = 'lazy.apikey.';
-const URL_PREFIX = 'lazy.baseurl.';
-const MODEL_PREFIX = 'lazy.model.';
+const KEY_PREFIX = 'lazygt.apikey.';
+const URL_PREFIX = 'lazygt.baseurl.';
+const MODEL_PREFIX = 'lazygt.model.';
 
 // Regression (2026-08-12, live-app audit): a plain module-level `const
 // byokVaultCache = new Map()` is reset to empty the instant this module is

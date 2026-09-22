@@ -1,7 +1,7 @@
 /* projection.ts — 3D -> 2D projection math + hit-testing for the Brain
    Canvas. Ported near-verbatim from the design handoff prototype's
    `project` closure inside `loop()` (see design_handoff_brain_redesign/
-   Lazy IDE.dc.html, class Component).
+   lazygt.dc.html, class Component).
 
    `projectInto` writes into a caller-supplied output object instead of
    allocating one, so the per-frame render loop (looping over every visible

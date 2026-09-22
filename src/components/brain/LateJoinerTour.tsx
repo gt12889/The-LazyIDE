@@ -11,7 +11,7 @@ import { isTauri } from '../../lib/platform';
 import { parseNoteIds } from '../../lib/brain/queryCssParse';
 
 function tourKey(orgId: string): string {
-  return `lazy.team-tour:${orgId}`;
+  return `lazygt.team-tour:${orgId}`;
 }
 
 interface TourItem {

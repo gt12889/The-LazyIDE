@@ -81,7 +81,7 @@ export const SAFE_ACTIONS = new Set<string>([
   // deletion. Same "reversible, no approval needed" tier as
   // propose_mission_charter above (types.ts's propose_artifact doc comment).
   'propose_artifact',
-  // LazyBots (A3) — create/update/list persist only a local bot config file
+  // lazygt Bots (A3) — create/update/list persist only a local bot config file
   // (.lazy/bots.json), fully reversible via the same actions, exactly like
   // create_agent above. list_lazybots is read-only.
   'create_lazybot',
@@ -139,7 +139,7 @@ export const SENSITIVE_ACTIONS = new Set<string>([
   // non-final buttons) even though `validateOnly` keeps the actual publish
   // step from firing — touches real execution, same tier as start_preview.
   'run_browser_recipe',
-  // LazyBots (A3) — run_lazybot launches a real managed mission (spends
+  // lazygt Bots (A3) — run_lazybot launches a real managed mission (spends
   // budget, touches real execution) like launch_mission; stop_lazybot halts
   // running execution like stop_mission. sweep_solari kills real cloud
   // sessions (orphaned ones, but still remote resources); resolving a bot's

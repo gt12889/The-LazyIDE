@@ -1,6 +1,6 @@
 /* codeTools.ts — ChatTool definitions exposing code intelligence to the AI assistant (C).
    Instead of GitNexus's MCP tools, these are ChatTool definitions that plug into
-   Lazy's existing tool system (same pattern as brain_search, search_replace).
+   lazygt's existing tool system (same pattern as brain_search, search_replace).
 
    The managed provider runs a client-side ReAct shim: the model emits a directive
    line, the provider parses it, executes the tool, and continues with results.

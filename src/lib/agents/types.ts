@@ -175,7 +175,7 @@ export interface Mission {
    * happens to be ACTIVE later.
    *
    * Fixes a real project_id drift (2026-08-04 prod incident, missions
-   * drifting onto "Lazy-real-test"): the debounce-save journaling effect
+   * drifting onto "lazygt-real-test"): the debounce-save journaling effect
    * (agentsStore.tsx) used to stamp EVERY changed mission with
    * `projectIdFromRoot(await resolveProjectRoot())` — the CURRENTLY active
    * project — computed ONCE per cycle and applied to the whole batch,
@@ -1082,10 +1082,10 @@ export interface ManagerMessage {
 
 /**
  * Deliberate per-mission provider choice the manager can request — "cli"
- * targets the Claude CLI/BYOK subscription, "pro" targets the Lazy managed
+ * targets the Claude CLI/BYOK subscription, "pro" targets the lazygt managed
  * (OpenRouter/ai-proxy) credits. The two rails are independent and can both
  * be active at once (a user may hold a Claude subscription AND an active
- * Lazy Pro plan simultaneously — see runtime.ts's classifyMissionModel doc
+ * lazygt Pro plan simultaneously — see runtime.ts's classifyMissionModel doc
  * comment and modelPickerOptions.ts's module header). Resolved to a concrete
  * model id of the matching family by resolveManagerModelId (managerEngine.ts)
  * before the mission ever reaches runtime.ts's classifyMissionModel-based
@@ -1875,11 +1875,11 @@ export type ManagerAction =
   // ── Self-improvement & learning (Pillar B3/D) — the manager can trigger
   //  improvement loops, save reusable agent templates, and capture learned
   //  patterns into the Brain. These are sensitive actions (gated in
-  //  supervised mode) because self_improve launches missions on the Lazy
+  //  supervised mode) because self_improve launches missions on the lazygt
   //  repo itself, and learn_pattern writes to the Brain.
   /** Triggers a self-improvement cycle on a project: observes recent
    *  outcomes, diagnoses failures, and generates fix missions. When
-   *  projectId targets the Lazy repo itself, this is true self-improvement.
+   *  projectId targets the lazygt repo itself, this is true self-improvement.
    *  In supervised mode, the gate asks for approval before launching. */
   | { type: 'self_improve'; projectId?: string; maxFixMissions?: number }
   /** Saves a reusable agent template from a successful mission so the
@@ -1968,7 +1968,7 @@ export type ManagerAction =
    * see BrowserRecipeResult's own fields for what the executor reports back.
    */
   | { type: 'run_browser_recipe'; recipe: import('./browserRecipe.js').BrowserRecipe; validateOnly?: boolean }
-  // ── LazyBots (A3) — the LazyManager creates/manages LazyBots from the
+  // ── lazygt Bots (A3) — the LazyManager creates/manages lazygt Bots from the
   // chat, and a running bot can ask the manager for human intervention
   // (login/2FA/takeover — see botRequestIntervention.ts). Additive only.
   /** Creates a new LazyBot: a persistent, named agent persona with its own
@@ -2004,7 +2004,7 @@ export type ManagerAction =
   /** Stops every currently running run of a LazyBot (stopBotRun per active
    *  run via listActiveRunsForBot). */
   | { type: 'stop_lazybot'; botId: string }
-  /** Lists all saved LazyBots with a coarse runtime summary
+  /** Lists all saved lazygt Bots with a coarse runtime summary
    *  ({ id, name, autonomy, enabled, activeRuns, status }). */
   | { type: 'list_lazybots' }
   /** Permanently deletes a LazyBot's configuration — bots have no archived

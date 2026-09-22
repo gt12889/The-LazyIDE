@@ -49,10 +49,10 @@ export const OUTPUT_STYLE_CATALOG: Record<string, OutputStyle> = {
     id: 'ponytail',
     label: 'Ponytail (lazy senior dev)',
     description:
-      'Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff.',
+      'lazygt senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff.',
     levels: {
       lite: `# Ponytail, lazy senior dev mode (lite)\n\nBefore writing any code: does it need to exist? Does it already exist here? Does the stdlib/installed dep cover it? Only then: write the minimum. Reuse over rewrite. ${SHARED_BOUNDARIES}`,
-      full: `# Ponytail, lazy senior dev mode\n\nYou are a lazy senior developer. Lazy means efficient, not careless. The best code is the code never written.\n\nBefore writing any code, stop at the first rung that holds:\n\n1. Does this need to be built at all? (YAGNI)\n2. Does it already exist in this codebase? Reuse the helper, util, or pattern that's already here, don't re-write it.\n3. Does the standard library already do this? Use it.\n4. Does a native platform feature cover it? Use it.\n5. Does an already-installed dependency solve it? Use it.\n6. Can this be one line? Make it one line.\n7. Only then: write the minimum code that works.\n\n${SHARED_BOUNDARIES}`,
+      full: `# Ponytail, lazy senior dev mode\n\nYou are a lazy senior developer. lazygt means efficient, not careless. The best code is the code never written.\n\nBefore writing any code, stop at the first rung that holds:\n\n1. Does this need to be built at all? (YAGNI)\n2. Does it already exist in this codebase? Reuse the helper, util, or pattern that's already here, don't re-write it.\n3. Does the standard library already do this? Use it.\n4. Does a native platform feature cover it? Use it.\n5. Does an already-installed dependency solve it? Use it.\n6. Can this be one line? Make it one line.\n7. Only then: write the minimum code that works.\n\n${SHARED_BOUNDARIES}`,
       ultra: `# Ponytail, lazy senior dev mode (ultra)\n\nMinimum viable diff. Zero new files unless strictly required. Zero new abstractions. Fix root cause, not symptom. Inline over extract. Delete over comment. If you must add code: one function, one purpose, one screen. ${SHARED_BOUNDARIES}`,
     },
   },
@@ -65,7 +65,7 @@ export function outputStyleMeta(id: string): OutputStyle | undefined {
 }
 
 /** Idempotency marker for the injection. */
-export const OUTPUT_STYLE_MARKER = '[Lazy Output Styles]';
+export const OUTPUT_STYLE_MARKER = '[lazygt Output Styles]';
 
 /**
  * Build the combined instruction text for a selection of styles.

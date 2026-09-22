@@ -16,7 +16,7 @@ interface SettingItem {
 }
 
 // NOTE: this panel's fields are cosmetic only. updateSetting() below writes
-// to the `lazy.settings.*` localStorage namespace, which nothing else in the
+// to the `lazygt.settings.*` localStorage namespace, which nothing else in the
 // app reads back — the live AI/model configuration lives in AccessSettings
 // (see src/lib/models/accessSettings.ts) and is edited from SettingsSpace /
 // ModelPicker (src/spaces/SettingsSpace.tsx, src/components/settings/ModelPicker.tsx).
@@ -85,7 +85,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   function updateSetting(key: string, value: string | number | boolean) {
     setSettings(prev => ({ ...prev, [key]: value }));
     try {
-      localStorage.setItem(`lazy.settings.${key}`, String(value));
+      localStorage.setItem(`lazygt.settings.${key}`, String(value));
     } catch { /* ignore */ }
   }
 

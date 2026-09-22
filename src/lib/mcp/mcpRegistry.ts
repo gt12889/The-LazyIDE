@@ -28,7 +28,7 @@ export interface McpServerConfig {
   createdAt: string;
 }
 
-const STORAGE_KEY = 'lazy.mcp.servers';
+const STORAGE_KEY = 'lazygt.mcp.servers';
 
 export function listServerConfigs(): McpServerConfig[] {
   try {

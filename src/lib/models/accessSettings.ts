@@ -42,16 +42,20 @@ export interface AccessSettings {
   outputStyles?: OutputStyleSelectionEntry[];
 }
 
-const LS_ACCESS_KEY = 'lazy.accessSettings';
+const LS_ACCESS_KEY = 'lazygt.accessSettings';
 
 export function loadAccessSettings(): AccessSettings {
   try {
     const raw = localStorage.getItem(LS_ACCESS_KEY);
-    if (raw) return JSON.parse(raw) as AccessSettings;
+    if (raw) {
+      const parsed = JSON.parse(raw) as AccessSettings;
+      if (parsed && parsed.accessMode === 'cli' && ['claude', 'codex', 'devin'].includes(parsed.cliTool ?? 'claude')) return parsed;
+      if (parsed && parsed.accessMode === 'local') return { ...parsed, model: parsed.model?.startsWith('local/') ? parsed.model : 'local/hermes3' };
+    }
   } catch {
     // localStorage unavailable or invalid JSON — fall through
   }
-  return {};
+  return { accessMode: 'local', model: 'local/hermes3' };
 }
 
 export function saveAccessSettings(settings: AccessSettings): void {

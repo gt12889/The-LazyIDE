@@ -36,7 +36,7 @@
         getCostState().totalCostUsd across a cycle — the same session-wide
         cost accumulator every model call already feeds
         (src/lib/models/costStore.ts) — and persisted per-window to
-        localStorage ('lazy.nightshift.window') so it survives restarts
+        localStorage ('lazygt.nightshift.window') so it survives restarts
         and resets automatically the moment a new night starts.
 
    loopEngine.ts integration: loopEngine.ts is a persistent scheduler for
@@ -251,7 +251,7 @@ interface NightShiftPersistedState {
   lastRunAtIso?: string;
 }
 
-const WINDOW_STORAGE_KEY = 'lazy.nightshift.window';
+const WINDOW_STORAGE_KEY = 'lazygt.nightshift.window';
 const NIGHT_WINDOW_START_HOUR = 22; // 22:00 local
 
 /** ISO start of the night window containing `now` (22:00-08:00 local,

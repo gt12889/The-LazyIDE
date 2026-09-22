@@ -3,7 +3,7 @@
    agent to produce ≤5-word intermediate reasoning steps instead of verbose
    chain-of-thought.
 
-   Inspired by ReasonBlocks' Chain-of-Draft, adapted for Lazy's ReAct loop.
+   Inspired by ReasonBlocks' Chain-of-Draft, adapted for lazygt's ReAct loop.
    The directive is appended to the system prompt as a [LAZYREASONING] block.
 */
 

@@ -146,7 +146,7 @@ const TIER_GROUP_LABEL: Record<ModelTier, string> = {
 /**
  * Build a compact listing of the FULL OpenRouter catalog for the manager's
  * dynamic context (see buildManagerDynamicContext's proModelCatalogBlock) —
- * injected ONLY when the Lazy Pro rail is actually usable this turn
+ * injected ONLY when the lazygt Pro rail is actually usable this turn
  * (ManagerContext.proRailActive), since the CLI rail can never route to any
  * of these ids anyway (see UnknownManagerModelIdError's 'cli' branch).
  *
@@ -181,7 +181,7 @@ export function buildCompactModelCatalog(): string {
  *
  *  Sonnet is the right default for the manager's orchestration role
  *  (see getManagerDefaultModelId's doc comment below). The user's
- *  manually-picked model (localStorage 'lazy.manager.model') always wins. */
+ *  manually-picked model (localStorage 'lazygt.manager.model') always wins. */
 const MANAGER_NATIVE_MODEL_ID = 'claude-sonnet-5';
 
 /**
@@ -210,6 +210,7 @@ const MANAGER_NATIVE_MODEL_ID = 'claude-sonnet-5';
  * nothing valid was ever explicitly selected).
  */
 export function getManagerDefaultModelId(mode: ProviderMode): string {
+  if (mode === 'local') return getDefaultModelIdForMode(mode);
   if (mode === 'managed' || mode === 'pro' || mode === 'codex' || mode === 'devin') {
     return getDefaultModelIdForMode(mode);
   }
@@ -430,7 +431,7 @@ export interface ManagerContext {
   creditsSummary?: string;
   /**
    * STACK fix: live status of the two INDEPENDENT engine rails (a Claude
-   * CLI/BYOK subscription and Lazy Pro managed credits can both be active at
+   * CLI/BYOK subscription and lazygt Pro managed credits can both be active at
    * once — see modelPickerOptions.ts's module doc comment), built by
    * formatEntitlementsSummary from the SAME detectModelEntitlements()
    * snapshot every model picker (LazyManager, New Mission, Composer) already
@@ -505,7 +506,7 @@ export interface ManagerContext {
    */
   locale?: string;
   /**
-   * True when the Lazy Pro rail's managed credits are actually usable this
+   * True when the lazygt Pro rail's managed credits are actually usable this
    * turn (detectModelEntitlements().pro === 'active', modelPickerOptions.ts
    * — the SAME primitive every model picker already uses, no new detection).
    * Gates whether buildManagerDynamicContext injects the compact full
@@ -518,7 +519,7 @@ export interface ManagerContext {
    */
   proRailActive?: boolean;
   /**
-   * The saved LazyBots (Solari cloud bots) as seen at prompt-build time —
+   * The saved lazygt Bots (Solari cloud bots) as seen at prompt-build time —
    * built by agentsStore.tsx from listBots() + botEngine's runtime state via
    * summarizeLazyBot (botManagerContext.ts). Injected EVERY turn (a handful
    * of one-line entries, no round-trip to wait for) so the model has the
@@ -596,7 +597,7 @@ export interface CreditsSnapshot {
 export function formatCreditsSummary(snapshot: CreditsSnapshot | undefined): string | undefined {
   if (!snapshot) return undefined;
   if (!snapshot.isPro || snapshot.creditsRemainingCents === undefined) {
-    return 'Free plan — no managed Lazy credit balance; the user pays via their own CLI subscription or API key, not Lazy credits.';
+    return 'Free plan — no managed lazygt credit balance; the user pays via their own CLI subscription or API key, not lazygt credits.';
   }
   const remaining = formatCredits(snapshot.creditsRemainingCents);
   const included = snapshot.creditsIncludedCents !== undefined
@@ -626,10 +627,10 @@ export function formatEntitlementsSummary(
   const claudeLine = `- Claude subscription (CLI/BYOK): ${entitlements.claudeSub ? 'ready' : 'not detected'}`;
   const proLine =
     entitlements.pro === 'active'
-      ? `- Lazy Pro (managed credits): active, ${formatCredits(creditsRemainingCents ?? 0)} remaining`
+      ? `- lazygt Pro (managed credits): active, ${formatCredits(creditsRemainingCents ?? 0)} remaining`
       : entitlements.pro === 'no-credits'
-        ? '- Lazy Pro (managed credits): active plan, 0 credits left'
-        : '- Lazy Pro (managed credits): no active plan';
+        ? '- lazygt Pro (managed credits): active plan, 0 credits left'
+        : '- lazygt Pro (managed credits): no active plan';
   return `${claudeLine}\n${proLine}`;
 }
 
@@ -706,7 +707,7 @@ export function buildManagerDynamicContext(ctx: ManagerContext): string {
     presentSection(ctx.creditsSummary, (v) => `\n\n### Account & Credits (real, from the user's subscription)\n${v}`),
     presentSection(ctx.entitlementsSummary, (v) => `\n\n### Engines (real, live — both rails below are independent and can be active at once)\n${v}`),
     presentSection(ctx.proRailActive ? buildCompactModelCatalog() : undefined, (v) => `\n\n### Pro Model Catalog (real, exact ids — set "modelId" on launch_mission/launch_best_of_n/create_loop/create_draft/spawn_submissions/generate_plan steps to target one precisely; plain tier hints still resolve within this same rail otherwise)\n${v}`),
-    presentSection(ctx.lazyBots ? formatLazyBotsContext(ctx.lazyBots) : undefined, (v) => `\n\n### LazyBots (real, saved Solari cloud bots — the ONLY valid "botId" values)\n${v}\n\nThis list is already grounded: to run one of these bots, emit run_lazybot with its exact botId (its name is accepted too) IN THE SAME REPLY as your announcement — never emit list_lazybots just to find an id that is already here, and never announce "je lance le bot" without the <lazy_actions> block.`),
+    presentSection(ctx.lazyBots ? formatLazyBotsContext(ctx.lazyBots) : undefined, (v) => `\n\n### lazygt Bots (real, saved Solari cloud bots — the ONLY valid "botId" values)\n${v}\n\nThis list is already grounded: to run one of these bots, emit run_lazybot with its exact botId (its name is accepted too) IN THE SAME REPLY as your announcement — never emit list_lazybots just to find an id that is already here, and never announce "je lance le bot" without the <lazy_actions> block.`),
     groundedResultBlock('Agent Canvas (real, live board state)', ctx.canvasDigest, 'This is the REAL current state of the Agent Canvas — the cockpit surface the user is looking at. Use real refs (e.g. "mission:M12", "draft:abc-123") from this digest when emitting canvas actions (chain_agents, launch_draft, focus_canvas, move_node, unchain, collapse_project) — never invent a ref that is not listed here. When the user asks "how many nodes/elements are on the canvas", answer with the digest\'s own "Canvas total" line (sums every kind: missions/loops + drafts + notes + routers + joins + terminals/previews + frames) — never the "Nodes (N)" line alone, which counts missions/loops only and will under-report what the user actually sees on the board.'),
     groundedResultBlock('Fleet Runtime (real, all projects)', ctx.fleetContext, 'This is the REAL runtime state across all open projects — use it when the user asks about the fleet, budgets, or cross-project work.'),
     presentSection(ctx.otherProjectsDigest, (v) => `\n\n### Other projects (compact — missions not on the active board)\n${v}\nUse this when orchestrating across projects; the Current State missions list above is the ACTIVE board only.`),
@@ -1918,7 +1919,7 @@ export function isClarifyingQuestion(text: string): boolean {
 }
 
 // ── GOAL LOOP: evaluate → act → re-evaluate until the objective is reached ──
-// FOUNDER DIRECTIVE (verbatim): "le LazyIDE doit être capable de lancer un
+// FOUNDER DIRECTIVE (verbatim): "le lazygt doit être capable de lancer un
 // plan, et en temps réel voir si le plan suffit ou s'il faut rajouter des
 // étapes, des agents, corriger des choses jusqu'à arriver à l'objectif — il
 // doit lui-même comprendre quand relancer d'autres agents jusqu'à atteindre
@@ -2288,7 +2289,7 @@ const ACTION_REQUIRED_FIELDS_HINT: Readonly<Record<string, string>> = {
   open_project: '{"path":"..."}',
   create_project: '{"path":"..."}',
   set_budget: '{"limitUsd":5}',
-  // LazyBots (A3) — one-line schemas, same format as every other entry above.
+  // lazygt Bots (A3) — one-line schemas, same format as every other entry above.
   create_lazybot: '{"name":"bot-name","systemPrompt":"...","profileIds":["prof_..."],"routines":[{"name":"...","schedule":"0 9 * * 1-5","task":"...","enabled":true}],"avatar":"...","budgetCapUsd":5}',
   update_lazybot: '{"botId":"bot_...","patch":{"profileIds":["prof_..."],"routines":[...],"avatar":"...","budgetCapUsd":5}}',
   run_lazybot: '{"botId":"bot_...","task":"...","model":"<tier|exact id>"}',
@@ -2314,7 +2315,7 @@ function buildActionExtractionRepairSystemPrompt(lazyBots: readonly LazyBotSumma
   // example.com") — without this excerpt the repair call could only ever
   // invent an id or give up. Same rendering the main prompt uses.
   const botsHint = lazyBots && lazyBots.length > 0
-    ? `\n\nKnown LazyBots (Solari cloud bots — use these EXACT ids as "botId"; a bot named in the text maps to its id here):\n${formatLazyBotsContext(lazyBots)}`
+    ? `\n\nKnown lazygt Bots (Solari cloud bots — use these EXACT ids as "botId"; a bot named in the text maps to its id here):\n${formatLazyBotsContext(lazyBots)}`
     : '';
   return (
     'You convert assistant intentions into a machine-actionable block. Output ONLY a ' +
@@ -2411,6 +2412,12 @@ const MAX_LLM_CALLS_BEFORE_REPAIR_SKIPPED = 6;
  *  converges to an honest final answer within the existing `maxTurns` budget. */
 export async function runManagerTurn(opts: ManagerTurnOptions): Promise<ManagerTurnResult> {
   const { messages, context, model, signal, engineOverride, maxTurns = 3, onChunk, onPartial } = opts;
+  // Local chat has no action loop: never force an informational response to
+  // fabricate executable actions, retry it as a mission, or route it to cloud.
+  if (getProviderMode() === 'local') {
+    const rawResponse = await streamManagerCompletion({ mode: 'local', model: model ?? '', system: '', apiMessages: messages, signal, onChunk, onPartial });
+    return { responseText: rawResponse, actions: [], rawResponse, announcementNudged: false };
+  }
 
   // REMOVED (2026-07-28 perf/architecture audit — founder call): this used to
   // run an UNCONDITIONAL ambient brain.recall(lastUserMsg.content) here on

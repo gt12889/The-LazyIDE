@@ -2,7 +2,7 @@
    Stores full transcripts, diffs, verdicts, metrics, and brain context
    so missions can be reviewed and compared after completion.
 
-   Inspired by Millrace's run artifacts concept — adapted for Lazy's
+   Inspired by Millrace's run artifacts concept — adapted for lazygt's
    .lazy/ directory convention.
 */
 

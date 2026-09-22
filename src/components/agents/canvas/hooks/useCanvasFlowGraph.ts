@@ -129,7 +129,7 @@ export function useCanvasFlowGraph(params: UseCanvasFlowGraphParams): UseCanvasF
   const prevReconcileNodesRef = useRef<readonly CanvasReactFlowNode[]>([]);
 
   // LazyBot wave — load persisted bots + coarse runtime snapshot, feed them
-  // into reconcile() so each bot renders as a `bot` node in the LazyBots zone.
+  // into reconcile() so each bot renders as a `bot` node in the lazygt Bots zone.
   const [botInputs, setBotInputs] = useState<BotNodeInput[]>([]);
   useEffect(() => {
     let cancelled = false;

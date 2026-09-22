@@ -1,5 +1,5 @@
 /* cliAgentTurnStreamer — the CLI subscription (claude / codex) as a TEXT
-   backend for Lazy's own ReAct loop (planAndActManaged).
+   backend for lazygt's own ReAct loop (planAndActManaged).
 
    Why this exists. The native CLI rail (planAndActLive -> agent_run) runs the
    CLI's OWN agent: its own tools (files, git, shell) inside a git worktree.

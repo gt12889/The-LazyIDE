@@ -55,7 +55,7 @@ export class UnknownManagerModelIdError extends Error {
         ? `Model id "${modelId}" is not available on the Claude CLI/BYOK rail — that rail only understands native Anthropic ids (registry.ts's ALL_MODELS), never an OpenRouter-style id. Pick an id from ALL_MODELS, switch this action's "engine" to "pro", or use a tier hint instead.`
         : rail === 'byok'
           ? `Model id "${modelId}" is not available on the selected BYOK rail — that rail only understands ids from its own provider catalog (byokProviders.ts). Pick an id from the provider's model list, or use a tier hint instead.`
-          : `Model id "${modelId}" is not in the OpenRouter catalog the Lazy Pro rail accepts (openrouterCatalog.ts's OPENROUTER_MODELS). Pick a real catalog id, or use a tier hint instead.`;
+          : `Model id "${modelId}" is not in the OpenRouter catalog the lazygt Pro rail accepts (openrouterCatalog.ts's OPENROUTER_MODELS). Pick a real catalog id, or use a tier hint instead.`;
     super(hint ? `${base} ${hint}` : base);
     this.name = 'UnknownManagerModelIdError';
     this.modelId = modelId;
@@ -505,7 +505,7 @@ function resolveTierOrDefault(
  * `tier` doesn't match any catalog entry.
  *
  * @param engineOverride STACK fix (a user can hold both a Claude CLI
- *   subscription and an active Lazy Pro plan at once — see
+ *   subscription and an active lazygt Pro plan at once — see
  *   modelPickerOptions.ts's module doc comment): a deliberate per-mission
  *   "cli"/"pro" choice (the action's own `engine` field) always wins over
  *   both the ambient `mode` and the automatic BUG-2 rescue below — this is

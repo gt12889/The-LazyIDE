@@ -165,7 +165,7 @@ export interface StreamChatRequest {
    * assistantToolLoop.ts's tool-directive execution (READ_FILE, SEARCH_CODE,
    * GIT_*, etc.) runs against the project the user actually has open instead
    * of the localStorage key it used to read on its own — that key
-   * ('lazy.projectRoot') was never written by any code path, so every tool
+   * ('lazygt.projectRoot') was never written by any code path, so every tool
    * call silently ran against the backend process's own cwd (see
    * assistantToolLoop.ts's getProjectRoot doc comment). Optional so every
    * caller that doesn't track a project (inline-edit, autoFix, terminalAi,

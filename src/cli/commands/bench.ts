@@ -160,7 +160,7 @@ export function registerBench(program: Command): void {
         lastError: result.lastError ?? null,
         committed: Boolean(opts.commit),
         // Real usage/cost reported by the backend (claude backend JSON mode). Lets
-        // A/B benchmark harnesses measure "model alone" vs "LazyIDE loop" cost.
+        // A/B benchmark harnesses measure "model alone" vs "lazygt loop" cost.
         usage: result.usage ?? null,
         costUsd: result.usage?.costUsd ?? null,
       };

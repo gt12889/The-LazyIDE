@@ -97,7 +97,7 @@ export async function loadProjectScope(
 
 /** Default reader: delegates to the active Platform's fs.readFile. */
 async function _platformReadFile(path: string): Promise<string> {
-  // Lazy import to avoid circular deps and to keep this module usable
+  // lazygt import to avoid circular deps and to keep this module usable
   // in non-platform contexts (CLI, tests with explicit reader).
   const { getPlatform } = await import('../platform/index.js');
   return getPlatform().fs.readFile(path);

@@ -1,3 +1,4 @@
+import { localProvider } from '../models/localProvider.js';
 /* managerStreamCompletion — per-rail LLM dispatch for LazyManager.
 
    Measured 2026-08-28: streamManagerCompletion cyclomatic complexity was 21
@@ -573,6 +574,16 @@ async function dispatchAmbientRail(
 }
 
 export async function streamManagerCompletion(opts: StreamManagerCompletionOpts): Promise<string> {
+  if (opts.mode === 'local' || opts.model.startsWith('local/')) {
+    let response = '';
+    for await (const chunk of localProvider.streamChat({
+      messages: opts.apiMessages.map((m) => ({ id: m.id, role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
+      model: localProvider.listModels()[0], mode: 'ask', signal: opts.signal,
+      rulesContext: 'You are the lazygt local coding assistant. Answer questions and suggest code. Autonomous missions require a CLI engine; explain this when asked to execute tasks. Do not emit action blocks or claim to execute tools.',
+    })) { response += chunk; opts.onChunk?.(); opts.onPartial?.(response); }
+    return response;
+  }
+
   const {
     mode, model, system, cacheableSystem, apiMessages, signal, onChunk, onPartial,
     appendRecallTeaching = true,

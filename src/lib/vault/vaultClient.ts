@@ -48,9 +48,9 @@ export function deleteSecret(key: string): Promise<void> {
 
 // ── BYOK migration (localStorage → vault) ──────────────────────────
 
-const BYOK_LOCALSTORAGE_PREFIX = 'lazy.apikey.';
+const BYOK_LOCALSTORAGE_PREFIX = 'lazygt.apikey.';
 
-/** Every provider id ever persisted under `lazy.apikey.<id>` in
+/** Every provider id ever persisted under `lazygt.apikey.<id>` in
  *  localStorage — a plain string list (not importing ByokProvider /
  *  BYOK_PROVIDER_DEFS from byokProviders.ts) so this migration has zero
  *  dependency on that module and can run standalone, before anything else
@@ -67,7 +67,7 @@ export function byokVaultKey(provider: string): string {
 }
 
 /**
- * One-time, silent migration: for every `lazy.apikey.<provider>` value
+ * One-time, silent migration: for every `lazygt.apikey.<provider>` value
  * still sitting in localStorage (pre-vault installs), move it into the OS
  * vault and remove the plaintext copy. Idempotent — a provider with no
  * localStorage entry (already migrated, or never configured) is a no-op

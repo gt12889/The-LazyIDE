@@ -9,9 +9,7 @@ mod test_runner;
 mod lsp;
 mod teams_sidecar;
 mod crash_guard;
-mod updater_service;
 pub mod runner;
-mod solari_cdp_proxy;
 #[cfg(windows)]
 mod webview_recovery;
 #[cfg(windows)]
@@ -367,66 +365,6 @@ pub fn run() {
         crash_guard::install(&crash_guard::marker_path(dir));
     }
 
-    // ── Auto-update: apply a staged update before anything else starts ──
-    //
-    // See `updater_service`'s own module doc comment for the full model
-    // (staged-to-disk this session, applied at the START of the NEXT boot —
-    // never `Update::install`/`download_and_install`, which `exit(0)`
-    // unconditionally on Windows and bypass `RunEvent::Exit` entirely).
-    // Reuses the EXACT same pre-Builder `data_dir` resolution as
-    // `crash_guard` just above (`crash_guard_dir`) — must run before the
-    // Builder exists, so before any sidecar/agent/thread that would need
-    // killing on a self-relaunch. `log::*` is not wired yet (the log plugin
-    // registers in `.setup()` below), hence `eprintln!` here — same
-    // pre-Builder logging caveat `crash_guard`/`migration` already document;
-    // `updater_service::take_boot_action`'s own `log::*` calls additionally
-    // cover the SAME decision for the (non-boot) callers that run after the
-    // log plugin is up, e.g. a future manual re-check of this exact state.
-    let mut boot_update_applied: Option<String> = None;
-    if let Some(dir) = &crash_guard_dir {
-        match updater_service::take_boot_action(dir, env!("CARGO_PKG_VERSION")) {
-            updater_service::BootAction::Install { exe_path } => {
-                // This exit is VOLUNTARY (we are about to hand off to the
-                // freshly staged installer) — mark it clean so the NEXT
-                // boot's `crash_guard::read_startup_crash_state` does not
-                // mistake it for an unclean end (the exact bug this whole
-                // module exists to fix: `Update::install`'s own unconditional
-                // `exit(0)` never got a chance to do this).
-                crash_guard::mark_clean_exit(&crash_guard::marker_path(dir));
-
-                // /S = silent (currentUser install, no UAC prompt), /R =
-                // relaunch after install, /UPDATE = the NSIS "update mode"
-                // Tauri's own bundled installer script expects, /ARGS =
-                // prefix before the current process's own argv so the
-                // relaunched app sees the same args it was started with
-                // (mirrors the plugin's own `install_inner`, `updater.rs:812-814`).
-                let mut cmd = std::process::Command::new(&exe_path);
-                cmd.args(["/S", "/R", "/UPDATE", "/ARGS"]).args(std::env::args().skip(1));
-                match cmd.spawn() {
-                    Ok(_) => std::process::exit(0),
-                    Err(e) => {
-                        // Fail-open: do NOT exit — continue this boot
-                        // normally. `take_boot_action` already persisted the
-                        // incremented attempt count, so a persistently
-                        // unspawnable installer self-discards after
-                        // MAX_INSTALL_ATTEMPTS on a later boot rather than
-                        // wedging this one.
-                        eprintln!(
-                            "updater_service: failed to spawn staged installer {} ({}) — continuing normal boot (fail-open)",
-                            exe_path.display(),
-                            e
-                        );
-                    }
-                }
-            }
-            updater_service::BootAction::UpdateApplied { from_version } => {
-                eprintln!("updater_service: update applied successfully (was {from_version})");
-                boot_update_applied = Some(from_version);
-            }
-            updater_service::BootAction::None => {}
-        }
-    }
-
     // ── One-shot profile migration com.lazy.dev → com.lazy.app ──
     //
     // MUST run here, before the Builder is even constructed: WebView2 opens
@@ -439,22 +377,13 @@ pub fn run() {
     // hence the returned report, logged below once the plugin is up.
     let migration_report = migration::run_startup_migration(&context.config().identifier);
 
-    // C72 — local Origin-strip CDP proxy for packaged Tauri (mirrors vite /solari-cdp).
-    // Start before Builder::manage so the port is known; a bind failure yields
-    // port 0 and the frontend falls back to direct wss://api.getsolari.com.
-    let solari_cdp_port = match solari_cdp_proxy::start_solari_cdp_proxy() {
-        Ok(port) => port,
-        Err(err) => {
-            eprintln!("[lazy] solari_cdp_proxy failed to start: {err}");
-            0
-        }
-    };
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
+        .manage(commands::local_llm::LocalRequests::default())
         .manage(PtyState::new())
         .manage(BrainState::new())
         .manage(ProjectState::new())
@@ -467,10 +396,7 @@ pub fn run() {
         .manage(lsp::LspState::new())
         .manage(teams_sidecar::TeamsSidecarState::new())
         .manage(crash_guard::StartupCrashStateManaged(startup_crash_state))
-        .manage(updater_service::UpdaterRuntimeState::new(boot_update_applied))
-        .manage(std::sync::Arc::new(solari_cdp_proxy::SolariCdpProxyState {
-            port: solari_cdp_port,
-        }));
+;
 
     // ── Startup-readiness watchdog registration (see startup_watchdog.rs's
     // own module doc comment) ── MUST be attached to the `Builder` itself,
@@ -485,17 +411,6 @@ pub fn run() {
 
     builder
         .setup(move |app| {
-            // Register updater plugin (desktop only — not available on mobile).
-            // `tauri_plugin_updater::Builder` (this one) does not expose an
-            // `on_before_exit` hook — only the per-call `UpdaterBuilder`
-            // returned by `UpdaterExt::updater_builder()` does, and that
-            // hook only ever fires from `Update::install`'s own
-            // `install_inner` (updater.rs:837), a path `updater_service.rs`
-            // never calls — so there is nothing to wire here (spec A.3).
-            #[cfg(desktop)]
-            app.handle()
-                .plugin(tauri_plugin_updater::Builder::new().build())?;
-
             // OS info plugin — used for locale detection on first run.
             app.handle().plugin(tauri_plugin_os::init())?;
 
@@ -1114,6 +1029,8 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            commands::local_llm::local_llm_request,
+            commands::local_llm::local_llm_cancel,
             commands::fs::read_dir,
             commands::fs::read_file,
             commands::fs::read_file_base64,
@@ -1194,8 +1111,6 @@ pub fn run() {
             commands::vault::secret_get,
             commands::vault::secret_presence,
             commands::vault::secret_delete,
-            solari_cdp_proxy::solari_cdp_proxy_base,
-            commands::web::solari_replay_fetch,
             commands::shell::run_tests,
             commands::shell::run_shell,
             commands::shell::is_worktree_script_eligible,
@@ -1274,13 +1189,6 @@ pub fn run() {
             crash_guard::get_startup_recovery_state,
             runner::commands::runner_status,
             runner::commands::runner_ensure_started,
-            updater_service::updater_check,
-            updater_service::updater_download,
-            updater_service::updater_state,
-            updater_service::updater_set_auto,
-            updater_service::updater_ignore_version,
-            updater_service::updater_clear_staged,
-            updater_service::updater_restart_and_apply,
         ])
         .build(context)
         .expect("error while running tauri application")

@@ -87,7 +87,7 @@ For each design decision, document:
 - Minimal network requests
 - Optimized database queries
 - Appropriate caching
-- Lazy loading
+- lazygt loading
 
 ## Common Patterns
 
@@ -96,7 +96,7 @@ For each design decision, document:
 - **Container/Presenter**: Separate data logic from presentation
 - **Custom Hooks**: Reusable stateful logic
 - **Context for Global State**: Avoid prop drilling
-- **Code Splitting**: Lazy load routes and heavy components
+- **Code Splitting**: lazygt load routes and heavy components
 
 ### Backend Patterns
 - **Repository Pattern**: Abstract data access

@@ -360,7 +360,7 @@ const validators: Record<string, Validator> = {
   propose_mission_charter: (a) => validateMissionCharterAction(a),
   propose_artifact: (a) => validateProposeArtifactAction(a),
   info: (a) => check(requireString(a, 'message')),
-  // ── LazyBots (A3) — the manager creates/manages LazyBots from the chat.
+  // ── lazygt Bots (A3) — the manager creates/manages lazygt Bots from the chat.
   // `name` is required for create (the manager must ask the user for one —
   // never invent it); `botId` is required for update/run/stop. `systemPrompt`
   // is required because the executor builds a real BotConfig from it.

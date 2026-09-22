@@ -172,7 +172,7 @@ export function findSignalMission(signals: ManagerSignal[], missionId: string): 
 // rationale. Persisted to localStorage so a dismissed signal stays hidden
 // across a reload, not just for the current session.
 
-const ACK_STORAGE_KEY = 'lazy.managerSignals.acknowledged';
+const ACK_STORAGE_KEY = 'lazygt.managerSignals.acknowledged';
 
 /** Reads the persisted acknowledgment set. Never throws — a corrupt/absent
  *  value (private browsing, quota, first run, manual edit) degrades to "no

@@ -13,7 +13,7 @@ import { recordRecentFile } from '../../lib/editor/recentFiles';
 // persisted) on the way in. This keeps memory bounded to whichever
 // project is currently active.
 
-const TABS_STORAGE_PREFIX = 'lazy.editor.tabs.';
+const TABS_STORAGE_PREFIX = 'lazygt.editor.tabs.';
 const TABS_PERSIST_DEBOUNCE_MS = 300;
 
 /**

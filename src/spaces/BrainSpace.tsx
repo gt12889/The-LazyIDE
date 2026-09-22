@@ -445,7 +445,7 @@ function BrainSetupCard({ onUseProjectBrain, onOpenImport, onOpenSettings, proje
           Configurez votre brain
         </div>
         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.55 }}>
-          Ce brain est vide pour l&apos;instant. Choisissez comment le remplir pour que Lazy retienne vos décisions, bugs et contexte au fil du temps.
+          Ce brain est vide pour l&apos;instant. Choisissez comment le remplir pour que lazygt retienne vos décisions, bugs et contexte au fil du temps.
         </div>
       </div>
 
@@ -1051,7 +1051,7 @@ export function BrainSpace() {
   }, []);
 
   // Health score from platform.brain.health() — undefined while loading, null on web
-  // Lazy initializer avoids a synchronous setState in useEffect for the non-Tauri path
+  // lazygt initializer avoids a synchronous setState in useEffect for the non-Tauri path
   const [health, setHealth] = useState<BrainHealth | null | undefined>(() => isTauri ? undefined : null);
   const healthRef = useRef(health);
   healthRef.current = health;

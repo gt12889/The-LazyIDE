@@ -1,8 +1,8 @@
 /* schedulerHardware — default global agent concurrency from real cores.
 
-   Cursor's default is 8 parallel agents. Lazy's settings input used a
+   Cursor's default is 8 parallel agents. lazygt's settings input used a
    hardcoded 3. This derives 3–8 from navigator.hardwareConcurrency
-   (honest probe, never invented). User-saved lazy.agents.maxParallel
+   (honest probe, never invented). User-saved lazygt.agents.maxParallel
    still wins; an empty/absent key uses this hardware default (never
    Infinity). Explicit 0 / invalid remains unlimited. */
 
@@ -22,7 +22,7 @@ export function detectHardwareConcurrency(): number {
   return Number.isFinite(n) && n > 0 ? n : MAX_PARALLEL_FLOOR;
 }
 
-/** Resolve lazy.agents.maxParallel. Empty/absent → hardware 3–8 (same
+/** Resolve lazygt.agents.maxParallel. Empty/absent → hardware 3–8 (same
  *  number the settings panel shows). User-saved positive ints win.
  *  0 / NaN stay unlimited (Infinity) — 0 is not a UI value, it is the
  *  explicit sentinel the scheduler historically used for "no cap". */

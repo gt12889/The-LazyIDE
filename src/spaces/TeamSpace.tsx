@@ -130,7 +130,7 @@ export function TeamSpace() {
   // though `data` for that org hadn't loaded yet. Gate on BOTH signals —
   // memberships still loading, OR a known org whose data/error hasn't
   // settled yet.
-  // Unsigned: a leftover lazy.teams.orgId in localStorage must not stall
+  // Unsigned: a leftover lazygt.teams.orgId in localStorage must not stall
   // SoloView while useOrg waits on a session that does not exist (measured
   // 2026-08-28: Team tab spinner ~4s in the browser with no login).
   if (user && (membershipsLoading || (orgId && !data && !error))) {

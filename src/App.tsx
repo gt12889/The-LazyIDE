@@ -8,14 +8,12 @@ import { AppProvider } from './app/AppContext';
 import { I18nProvider } from './i18n';
 import { EditorStoreProvider } from './components/editor/editorStore';
 import { AppShell } from './components/AppShell';
-import { AuthGate } from './components/auth/AuthGate';
-import { useOAuthCallback } from './lib/auth/oauthDesktop';
 import { readActiveBrainConfigAsync } from './lib/teams/activeBrainConfig';
 
 function App() {
   // Register the Tauri deep-link listener for the OAuth callback.
   // No-op on web; on desktop it handles lazy://auth-callback → Supabase session.
-  useOAuthCallback();
+
 
   // Hydrate the durable active brain config from disk once at boot so a
   // restart restores the active team brain instead of leaving the cache null.
@@ -29,11 +27,11 @@ function App() {
   return (
     <I18nProvider>
       <AppProvider>
-        <AuthGate>
+
           <EditorStoreProvider>
             <AppShell />
           </EditorStoreProvider>
-        </AuthGate>
+
       </AppProvider>
     </I18nProvider>
   );

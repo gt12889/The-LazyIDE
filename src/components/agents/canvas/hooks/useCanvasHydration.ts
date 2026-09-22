@@ -69,7 +69,7 @@ function makeProposalCleanupDeps(): CleanupStaleProposalsDeps {
     // enableReHome deliberately OMITTED (defaults to false) — see
     // canvasProposalCleanup.ts's own INCIDENT note (module header): the
     // FIRST version of the re-home matcher fired on the product name
-    // "Lazy" (present in nearly every real objective) and relocated an
+    // "lazygt" (present in nearly every real objective) and relocated an
     // already-correctly-homed plan into the wrong zone. Re-home stays
     // OFF in production until there is a real, considered decision to
     // re-enable it — the missing/advanced staleness cleanup below is

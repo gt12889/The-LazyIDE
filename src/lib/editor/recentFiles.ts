@@ -10,7 +10,7 @@
 
 import { stripVerbatimPrefix } from '../paths';
 
-const RECENT_FILES_STORAGE_PREFIX = 'lazy.editor.recentFiles.';
+const RECENT_FILES_STORAGE_PREFIX = 'lazygt.editor.recentFiles.';
 const MAX_RECENT_FILES = 8;
 
 export interface RecentFileEntry {

@@ -471,8 +471,8 @@ async function detectPackageManager(projectRoot: string, deps: DevPreviewDeps): 
 // ── Per-project configuration (localStorage — same convention as
 // autoPreviewPrefs.ts's dismissal set) ────────────────────────────────
 
-const PORT_OVERRIDE_STORAGE_KEY = 'lazy.canvas.devPreviewPortOverrides';
-const IDLE_TIMEOUT_STORAGE_KEY = 'lazy.canvas.devPreviewIdleTimeoutMs';
+const PORT_OVERRIDE_STORAGE_KEY = 'lazygt.canvas.devPreviewPortOverrides';
+const IDLE_TIMEOUT_STORAGE_KEY = 'lazygt.canvas.devPreviewIdleTimeoutMs';
 
 /** 30 minutes — the task's own default; overridable per project via
  *  `setIdleTimeoutMs`. */
@@ -529,7 +529,7 @@ export function setConfiguredPort(projectId: string, port: number | undefined): 
  *  legitimate "I left the terminal open" case) still gets recognized as
  *  ITS OWN on the next session, not merely on the session that first
  *  spawned it. */
-const CONFIRMED_PORT_STORAGE_KEY = 'lazy.canvas.devPreviewConfirmedPorts';
+const CONFIRMED_PORT_STORAGE_KEY = 'lazygt.canvas.devPreviewConfirmedPorts';
 
 /** The port THIS module has previously confirmed `projectId`'s own dev
  *  server runs on, or undefined when none was ever confirmed. Exported for

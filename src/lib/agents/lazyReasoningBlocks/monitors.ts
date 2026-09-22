@@ -14,7 +14,7 @@
    When composite > fire threshold or any monitor fires, a steering injection
    is produced and appended to the system message as a [LAZYREASONING] block.
 
-   Inspired by ReasonBlocks' monitor suite, adapted for Lazy's ReAct loop.
+   Inspired by ReasonBlocks' monitor suite, adapted for lazygt's ReAct loop.
 */
 
 // ── Types ─────────────────────────────────────────────────────────

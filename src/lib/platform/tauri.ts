@@ -106,7 +106,7 @@ const nativeTerminal: Terminal = {
     _args: string[],
     _opts?: SpawnOptions
   ): Promise<TerminalProcess> {
-    // Lazy-import the event API to avoid issues in non-Tauri contexts
+    // lazygt-import the event API to avoid issues in non-Tauri contexts
     const { listen } = await import('@tauri-apps/api/event');
 
     const id = await invoke<string>('terminal_spawn', {
@@ -469,7 +469,7 @@ export interface BrainPublishOptions {
   remoteUrl?: string;
   // No visibility flag here on purpose: the brain is personal data (memory
   // and notes) and must never be published to a public repository. Repos
-  // Lazy creates itself (gh/token auto-create) are always private; pushing
+  // lazygt creates itself (gh/token auto-create) are always private; pushing
   // to an already-existing remote is refused unless its visibility can be
   // confirmed private — see src-tauri/src/commands/brain/publish.rs.
 }
@@ -996,7 +996,7 @@ const nativeLsp: Lsp = {
   },
 
   onMessage(cb: (msg: { method: string; params: unknown }) => void): () => void {
-    // Lazy-import the event API; fall back to no-op if unavailable.
+    // lazygt-import the event API; fall back to no-op if unavailable.
     // Track disposal intent before the async chain resolves so we never
     // leak a permanent Tauri event listener on fast dispose (#25).
     let disposed = false;

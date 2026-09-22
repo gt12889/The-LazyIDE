@@ -39,7 +39,7 @@ export function opsOrphanFingerprint(status: BrainOpsStatus): string {
  *  ops-status.json until the next maintenance run overwrites it, and an
  *  in-memory-only dedupe re-fired once per reload (real incident:
  *  "dream killed after 600s" journaled ~every poll after each reload). */
-const LAST_FP_STORAGE_KEY = 'lazy.opsOrphan.lastFingerprint';
+const LAST_FP_STORAGE_KEY = 'lazygt.opsOrphan.lastFingerprint';
 
 let lastEmittedFingerprint: string | null = loadPersistedFingerprint();
 

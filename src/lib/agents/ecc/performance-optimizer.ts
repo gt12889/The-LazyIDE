@@ -60,7 +60,7 @@ npx webpack-bundle-analyzer
 | Metric | Target | Action if Exceeded |
 |--------|--------|-------------------|
 | First Contentful Paint | < 1.8s | Optimize critical path, inline critical CSS |
-| Largest Contentful Paint | < 2.5s | Lazy load images, optimize server response |
+| Largest Contentful Paint | < 2.5s | lazygt load images, optimize server response |
 | Time to Interactive | < 3.8s | Code splitting, reduce JavaScript |
 | Cumulative Layout Shift | < 0.1 | Reserve space for images, avoid layout thrashing |
 | Total Blocking Time | < 200ms | Break up long tasks, use web workers |
@@ -137,7 +137,7 @@ const sortedItems = useMemo(
 - [ ] \`React.memo\` for frequently re-rendered components
 - [ ] Proper dependency arrays in hooks
 - [ ] Virtualization for long lists (react-window, react-virtualized)
-- [ ] Lazy loading for heavy components (\`React.lazy\`)
+- [ ] lazygt loading for heavy components (\`React.lazy\`)
 - [ ] Code splitting at route level
 
 ### 4. Bundle Size Optimization

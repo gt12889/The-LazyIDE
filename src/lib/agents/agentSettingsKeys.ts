@@ -3,7 +3,7 @@
    Settings UI.
 
    AgentsPanel.tsx (src/components/settings/AgentsPanel.tsx) remains the
-   registry of record for every `lazy.agents.*` localStorage key and
+   registry of record for every `lazygt.agents.*` localStorage key and
    re-exports LS_AGENTS_MAX_PARALLEL from here for backward compatibility —
    see its own header comment for the full key list. This module exists
    because scheduler.ts is reachable from tsconfig.cli.json's program (via
@@ -12,4 +12,4 @@
    string constant. */
 
 /** localStorage key: number, max parallel agents (1-20). */
-export const LS_AGENTS_MAX_PARALLEL = 'lazy.agents.maxParallel';
+export const LS_AGENTS_MAX_PARALLEL = 'lazygt.agents.maxParallel';

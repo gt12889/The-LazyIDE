@@ -1,4 +1,4 @@
-/* teachMode — teach-by-demonstration journaling for LazyBots.
+/* teachMode — teach-by-demonstration journaling for lazygt Bots.
 
    When teach mode is active on a bot, every user input (keyboard, mouse
    clicks on specific elements, form submissions) is journaled as a

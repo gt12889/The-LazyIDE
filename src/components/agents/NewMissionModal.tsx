@@ -150,7 +150,7 @@ function resolveMaxDurationMs(optionId: DurationOptionId): number | undefined {
 
 /** Seeds the form's model field with the best default for the user's CURRENT
  *  entitlements (see modelPickerOptions.ts) — the managed catalog's default
- *  when Lazy Pro is actively usable, else the Claude subscription's default,
+ *  when lazygt Pro is actively usable, else the Claude subscription's default,
  *  else the same native fallback as before this fix. */
 function getInitialModelId(): string {
   return getModelPickerOptions().defaultModelId;
@@ -222,7 +222,7 @@ export function NewMissionModal({ isOpen, onClose }: NewMissionModalProps) {
   const [conflictTitles, setConflictTitles] = useState<string[]>([]);
 
   // Grouped model options for the CURRENT entitlements — a Claude
-  // subscription and a Lazy Pro plan are independent and can both be active,
+  // subscription and a lazygt Pro plan are independent and can both be active,
   // so this offers both catalogs together instead of picking one from the
   // single resolved provider mode (see modelPickerOptions.ts's header for
   // the bug this replaces: #nm-model used to only ever render ALL_MODELS,
@@ -811,7 +811,7 @@ export function NewMissionModal({ isOpen, onClose }: NewMissionModalProps) {
                 {quoteResult
                   ? t(
                       // 'devin' bills the user's own Devin account, never
-                      // Lazy credits — same non-debited qualifier as native.
+                      // lazygt credits — same non-debited qualifier as native.
                       ['native', 'devin'].includes(classifyMissionModel(form.modelId) ?? '')
                         ? 'agents.modal.quote.lineNative'
                         : 'agents.modal.quote.line',

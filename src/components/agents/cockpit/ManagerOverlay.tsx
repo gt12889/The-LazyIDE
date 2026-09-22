@@ -197,16 +197,16 @@ export function resolveEffectiveOverlayWidth(
   return customWidth ?? overlayWidthFor(widthState, expandedWidth);
 }
 
-const WIDTH_STORAGE_KEY = 'lazy.manager.overlayWidth';
+const WIDTH_STORAGE_KEY = 'lazygt.manager.overlayWidth';
 /** Separate key remembering the last MANUALLY chosen non-collapsed width
  *  (normal/expanded) — read when the user reopens from the collapsed tab,
  *  so reopening restores their actual preference instead of always
  *  forcing 'normal'. */
-const LAST_OPEN_WIDTH_STORAGE_KEY = 'lazy.manager.overlayWidth.lastOpen';
+const LAST_OPEN_WIDTH_STORAGE_KEY = 'lazygt.manager.overlayWidth.lastOpen';
 /** 2026-08-06 drag-resize: pixel width chosen by dragging the panel's left
  *  edge (VS Code terminal style). Persisted as a deliberate user choice;
  *  `null` means "no custom width — follow the state machine". */
-const CUSTOM_WIDTH_STORAGE_KEY = 'lazy.manager.overlayWidth.custom';
+const CUSTOM_WIDTH_STORAGE_KEY = 'lazygt.manager.overlayWidth.custom';
 
 function readPersistedWidthState(): OverlayWidthState {
   try {

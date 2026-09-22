@@ -1436,7 +1436,7 @@ export function GraphProposalCard({ msg, onAccept, onModify, onReject, onStepMod
                       snapshots without one render the step read-only, exactly
                       as before). Grouped by rail (one <optgroup> per
                       buildModelPickerOptions group — Claude subscription /
-                      BYOK / Lazy Pro) plus a disabled locked-Pro group when
+                      BYOK / lazygt Pro) plus a disabled locked-Pro group when
                       Pro isn't active, mirroring LazyManagerHeader.tsx's own
                       "manager-model-select" treatment line for line rather
                       than a second, drifting picker layout. */}
@@ -1589,7 +1589,7 @@ export function GraphProposalCard({ msg, onAccept, onModify, onReject, onStepMod
       {/* Estimates — item 7 fix (real user QA, 2026-08-01): this used to
           always show `~$${estimatedCostUsd}` regardless of engine, even
           while the header badge read "Claude · abonnement" (a CLI
-          subscription turn that never spends a single Lazy-managed
+          subscription turn that never spends a single lazygt-managed
           credit). The owner's standing rule: an estimate is credits per
           model, never a raw dollar figure, and a subscription-routed plan
           must say explicitly that it costs no credits. `engineMode` reuses

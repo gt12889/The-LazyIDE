@@ -12,7 +12,7 @@ import { sseLines } from './byokProviders.js';
 function loadApiKey(): string {
   // BYOK: user can set their own key in localStorage (optional, overrides proxy)
   try {
-    return localStorage.getItem('lazy.apikey.anthropic') ?? '';
+    return localStorage.getItem('lazygt.apikey.anthropic') ?? '';
   } catch {
     return '';
   }

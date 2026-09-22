@@ -1,7 +1,7 @@
 /* TopNav — shared 64px header for the redesigned shell (D2).
 
    Replaces the left SpacesRail as the app's primary navigation: logo +
-   wordmark ("Lazy / <Space>"), segmented pill nav (Cockpit/Code/Brain/Team
+   wordmark ("lazygt / <Space>"), segmented pill nav (Cockpit/Code/Brain/Team
    + a settings gear), the Cmd-K command-bar pill (opens CommandPalette),
    the credits badge (AccountChip, restyled chrome only — same real
    billing data/popover), and the violet "+ Lancer un agent" CTA (opens
@@ -197,7 +197,7 @@ export function TopNav({ activeSpace, onSpaceChange }: TopNavProps) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexShrink: 0 }}>
         <Logo />
         <span style={{ fontWeight: 700, fontSize: 18, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
-          Lazy
+          lazygt
           <span style={{ fontWeight: 400, opacity: 0.5 }}> / {wordmarkSuffix}</span>
         </span>
       </div>

@@ -22,7 +22,7 @@ const DEFAULT_MAX_RETRIES = 3;
 /**
  * Wrap a list of providers into a single provider that tries each in order
  * until one succeeds. If a provider throws or yields an empty stream, the
- * next provider is tried. Combo routing concept, simplified for Lazy's
+ * next provider is tried. Combo routing concept, simplified for lazygt's
  * provider model.
  */
 export function withFallback(config: FallbackConfig): ModelProvider {

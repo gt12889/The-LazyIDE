@@ -90,7 +90,7 @@ Run these in order:
 | Error | Cause | Fix |
 |-------|-------|-----|
 | \`No qualifying bean of type X\` | Missing \`@Component\`/\`@Service\` or component scan | Add annotation or fix scan base package |
-| \`Circular dependency involving X\` | Constructor injection cycle | Refactor to break cycle or use \`@Lazy\` on one leg |
+| \`Circular dependency involving X\` | Constructor injection cycle | Refactor to break cycle or use \`@lazygt\` on one leg |
 | \`BeanCreationException: Error creating bean\` | Missing config, bad property, or missing dependency | Check \`application.yml\`, dependency tree |
 | \`HttpMessageNotReadableException\` | Malformed JSON or missing Jackson dependency | Check \`spring-boot-starter-web\` includes Jackson |
 | \`Could not autowire. No beans of type found\` | Missing bean or wrong profile active | Check \`@Profile\`, \`@ConditionalOn*\`, component scan |

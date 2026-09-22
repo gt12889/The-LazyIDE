@@ -31,7 +31,7 @@ import type { Mission } from '../lib/agents/types';
 
 // ── Set locale to French before first render (matches the design's copy) ──
 try {
-  localStorage.setItem('lazy.locale', 'fr');
+  localStorage.setItem('lazygt.locale', 'fr');
 } catch { /* noop */ }
 
 // ── Demo fixtures ───────────────────────────────────────────────────

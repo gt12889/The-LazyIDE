@@ -55,7 +55,7 @@ function createPortalNode(): HTMLDivElement {
 
 export function ManagerHost({ activeHostId }: ManagerHostProps) {
   const entry = useManagerHostEntry(activeHostId);
-  // Lazy useState initializer — runs exactly once, on mount, for the app's
+  // lazygt useState initializer — runs exactly once, on mount, for the app's
   // whole session (this component itself never unmounts, see AppShell.tsx).
   const [portalNode] = useState(createPortalNode);
 

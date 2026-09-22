@@ -156,7 +156,7 @@ export interface FleetMission {
   /** Structured plan steps for in-progress step visibility. */
   planSteps?: Mission['planSteps'];
   /** Mirrors Mission.botId — when set, this is a LazyBot run rendered as
-   *  a bot node in the LazyBots zone, not as an agent mission node. */
+   *  a bot node in the lazygt Bots zone, not as an agent mission node. */
   botId?: string;
   /**
    * Live collab (additive): true when this row was mirrored from a

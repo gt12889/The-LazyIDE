@@ -37,7 +37,7 @@ import type { Objective } from '../lib/objectives/objectivesStore';
 
 // ── Set locale to French before first render (matches the design's copy) ──
 try {
-  localStorage.setItem('lazy.locale', 'fr');
+  localStorage.setItem('lazygt.locale', 'fr');
 } catch { /* noop */ }
 
 // ── Mission fixtures — 20 missions across 5 projects, mirrors the design's

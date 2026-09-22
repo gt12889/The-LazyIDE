@@ -156,7 +156,7 @@ export async function provisionOneRepo(opts: ProvisionOneRepoOptions): Promise<P
   const res = await githubApiPost(baseUrl, token, {
     name,
     private: true,
-    description: 'LazyBrain team brain (auto-provisioned by Lazy)',
+    description: 'LazyBrain team brain (auto-provisioned by lazygt)',
     auto_init: false,
   });
   if (res.ok) {

@@ -431,7 +431,7 @@ export const ZONE_HORIZONTAL_GAP = ZONE_TITLE_MAX_FLOW_WIDTH;
  * advance (`packAutoPlacedZones`'s/`layoutAll`'s own cursorX step) by sizing
  * the gap against THIS zone's own REAL name length (never the generic
  * 40-char ceiling — "espacement proportionne au contenu reel": a zone named
- * "Lazy" needs far less clearance than one with a 40-char name) — still
+ * "lazygt" needs far less clearance than one with a 40-char name) — still
  * clamped at {@link ZONE_TITLE_TYPICAL_MAX_NAME_CHARS} for a pathologically
  * long name, same "permitted pathological case" trade-off that constant's
  * own doc comment already accepts — evaluated at {@link

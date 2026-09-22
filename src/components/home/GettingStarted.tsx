@@ -3,7 +3,7 @@
      1. a project is open              — projectRoot is set
      2. the AI engine is ready         — getEngineReadiness().ready
      3. a mission or first message ran — agents store mission count (passed
-        in as `hasMissions`) OR the lazy.firstAssistantSend flag (set by the
+        in as `hasMissions`) OR the lazygt.firstAssistantSend flag (set by the
         composer send path, see Composer.tsx handleSend)
    Dismiss ("Masquer") and auto-hide-once-all-done are both persisted
    per-account in localStorage, so a graduated user is never nagged again.
@@ -19,8 +19,8 @@ import { isTauri } from '../../lib/platform';
 import { getEngineReadiness } from '../../lib/models/entitlement';
 import { emit } from '../../lib/bus';
 
-const FIRST_SEND_KEY = 'lazy.firstAssistantSend';
-const DISMISSED_PREFIX = 'lazy.gettingStarted.dismissed';
+const FIRST_SEND_KEY = 'lazygt.firstAssistantSend';
+const DISMISSED_PREFIX = 'lazygt.gettingStarted.dismissed';
 
 function dismissedKey(userId: string): string {
   return `${DISMISSED_PREFIX}:${userId}`;

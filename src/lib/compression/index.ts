@@ -1,5 +1,5 @@
 /* Compression module — public API.
-   Simplified for Lazy IDE.
+   Simplified for lazygt.
 
    Usage:
      import { compressMessages } from '@/lib/compression';

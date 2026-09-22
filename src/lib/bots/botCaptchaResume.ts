@@ -1,4 +1,4 @@
-/* botCaptchaResume — captcha / human-gate resume loop for LazyBots (C59).
+/* botCaptchaResume — captcha / human-gate resume loop for lazygt Bots (C59).
 
    Solari can auto-solve some captchas when launch.captcha=true, but many
    sites still need a human. This module tracks outstanding captcha gates per

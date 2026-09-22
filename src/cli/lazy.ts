@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Lazy CLI — headless entry point.
+ * lazygt CLI — headless entry point.
  *
  * Commands:
  *   lazy ask "<question>"            Brain-fused Q&A via Claude subscription
@@ -8,7 +8,7 @@
  *   lazy brain search "<q>"          FTS search of the project brain
  *   lazy brain recall "<q>"          inject-context recall for LLM injection
  *
- * The CLI uses the SAME backends as the Lazy IDE GUI:
+ * The CLI uses the SAME backends as the lazygt GUI:
  *   - claude CLI (subscription auth, no API key) for model calls
  *   - lazybrain CLI for all brain operations
  *   - git CLI for worktree management
@@ -34,7 +34,7 @@ const program = new Command();
 
 program
   .name('lazy')
-  .description('Lazy IDE — headless CLI (brain + agent + ask)')
+  .description('lazygt — headless CLI (brain + agent + ask)')
   .version(VERSION);
 
 registerAsk(program);

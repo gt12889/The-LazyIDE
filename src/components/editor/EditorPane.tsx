@@ -186,7 +186,7 @@ export function EditorPane({ value, filename, path, onChange, focusLine }: Edito
   // Peek Definition overlay (Alt+F12) — distinct from Ctrl/Cmd-click's
   // navigate-to-definition in lspClient.ts, which replaces the open tab.
   const [peek, setPeek] = useState<{ filePath: string; position: { line: number; character: number } } | null>(null);
-  // Lazy rules context — injected into AI completions and inline edits.
+  // lazygt rules context — injected into AI completions and inline edits.
   const { rules: lazyRules } = useLazyRules(projectRoot);
 
   // Keep stable refs so extension closures don't need to re-create on every render.

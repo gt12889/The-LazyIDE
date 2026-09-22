@@ -74,16 +74,16 @@ import {
 } from '../../lib/brain/seedExtractor';
 
 // ── localStorage keys (public contract for other modules) ──────────
-// lazy.memory.scopesEnabled  — boolean (default: true)
+// lazygt.memory.scopesEnabled  — boolean (default: true)
 //
-// NOTE: lazy.brain.embeddings (a semantic-recall on/off toggle) used to live
+// NOTE: lazygt.brain.embeddings (a semantic-recall on/off toggle) used to live
 // here and has been REMOVED — it was never read by any Rust command or the
 // sidecar spawn path (LAZYBRAIN_EMBEDDINGS=1 is hardcoded at every spawn
 // site regardless of this key), so the toggle controlled nothing real. See
 // the "Semantic recall status" block in MemoryPanel below, which replaces
 // it with an honest read-only status instead of a misleading control.
 
-const LS_SCOPES_KEY = 'lazy.memory.scopesEnabled';
+const LS_SCOPES_KEY = 'lazygt.memory.scopesEnabled';
 
 function loadScopesEnabled(): boolean {
   try {
@@ -2663,7 +2663,7 @@ export function MemoryPanel() {
       <BrainProjectsEditor />
 
       {/* Semantic recall status — READ-ONLY (P3 DEAD EMBEDDINGS TOGGLE fix).
-          This used to be a Toggle that persisted lazy.brain.embeddings to
+          This used to be a Toggle that persisted lazygt.brain.embeddings to
           localStorage, but nothing ever read that key: the Rust sidecar
           spawn path hardcodes LAZYBRAIN_EMBEDDINGS=1 at every call site
           (sidecar.rs, config.rs, search.rs, capture.rs, history_import.rs),

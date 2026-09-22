@@ -21,7 +21,7 @@
        deliverable resolves (or whose real orchestration is only
        transiently blocked - `getDevServerSkipReason`) NEVER reaches the
        passive candidate-port loop at all - real incident: it attributed
-       project "Lazy-real-test" a preview at localhost:3000 that was
+       project "lazygt-real-test" a preview at localhost:3000 that was
        actually a DIFFERENT open project's (lazy-backoffice) Next.js dev
        server, only because 3000 answered and wasn't this app's own self
        origin; (ii) even in the genuine last resort (no scripts.dev, no
@@ -463,7 +463,7 @@ export function useCanvasAutoComposition({
 
         // 2026-08-05 foreign-server-adoption incident fix (a) - PRIORITY
         // ORDER. Real incident: the passive sniff below attributed project
-        // "Lazy-real-test" a preview at http://localhost:3000 - actually
+        // "lazygt-real-test" a preview at http://localhost:3000 - actually
         // another OPEN project's (lazy-backoffice) Next.js dev server -
         // because 3000 answered and wasn't this app's own self origin.
         // A project whose own dev script or static deliverable resolves

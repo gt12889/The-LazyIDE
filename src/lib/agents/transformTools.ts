@@ -123,7 +123,7 @@ export function isTransformToolLike(value: unknown): value is TransformTool {
 
 const store = createToolCollectionStore<TransformTool>({
   storageFileName: 'transformTools.json',
-  localStorageKey: 'lazy.agents.transformTools',
+  localStorageKey: 'lazygt.agents.transformTools',
   isLike: isTransformToolLike,
 });
 

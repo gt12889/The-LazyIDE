@@ -8,7 +8,7 @@
    - E-trace retrieval gating
    - Early-exit nudges (SKIP state)
 
-   Inspired by ReasonBlocks' DifficultyFSM, adapted for Lazy's managed agent loop.
+   Inspired by ReasonBlocks' DifficultyFSM, adapted for lazygt's managed agent loop.
    Pure local heuristics — no external API calls.
 */
 

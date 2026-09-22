@@ -52,9 +52,9 @@ export interface ManagerConversationTab {
 
 export type EngineKey = 'claude-code' | 'codex' | 'devin' | 'live-key' | 'managed' | 'pro' | 'mock';
 
-/** Engine keys that consume Lazy-managed credits — every other key runs
+/** Engine keys that consume lazygt-managed credits — every other key runs
  *  via a CLI subscription (claude-code/codex) or the user's own API key
- *  (live-key), never Lazy's own metered credits. Exported for
+ *  (live-key), never lazygt's own metered credits. Exported for
  *  GraphProposalCard.tsx's item 7 fix (credits-vs-subscription estimate
  *  display) — same "reuse, never a second classification" rule as the
  *  credits conversion itself. */
@@ -199,7 +199,7 @@ export function LazyManagerHeader({
   const { subscription } = useSubscriptionContext();
   const [showAcceptance, setShowAcceptance] = useState(false);
   const acceptanceTriggerRef = useRef<HTMLButtonElement>(null);
-  // LazyBots (A3) — bot → manager human-intervention requests (login/2FA/
+  // lazygt Bots (A3) — bot → manager human-intervention requests (login/2FA/
   // takeover). Kept as a tiny local map botId → latest request; the note
   // renders at the top of the header (data-testid="bot-intervention-<botId>")
   // and persists for the component's lifetime — a bot re-emits on each new
@@ -300,7 +300,7 @@ export function LazyManagerHeader({
     const byokDef = resolveByokDef(loadAccessSettings().byokProvider);
     engineLabel = byokDef ? `${byokDef.label} · clé API` : t(ENGINE_I18N_KEY['live-key']);
   } else {
-    engineLabel = t(ENGINE_I18N_KEY[engineMode as EngineKey] ?? 'assistant.engine.mock');
+    engineLabel = engineMode === 'local' ? 'Local · Ollama' : t(ENGINE_I18N_KEY[engineMode as EngineKey] ?? 'assistant.engine.mock');
   }
   const engineBg = ENGINE_COLOR[engineMode] ?? ENGINE_COLOR['mock'];
   const engineColor = ENGINE_TEXT_COLOR[engineMode] ?? ENGINE_TEXT_COLOR['mock'];
@@ -433,7 +433,7 @@ export function LazyManagerHeader({
 
   return (
     <div style={{ flexShrink: 0, borderBottom: '1px solid var(--color-border-2)' }}>
-      {/* LazyBots (A3) — outstanding bot → human intervention requests
+      {/* lazygt Bots (A3) — outstanding bot → human intervention requests
           (login/2FA/takeover, via botRequestIntervention.ts's
           requestUserIntervention). One compact note per bot, keyed by the
           bot's own id; the data-testid lets tests assert a specific bot's

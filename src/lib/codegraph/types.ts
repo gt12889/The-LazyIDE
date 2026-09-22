@@ -1,6 +1,6 @@
 /* types.ts — Core types for the code intelligence graph.
    Models code structure as nodes + edges, similar to GitNexus but adapted
-   for Lazy's Platform architecture and LazyBrain's knowledge graph patterns.
+   for lazygt's Platform architecture and LazyBrain's knowledge graph patterns.
 */
 
 // ── Node types ────────────────────────────────────────────────────

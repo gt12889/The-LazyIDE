@@ -22,9 +22,9 @@
    matched on a bare project BASENAME ("does the objective mention the
    word 'site'/'LazySite-internet'?"). Deployed live, it swept 33+16
    drafts — INCLUDING an already-correctly-homed 11-node plan — into a
-   project literally named `Lazy`, because every objective in this
-   product naturally contains the word "Lazy" ("finir le backoffice de
-   Lazy", "améliorer le site vitrine de Lazy") and there is an open
+   project literally named `lazygt`, because every objective in this
+   product naturally contains the word "lazygt" ("finir le backoffice de
+   lazygt", "améliorer le site vitrine de lazygt") and there is an open
    project with that exact name. A false re-home is WORSE than the
    accumulation it was meant to fix — a preview that LOOKS re-homed but
    is not the real target would launch missions against the wrong repo.
@@ -192,7 +192,7 @@ function isPathBoundary(char: string | undefined): boolean {
  * bounded on BOTH sides by a real boundary (whitespace/punctuation/`/`/
  * start-or-end of string), never as a prefix or suffix of a LONGER
  * contiguous path/word run. Plain substring matching alone is NOT enough:
- * a project root ending in a short segment (e.g. ".../cerveau/Lazy") is a
+ * a project root ending in a short segment (e.g. ".../cerveau/lazygt") is a
  * literal string-PREFIX of a DIFFERENT, longer sibling folder
  * (".../cerveau/LazySite-internet") — `"...lazy".includes(...)` would
  * false-positive on that exact pairing, the same class of mistake as the
@@ -219,7 +219,7 @@ function containsPathSegment(haystack: string, needlePath: string): boolean {
  * objective's text must contain, verbatim (after `normalizePathForMatch`),
  * the OTHER project's real root path — e.g.
  * "C:\Users\user\Documents\cerveau\LazySite-internet" typed or pasted
- * into the objective, not the word "site" or the product name "Lazy". A
+ * into the objective, not the word "site" or the product name "lazygt". A
  * plan's objective naming a project only by its short name or by the
  * product it belongs to produces NO signal at all under this rule — that
  * is intentional and expected to be the common (non-matching) case; see

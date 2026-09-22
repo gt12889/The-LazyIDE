@@ -1,4 +1,4 @@
-/* AuthScreen — polished sign-in / sign-up card for Lazy IDE.
+/* AuthScreen — polished sign-in / sign-up card for lazygt.
    Design language: dark violet theme, Linear/Cursor-quality.
 
    Sign-up uses Supabase email confirmation: after a successful sign-up the
@@ -44,7 +44,7 @@ interface AuthScreenProps {
   /**
    * Force the Create / Sign in segmented control. The manager session CTA
    * labels itself "Sign in" — landing on Create account was a measured miss
-   * (QA 2026-08-28). Absent: returning users (`lazy.returningUser`) open
+   * (QA 2026-08-28). Absent: returning users (`lazygt.returningUser`) open
    * Sign in, everyone else Create account.
    */
   initialMode?: AuthMode;
@@ -72,7 +72,7 @@ function mapAuthError(raw: string, t: Translate): string {
 
 function markReturningUser(): void {
   try {
-    localStorage.setItem('lazy.returningUser', '1');
+    localStorage.setItem('lazygt.returningUser', '1');
   } catch {
     // localStorage unavailable — ignore
   }
@@ -312,7 +312,7 @@ export function AuthScreen({ onSkip, allowSkip = true, initialMode }: AuthScreen
   const [mode, setMode] = useState<AuthMode>(() => {
     if (initialMode === 'signin' || initialMode === 'signup') return initialMode;
     try {
-      return localStorage.getItem('lazy.returningUser') === '1' ? 'signin' : 'signup';
+      return localStorage.getItem('lazygt.returningUser') === '1' ? 'signin' : 'signup';
     } catch {
       return 'signup';
     }

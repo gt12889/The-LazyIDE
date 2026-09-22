@@ -25,3 +25,5 @@ pub(crate) mod mcp;
 pub(crate) mod browser;
 pub(crate) mod browser_recipe;
 pub(crate) mod system_pressure;
+
+pub(crate) mod local_llm;

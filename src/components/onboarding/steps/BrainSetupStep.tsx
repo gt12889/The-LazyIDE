@@ -711,7 +711,7 @@ function EstimateCard({ estimate, rails, railId, onSelectRail, onConfirm, onLate
 
       {/* Extractor rail picker — "choisir le rail qu'on veut", same idea as
           the LazyManager model picker: free managed rail (offert par
-          LazyIDE), Claude Code CLI, BYOK providers, LazyPro… plus the
+          lazygt), Claude Code CLI, BYOK providers, LazyPro… plus the
           always-present heuristic option. 'heuristic' means the import
           runs without any LLM call — honest default when nothing is
           configured yet. */}

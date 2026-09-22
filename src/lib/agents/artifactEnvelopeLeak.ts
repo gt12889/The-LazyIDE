@@ -16,7 +16,7 @@
      M7"} </artifact> ~3 crédits
 
    Some backends wrap a structured result in a raw `<artifact type="..."
-   id="...">{...json payload...}</artifact>` envelope. This is NOT Lazy's
+   id="...">{...json payload...}</artifact>` envelope. This is NOT lazygt's
    own <lazy_actions> convention (managerEngine.ts's stripActionBlock) and
    never legitimately reaches a manager-facing surface — same leak CLASS as
    the native `<function_calls>`/`<invoke>` tool-call XML managerEngine.ts's

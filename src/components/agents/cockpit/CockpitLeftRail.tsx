@@ -527,7 +527,7 @@ function CockpitLeftRailImpl({
           canvas toolbar's own `canvas-toolbar-cockpit-mode` button (only
           reachable in Construction mode, where the canvas exists at all)
           stays as a convenience shortcut — both already read/write the SAME
-          `lazy.cockpitMode` state via the pre-existing `cockpit:modeChange`
+          `lazygt.cockpitMode` state via the pre-existing `cockpit:modeChange`
           bus event (Cockpit.tsx), so the two can never disagree. Direct
           action, not a popover (hasPopup false, same convention as
           'report' above) — clicking it flips the mode immediately. */}

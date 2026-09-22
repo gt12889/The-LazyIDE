@@ -180,7 +180,7 @@ export function Cockpit({
    *  shows the React Flow canvas (default). Toggled via the floating
    *  mode-switch button or keyboard shortcut 'C' (Pillar E1). */
   const [cockpitMode, setCockpitMode] = useState<'command' | 'construction'>(() => {
-    try { return (localStorage.getItem('lazy.cockpitMode') as 'command' | 'construction') || 'construction'; }
+    try { return (localStorage.getItem('lazygt.cockpitMode') as 'command' | 'construction') || 'construction'; }
     catch { return 'construction'; }
   });
   // Live mirror of cockpitMode for toggleCockpitMode — the toggle must emit
@@ -194,7 +194,7 @@ export function Cockpit({
   const cockpitModeRef = useRef<'command' | 'construction'>(cockpitMode);
   useEffect(() => { cockpitModeRef.current = cockpitMode; }, [cockpitMode]);
   useEffect(() => {
-    try { localStorage.setItem('lazy.cockpitMode', cockpitMode); } catch { /* ignore */ }
+    try { localStorage.setItem('lazygt.cockpitMode', cockpitMode); } catch { /* ignore */ }
   }, [cockpitMode]);
   const toggleCockpitMode = useCallback(() => {
     const next = cockpitModeRef.current === 'command' ? 'construction' : 'command';
@@ -722,7 +722,7 @@ export function Cockpit({
           BOTH modes; see that file's own `RailIconButton id="mode"`
           comment). The canvas toolbar button stays mounted as a
           Construction-mode convenience shortcut, reading/writing the same
-          persisted `lazy.cockpitMode` via the same `cockpit:modeChange` bus
+          persisted `lazygt.cockpitMode` via the same `cockpit:modeChange` bus
           event. Keyboard shortcut C still works (registered in the effect
           above), and TopNav.tsx's Cockpit pill resets to Construction on a
           re-click (`cockpit:resetMode`, effect above). */}

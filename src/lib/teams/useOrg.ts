@@ -1,6 +1,6 @@
 /* useOrg — fetches org data for the active org.
    Returns loading/error/data state and a refetch function.
-   orgId stored in localStorage under 'lazy.teams.orgId'.
+   orgId stored in localStorage under 'lazygt.teams.orgId'.
 */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -12,7 +12,7 @@ import { withTimeout } from '../brain/withTimeout.js';
  *  memberships query. Settle so the space can show retry instead. */
 export const TEAM_FETCH_TIMEOUT_MS = 5_000;
 
-const LS_ORG_KEY = 'lazy.teams.orgId';
+const LS_ORG_KEY = 'lazygt.teams.orgId';
 
 export function loadStoredOrgId(): string | null {
   try {
@@ -66,7 +66,7 @@ export function useOrg(): UseOrgState {
   const [orgId, setOrgIdState] = useState<string | null>(loadStoredOrgId);
   const initialCached = orgId && cachedOrg?.orgId === orgId ? cachedOrg.data : null;
   const [data, setData] = useState<OrgData | null>(initialCached);
-  // Lazy-initialized against the stored orgId (same pattern as
+  // lazygt-initialized against the stored orgId (same pattern as
   // useOrgMemberships' loading init): an already-known orgId with no cached
   // data means a fetch is about to start, so `loading` must start true — a
   // stale `false` here is exactly what let TeamSpace derive a role of `null`

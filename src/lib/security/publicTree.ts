@@ -1,6 +1,6 @@
 /**
  * Paths that must never be copied into the public source tree:
- * Lazy Cloud (Supabase/Stripe), official R2 updater/release pipelines, env files.
+ * lazygt Cloud (Supabase/Stripe), official R2 updater/release pipelines, env files.
  */
 
 const PRIVATE_PREFIXES = [

@@ -1,6 +1,6 @@
 /* useOnboarding — first-run detection hook, keyed per authenticated account.
 
-   The "onboarded" flag is namespaced by user id (`lazy.onboarded:<userId>`) so a
+   The "onboarded" flag is namespaced by user id (`lazygt.onboarded:<userId>`) so a
    brand-new account on an already-onboarded machine still sees onboarding, and a
    returning account is never re-onboarded. The flag is written ONLY when the user
    finishes or explicitly skips — never merely on mount. Onboarding is gated to the
@@ -12,13 +12,13 @@ import type { User } from '@supabase/supabase-js';
 import { useAuth } from '../../lib/auth/useAuth';
 import { isTauri } from '../../lib/platform';
 
-const LS_PREFIX = 'lazy.onboarded';
+const LS_PREFIX = 'lazygt.onboarded';
 // A signup is considered "new" when the account was created very recently. This
 // ONLY drives the Welcome step's greeting copy ("Welcome" vs "Welcome back") —
 // it must NOT gate which onboarding steps render. Whether the full wizard
 // (Model + Brain steps) or a condensed one shows is decided by first-run-on-
 // -device (the same "no local onboarded flag yet" signal behind showOnboarding
-// below), not by account age: an existing account installing Lazy on a new
+// below), not by account age: an existing account installing lazygt on a new
 // machine is a first run on THIS device and must still see the Brain step.
 const NEW_ACCOUNT_WINDOW_MS = 60 * 60 * 1000;
 

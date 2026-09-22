@@ -1,5 +1,5 @@
 {
-  "name": "lazy-ide",
+  "name": "lazygt",
   "private": true,
   "version": "0.1.19",
   "license": "FSL-1.1-ALv2",
@@ -59,10 +59,6 @@
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/space-grotesk": "^5.2.10",
     "@novnc/novnc": "^1.7.0",
-    "@solarisdk/browser": "0.1.1",
-    "@solarisdk/desktop": "0.1.2",
-    "@solarisdk/sandbox": "0.1.2",
-    "@supabase/supabase-js": "^2.108.2",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-deep-link": "^2.4.9",
     "@tauri-apps/plugin-dialog": "^2.7.1",
@@ -111,6 +107,9 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^5.4.21",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "@supabase/supabase-js": "^2.108.2",
+    "@solarisdk/desktop": "0.1.2",
+    "@solarisdk/sandbox": "0.1.2"
   }
 }

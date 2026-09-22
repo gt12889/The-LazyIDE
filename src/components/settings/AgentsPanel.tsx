@@ -2,10 +2,10 @@
    Future logic reads these keys to configure agent launches.
 
    localStorage keys (public contract):
-     lazy.agents.worktreeDir      — string: default worktree parent directory
-     lazy.agents.maxParallel      — number: max parallel agents (1–20)
-     lazy.agents.costLimitUsd     — number: per-session cost limit in USD (0 = no limit)
-     lazy.agents.autoApprove      — boolean: auto-approve low-risk tool calls
+     lazygt.agents.worktreeDir      — string: default worktree parent directory
+     lazygt.agents.maxParallel      — number: max parallel agents (1–20)
+     lazygt.agents.costLimitUsd     — number: per-session cost limit in USD (0 = no limit)
+     lazygt.agents.autoApprove      — boolean: auto-approve low-risk tool calls
 */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -15,7 +15,7 @@ import type { AcpAgent } from '../../lib/agents/acpAgent';
 // so scheduler.ts — reachable from tsconfig.cli.json's non-JSX program via
 // runtime.ts's dynamic import — can read it without needing --jsx support.
 // Re-exported below so this panel stays the registry of record for every
-// `lazy.agents.*` key.
+// `lazygt.agents.*` key.
 import { LS_AGENTS_MAX_PARALLEL } from '../../lib/agents/agentSettingsKeys';
 import {
   defaultMaxParallelFromHardware,
@@ -33,11 +33,11 @@ function isWindowsPlatform(): boolean {
 
 // ── localStorage keys ──────────────────────────────────────────────
 
-export const LS_AGENTS_WORKTREE_DIR  = 'lazy.agents.worktreeDir';
+export const LS_AGENTS_WORKTREE_DIR  = 'lazygt.agents.worktreeDir';
 export { LS_AGENTS_MAX_PARALLEL };
-export const LS_AGENTS_COST_LIMIT    = 'lazy.agents.costLimitUsd';
-export const LS_AGENTS_AUTO_APPROVE  = 'lazy.agents.autoApprove';
-export const LS_ACP_AGENTS            = 'lazy.agents.acpAgents';
+export const LS_AGENTS_COST_LIMIT    = 'lazygt.agents.costLimitUsd';
+export const LS_AGENTS_AUTO_APPROVE  = 'lazygt.agents.autoApprove';
+export const LS_ACP_AGENTS            = 'lazygt.agents.acpAgents';
 
 // ── Default values ─────────────────────────────────────────────────
 
@@ -281,7 +281,7 @@ export function AgentsPanel() {
 
 // ── ACP Agents Section ─────────────────────────────────────────────
 
-const LS_ACP_AGENTS_KEY = 'lazy.agents.acpAgents';
+const LS_ACP_AGENTS_KEY = 'lazygt.agents.acpAgents';
 
 function loadAcpAgents(): AcpAgent[] {
   try {

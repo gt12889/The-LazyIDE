@@ -14,7 +14,7 @@
         which on Windows is \\?\-prefixed (verbatim). Verbatim paths disable
         Win32's '/'-to-'\' separator normalization, so appending
         "/foo/bar" with a literal '/' produces a mixed-separator string
-        (e.g. `\\?\C:\...\Lazy/foo/bar`) that Rust's Path::canonicalize()
+        (e.g. `\\?\C:\...\lazygt/foo/bar`) that Rust's Path::canonicalize()
         fails to resolve even though the directory exists on disk.
 
    This module centralizes the small pure primitives behind those fixes so a

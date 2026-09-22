@@ -5,8 +5,8 @@
    which is available at the configured base URL.
 
    Configuration (localStorage):
-     - 'lazy.local.baseUrl' : the base URL (default: http://localhost:11434/v1 for Ollama)
-     - 'lazy.local.model'   : the model name to use (default: 'llama4')
+     - 'lazygt.local.baseUrl' : the base URL (default: http://localhost:11434/v1 for Ollama)
+     - 'lazygt.local.model'   : the model name to use (default: 'llama4')
 
    The provider is zero-cost (local), supports no web search, and does NOT
    support tool loops (the local models don't reliably follow ReAct directives).
@@ -18,17 +18,20 @@
 */
 
 import type { ModelProvider, ModelInfo, StreamChatRequest } from './types.js';
+import { localFetch } from './localFetch.js';
+import { isTauri } from '@tauri-apps/api/core';
 import { buildSystemPrompt } from './systemPrompts.js';
 import { sseLines } from './byokProviders.js';
 
-const DEFAULT_OLLAMA_URL = 'http://localhost:11434/v1';
+const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434/v1';
 const DEFAULT_LM_STUDIO_URL = 'http://localhost:1234/v1';
-const DEFAULT_MODEL = 'llama4';
+const DEFAULT_MODEL = 'hermes3';
 const DETECT_TIMEOUT_MS = 2000;
 
 function loadBaseUrl(): string {
   try {
-    return localStorage.getItem('lazy.local.baseUrl') ?? DEFAULT_OLLAMA_URL;
+    const url = localStorage.getItem('lazygt.local.baseUrl') ?? DEFAULT_OLLAMA_URL;
+    return import.meta.env.DEV && !isTauri() && /^http:\/\/(localhost|127\.0\.0\.1):11434\/v1\/?$/.test(url) ? '/ollama/v1' : url;
   } catch {
     return DEFAULT_OLLAMA_URL;
   }
@@ -36,7 +39,7 @@ function loadBaseUrl(): string {
 
 function loadModel(): string {
   try {
-    return localStorage.getItem('lazy.local.model') ?? DEFAULT_MODEL;
+    return localStorage.getItem('lazygt.local.model') ?? DEFAULT_MODEL;
   } catch {
     return DEFAULT_MODEL;
   }
@@ -48,7 +51,7 @@ export async function isLocalAvailable(): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), DETECT_TIMEOUT_MS);
-    const res = await fetch(`${baseUrl}/models`, { signal: controller.signal });
+    const res = await localFetch(`${baseUrl}/models`, { signal: controller.signal });
     clearTimeout(timer);
     return res.ok;
   } catch {
@@ -62,7 +65,7 @@ export async function detectLocalBaseUrl(): Promise<string | null> {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), DETECT_TIMEOUT_MS);
-      const res = await fetch(`${url}/models`, { signal: controller.signal });
+      const res = await localFetch(`${url}/models`, { signal: controller.signal });
       clearTimeout(timer);
       if (res.ok) return url;
     } catch {
@@ -77,7 +80,7 @@ export async function detectLocalBaseUrl(): Promise<string | null> {
 export async function listLocalModels(): Promise<ModelInfo[]> {
   const baseUrl = loadBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/models`);
+    const res = await localFetch(`${baseUrl}/models`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return [];
     const data = await res.json();
     const models = (data.data ?? data.models ?? []) as Array<{ id: string }>;
@@ -94,7 +97,7 @@ export async function listLocalModels(): Promise<ModelInfo[]> {
 
 async function* streamChatImpl(req: StreamChatRequest): AsyncIterable<string> {
   const baseUrl = loadBaseUrl();
-  const model = loadModel();
+  const model = req.model.id.startsWith('local/') ? req.model.id.slice(6) : loadModel();
 
   const system = buildSystemPrompt(req.mode, req.brainRecall, {
     rulesContext: req.rulesContext,
@@ -109,7 +112,7 @@ async function* streamChatImpl(req: StreamChatRequest): AsyncIterable<string> {
     ...req.messages.map((m) => ({ role: m.role, content: m.content })),
   ];
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+  const res = await localFetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -123,14 +126,12 @@ async function* streamChatImpl(req: StreamChatRequest): AsyncIterable<string> {
 
   if (!res.ok) {
     const errText = await res.text().catch(() => res.statusText);
-    yield `❌ Local LLM error ${res.status}: ${errText}\n`;
-    return;
+    throw new Error(`Local LLM error ${res.status}: ${errText}`);
   }
 
   const reader = res.body?.getReader();
   if (!reader) {
-    yield '❌ No response body from local LLM\n';
-    return;
+    throw new Error('No response body from local LLM');
   }
 
   const decoder = new TextDecoder();
@@ -155,7 +156,7 @@ export const localProvider: ModelProvider = {
     // Synchronous — returns the configured model. The actual list of
     // available models can be fetched asynchronously via listLocalModels()
     // for a future model picker enhancement; for now the user sets the
-    // model name in localStorage ('lazy.local.model').
+    // model name in localStorage ('lazygt.local.model').
     return [{
       id: `local/${loadModel()}`,
       label: loadModel(),

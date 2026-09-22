@@ -193,7 +193,7 @@ export async function provisionOneBrainRepo(
     {
       name,
       private: true,
-      description: 'LazyBrain team brain (auto-provisioned by Lazy)',
+      description: 'LazyBrain team brain (auto-provisioned by lazygt)',
       auto_init: false,
     },
   );

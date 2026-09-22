@@ -97,7 +97,7 @@ const ManagerHostRegistryContext = createContext<ManagerHostRegistry | null>(nul
  *  register into it) and <ManagerHost> (so it can read the active entry) —
  *  see AppShell.tsx. */
 export function ManagerHostRegistryProvider({ children }: { children: ReactNode }) {
-  // Lazy useState initializer (not useRef + a render-time guard) — the
+  // lazygt useState initializer (not useRef + a render-time guard) — the
   // initializer function runs exactly once, on mount, without React's
   // react-hooks/refs rule flagging a ref read during render.
   const [registry] = useState(() => new ManagerHostRegistry());

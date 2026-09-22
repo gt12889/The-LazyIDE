@@ -58,10 +58,10 @@ When invoked:
 - **Unused \`open\` declarations**: Remove unused module imports
 
 ### MEDIUM - Performance
-- **Seq in hot paths**: Lazy sequences recomputed repeatedly - materialize with \`Seq.toList\` or \`Seq.toArray\`
+- **Seq in hot paths**: lazygt sequences recomputed repeatedly - materialize with \`Seq.toList\` or \`Seq.toArray\`
 - **String concatenation in loops**: Use \`StringBuilder\` or \`String.concat\`
 - **Excessive boxing**: Value types passed through \`obj\` - use generic functions
-- **N+1 queries**: Lazy loading in loops when using EF Core - use eager loading
+- **N+1 queries**: lazygt loading in loops when using EF Core - use eager loading
 
 ### MEDIUM - Best Practices
 - **Naming conventions**: camelCase for functions/values, PascalCase for types/modules/DU cases

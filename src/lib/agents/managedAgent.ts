@@ -329,7 +329,7 @@ export interface PlanAndActManagedOpts {
   /** Launch prelude depth (managedAgentPrepare.ts). 'full' (default, local
    *  code agents): brain recall, repo startup context, harness rules, coding
    *  skill injection, learned tool overlays. 'lean': persona + policy + task
-   *  only. 'bot' (LazyBots, D93): like lean plus bot-scoped topical recall
+   *  only. 'bot' (lazygt Bots, D93): like lean plus bot-scoped topical recall
    *  for `botId` — no harness / no repo brain. */
   prelude?: 'full' | 'lean' | 'bot';
   /** LazyBot id — required when prelude === 'bot'. */

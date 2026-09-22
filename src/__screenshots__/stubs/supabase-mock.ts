@@ -137,7 +137,7 @@ export const supabase = {
             data: {
               invitationId: 'inv-new-001',
               token: 'mock-token-xyz',
-              link: 'https://lazy.app/invite/mock-token-xyz',
+              link: 'https://lazygt.app/invite/mock-token-xyz',
             },
           },
           error: null,

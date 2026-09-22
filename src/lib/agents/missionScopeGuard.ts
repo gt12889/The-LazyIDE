@@ -82,11 +82,11 @@
  *      stripInjectedContextBlocks() now cuts the scanned text at the first
  *      of either header, so only the real instruction is ever scanned —
  *      the deliberate "sibling directory sharing a name prefix" refusal
- *      (…\Lazy vs …\LazySite-internet, still enforced) stays intact because
+ *      (…\lazygt vs …\LazySite-internet, still enforced) stays intact because
  *      it can only ever fire on the genuine task text, never on incidental
  *      truncated noise appended after it.
  *
- * EXTRA-READABLE-ROOTS FIX (2026-08-18, live repro: a 12-step Lazy-Docs plan
+ * EXTRA-READABLE-ROOTS FIX (2026-08-18, live repro: a 12-step lazygt-Docs plan
  * — M66/M67/M68 — blocked at launch, zero worktrees created): a mission can
  * now legitimately declare `extraReadableProjectIds` on a plan step (see
  * OrchestratorPlanStep.extraReadableProjectIds, types.ts), resolved by the

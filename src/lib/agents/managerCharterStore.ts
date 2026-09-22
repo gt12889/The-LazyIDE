@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'lazy.managerCharters.v1';
+const STORAGE_KEY = 'lazygt.managerCharters.v1';
 
 export type CharterDecision = 'accepted' | 'rejected';
 

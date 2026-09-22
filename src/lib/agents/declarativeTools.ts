@@ -329,7 +329,7 @@ export async function executeFileReadTool(tool: FileReadTool, projectRoot: strin
 
 const store = createToolCollectionStore<DeclarativeTool>({
   storageFileName: 'declarativeTools.json',
-  localStorageKey: 'lazy.agents.declarativeTools',
+  localStorageKey: 'lazygt.agents.declarativeTools',
   isLike: isDeclarativeToolLike,
   joinPath,
 });

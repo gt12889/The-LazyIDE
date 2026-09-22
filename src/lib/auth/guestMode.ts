@@ -1,4 +1,4 @@
-export const GUEST_MODE_KEY = 'lazy.guestMode';
+export const GUEST_MODE_KEY = 'lazygt.guestMode';
 
 export function isGuestMode(): boolean {
   try {

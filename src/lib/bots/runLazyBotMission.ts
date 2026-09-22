@@ -11,7 +11,7 @@
    evaluation, no `claude -p` process. runMission (runtime.ts) diverts every
    mission carrying `botId` here before touching any of that machinery.
 
-   What IS shared is planAndActManaged — Lazy's own ReAct loop, the only
+   What IS shared is planAndActManaged — lazygt's own ReAct loop, the only
    place the cloud_* tools exist. The LLM behind that loop is whatever rail
    the bot's model resolves to (botRunModel.ts): BYOK (the user's key), CLI
    (claude/codex as a text backend — cliAgentTurnStreamer.ts), Pro (ai-proxy)
@@ -124,7 +124,7 @@ function chargeBot(mission: Mission, metrics: AgentMetrics | undefined): void {
 export function resolveBotBrain(model: string | undefined): BotBrain | { error: string } {
   const rail = classifyBotModelRail(model);
   if (!rail) {
-    return { error: `Aucun rail de modèle exécutable pour "${model ?? ''}" (clé BYOK, CLI, Lazy Pro ou modèle gratuit).` };
+    return { error: `Aucun rail de modèle exécutable pour "${model ?? ''}" (clé BYOK, CLI, lazygt Pro ou modèle gratuit).` };
   }
   return brainForRail(rail, model ?? '');
 }

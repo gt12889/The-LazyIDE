@@ -92,7 +92,7 @@ function normalize(s: string): string {
 /** Recently-picked model ids, newest first — persisted across sessions so
  *  the picker's "Recent" row survives a restart. Capped small: the section
  *  exists to re-pick fast, not to mirror the catalog. */
-const RECENTS_KEY = 'lazy.modelPicker.recents';
+const RECENTS_KEY = 'lazygt.modelPicker.recents';
 const RECENTS_MAX = 5;
 
 function loadRecents(): string[] {

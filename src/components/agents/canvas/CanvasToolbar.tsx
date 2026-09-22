@@ -1061,15 +1061,15 @@ export function CanvasToolbar({
   const [legendOpen, setLegendOpen] = useState(false);
   // 2026-08-09 (real-user request: "mets le bouton ⚡ Command dans la barre
   // en haut du canvas et enlève le bouton flottant"). Reads the SAME
-  // persisted `lazy.cockpitMode` the Cockpit's floating toggle used (see
+  // persisted `lazygt.cockpitMode` the Cockpit's floating toggle used (see
   // Cockpit.tsx), so both surfaces agree; the toolbar button is the only
   // affordance left after the floating one is removed.
   const [cockpitMode, setCockpitMode] = useState<'command' | 'construction'>(() => {
-    try { return (localStorage.getItem('lazy.cockpitMode') as 'command' | 'construction') || 'construction'; }
+    try { return (localStorage.getItem('lazygt.cockpitMode') as 'command' | 'construction') || 'construction'; }
     catch { return 'construction'; }
   });
   useEffect(() => {
-    try { localStorage.setItem('lazy.cockpitMode', cockpitMode); } catch { /* ignore */ }
+    try { localStorage.setItem('lazygt.cockpitMode', cockpitMode); } catch { /* ignore */ }
   }, [cockpitMode]);
   const toggleCockpitMode = useCallback(() => {
     setCockpitMode((m) => {

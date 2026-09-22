@@ -99,7 +99,7 @@ function handleCommand(cmd: string, emit: (text: string) => void): void {
     case '':
       break;
     case 'help':
-      emit(`${ANSI_BOLD}Lazy${ANSI_RESET} — ${BROWSER_HINT}\r\n`);
+      emit(`${ANSI_BOLD}lazygt${ANSI_RESET} — ${BROWSER_HINT}\r\n`);
       emit(`  ${ANSI_CYAN}help${ANSI_RESET}  this message\r\n`);
       emit(`  ${ANSI_CYAN}echo${ANSI_RESET}  print text\r\n`);
       emit(`  ${ANSI_CYAN}clear${ANSI_RESET} clear the screen\r\n`);
@@ -131,7 +131,7 @@ function makeBrowserShell(): TerminalProcess {
 
   setTimeout(() => {
     emit(
-      `${ANSI_VIOLET}${ANSI_BOLD}Lazy${ANSI_RESET} — ${ANSI_DIM}${BROWSER_HINT}${ANSI_RESET}\r\n\r\n`
+      `${ANSI_VIOLET}${ANSI_BOLD}lazygt${ANSI_RESET} — ${ANSI_DIM}${BROWSER_HINT}${ANSI_RESET}\r\n\r\n`
     );
     emit(PROMPT);
   }, 80);

@@ -50,7 +50,7 @@ export class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErr
       return (
         <div style={styles.overlay}>
           <div style={styles.icon}>!</div>
-          <div style={styles.title}>Lazy hit an unexpected error</div>
+          <div style={styles.title}>lazygt hit an unexpected error</div>
           <div style={styles.message}>
             {this.state.error?.message ?? 'Unknown error'}
           </div>

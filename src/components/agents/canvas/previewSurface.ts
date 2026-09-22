@@ -145,7 +145,7 @@ export interface EnsurePreviewSurfaceDeps {
 /**
  * Preview-surface-correctness fix (real incident, 2026-08: a project's
  * auto-detected preview was labelled `auto-preview-lazy-backoffice` but
- * pointed at `http://localhost:5173` — the Lazy IDE's OWN dev server
+ * pointed at `http://localhost:5173` — the lazygt's OWN dev server
  * (`src-tauri/tauri.conf.json`'s `devUrl`), wrongly attributed to a project
  * that never served anything there). Root cause: `useCanvasAutoComposition
  * .ts`'s candidate-port fallback probe (CANDIDATE_DEV_PORTS, which includes

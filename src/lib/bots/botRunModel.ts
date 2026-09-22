@@ -1,9 +1,9 @@
 /* botRunModel — which LLM drives a LazyBot run, and on which rail.
 
    A LazyBot's RUNTIME is always the same (a Solari cloud computer driven by
-   Lazy's own ReAct loop — see runLazyBotMission.ts). What varies is the
+   lazygt's own ReAct loop — see runLazyBotMission.ts). What varies is the
    BRAIN: the user may hold a BYOK key, a CLI subscription (claude/codex),
-   Lazy Pro credits, or nothing but the free tier — and the app must run the
+   lazygt Pro credits, or nothing but the free tier — and the app must run the
    bot with whichever of those is actually usable, never fail because a
    default id pointed at a rail the user doesn't have (the old
    `getActiveModel().id || 'claude-haiku-4-5'` sent every bot to the CLI
@@ -50,7 +50,7 @@ export interface ResolvedBotRunModel {
  *  codex means "the codex CLI's own default model" (getActiveModel() returns
  *  id '' in codex mode by design — see models/index.ts). */
 export function classifyBotModelRail(model: string | undefined): BotModelRail | undefined {
-  // Anthropic BYOK is a ReAct text rail for LazyBots (streamAnthropicCompatRaw),
+  // Anthropic BYOK is a ReAct text rail for lazygt Bots (streamAnthropicCompatRaw),
   // even though classifyMissionModel routes those ids as 'native' for the
   // local code-agent path. Prefer the user's own key over the CLI.
   if (model && isAnthropicByokModel(model) && hasByokKey('anthropic')) return 'byok';
@@ -82,7 +82,7 @@ export function isBotRailReady(rail: BotModelRail): boolean {
 export function describeBotRailNotReady(rail: BotModelRail, model: string): string {
   switch (rail) {
     case 'cli': return `Le modèle "${model}" passe par la CLI (claude/codex/devin), qui n'est pas détectée sur ce poste.`;
-    case 'pro': return `Le modèle "${model}" passe par Lazy Pro, sans plan actif ni crédits disponibles.`;
+    case 'pro': return `Le modèle "${model}" passe par lazygt Pro, sans plan actif ni crédits disponibles.`;
     case 'byok': return `Le modèle "${model}" nécessite une clé BYOK qui n'est pas configurée.`;
     case 'free': return `Le modèle gratuit "${model}" est indisponible.`;
   }
@@ -101,7 +101,7 @@ function firstReadyByokModel(): string | undefined {
 }
 
 /** Anthropic BYOK as a ReAct text streamer (byokProviders skips it because
- *  the code-agent rail uses the Rust live-key bridge). LazyBots need the
+ *  the code-agent rail uses the Rust live-key bridge). lazygt Bots need the
  *  HTTP messages API instead. */
 export function resolveAnthropicByokStreamer(model: string) {
   if (!isAnthropicByokModel(model) || !hasByokKey('anthropic')) return undefined;

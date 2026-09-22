@@ -24,10 +24,10 @@
    see systemPressure.ts) is what lets this component tell the two apart —
    this only ever shows the low-memory copy when RAM itself is confirmed
    High, and a distinct CPU-load copy otherwise. Also: even the low-memory
-   copy no longer says "Lazy" is why memory is low — `available_ram_mb` is
+   copy no longer says "lazygt" is why memory is low — `available_ram_mb` is
    system-wide (every process on the machine, not this app's own usage), so
-   blaming Lazy for someone else's memory pressure would itself be
-   inaccurate; the copy now describes the MACHINE's memory as low and Lazy's
+   blaming lazygt for someone else's memory pressure would itself be
+   inaccurate; the copy now describes the MACHINE's memory as low and lazygt's
    own (real, but partial) response to it.
 
    QA fix (bottom-left overlap): this used to float over whatever a space

@@ -24,7 +24,7 @@
    dispatch-time classification the run itself was routed through (never a
    second guess) — 'native' (no '/', not a BYOK provider id) means the
    user's own Claude CLI subscription, the one rail this product's rule
-   says incurs ZERO Lazy debit; every other rail (managed/byok) converts the
+   says incurs ZERO lazygt debit; every other rail (managed/byok) converts the
    real spend into credits using `usdToCredits` (billing/credits.ts — the
    single "1 credit == 1 USD cent" conversion every credits display in this
    app now shares, this module's own former private copy included).
@@ -59,7 +59,7 @@ export interface CostChipProps {
    *  >=90% of cap via the SAME classifyBudget threshold runtime.ts's own
    *  budget enforcer pauses a mission at (never a re-implemented cutoff).
    *  Meaningless (and unused) on the no-debit subscription state — a run
-   *  that incurs zero Lazy debit cannot near a Lazy budget cap. */
+   *  that incurs zero lazygt debit cannot near a lazygt budget cap. */
   budgetCapUsd?: number;
   /** Mission.model — the SAME field runtime.ts's own dispatch already
    *  classified this run's billing rail from (`classifyMissionModel`).
@@ -72,7 +72,7 @@ export interface CostChipProps {
 
 /** Compact cost chip — CREDITS, never €/$ (see this module's own header for
  *  the owner's standing rule), honest about estimates, near-cap spend, and
- *  the one rail (the user's own CLI subscription) that incurs no Lazy debit
+ *  the one rail (the user's own CLI subscription) that incurs no lazygt debit
  *  at all. Hidden entirely when there is no real cost yet (costUsd undefined
  *  or 0) — the same "absence over fabrication" rule this canvas already
  *  applies elsewhere (VerdictChip.scoreUnavailable,
@@ -87,7 +87,7 @@ export function CostChip({ costUsd, tokensSource, budgetCapUsd, model, testId }:
     // Fix D (2026-08-19 dollar-kill incident) — shows the SAME credits
     // number as the real-spend branch below (usdToCredits, one shared
     // formula), never budget-warning-colored (budgetCapUsd is meaningless
-    // here — no real spend can ever near a Lazy budget cap on this rail),
+    // here — no real spend can ever near a lazygt budget cap on this rail),
     // always prefixed "≈" and titled as an equivalent, never a debit.
     const equivalentCredits = usdToCredits(costUsd);
     return (

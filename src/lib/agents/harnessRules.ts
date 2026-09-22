@@ -515,7 +515,7 @@ export async function loadHarnessSessionBlock(
     const rules = await listRules({ limit: 200 });
     const objectives = await loadObjectivesForHarness();
 
-    // Lazy import: when the project has a standard onboarding file that we
+    // lazygt import: when the project has a standard onboarding file that we
     // have not captured yet, capture it once (revocable, source=imported).
     if (opts.projectRoot) {
       try {
@@ -568,7 +568,7 @@ export function renderAgentsMdBlock(
 ): string {
   const lines: string[] = [];
   lines.push(AGENTS_MD_BEGIN_MARKER);
-  lines.push('# Harness rules (maintained by Lazy — do not edit between markers)');
+  lines.push('# Harness rules (maintained by lazygt — do not edit between markers)');
 
   const applicable = selectRulesForContext(rules, { project: opts.project });
   let budget = opts.maxTokens ?? DEFAULT_RULES_MAX_TOKENS;

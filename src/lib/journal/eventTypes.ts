@@ -283,7 +283,7 @@ export interface ToolCalledPayload {
 }
 
 /**
- * Lazy tool-loading budget telemetry (toolRegistryLazy.ts's
+ * lazygt tool-loading budget telemetry (toolRegistryLazy.ts's
  * getToolPromptBudget) — emitted once per mission start (managedAgent.ts),
  * NOT per turn: the tool-definitions block is composed once at mission
  * start and reused via prompt caching for every ReAct step (see
@@ -443,7 +443,7 @@ export interface LoopStoppedPayload {
 /**
  * Emitted by the provider-aware scheduler (src/lib/agents/scheduler.ts, T1.1)
  * when a mission is queued because its pool — or the global
- * `lazy.agents.maxParallel` cap — has no free slot right now (reason
+ * `lazygt.agents.maxParallel` cap — has no free slot right now (reason
  * 'pool_full'), OR because its predicted file scope overlaps a currently
  * running mission's own scope (reason 'scope_conflict', T1.6, spec §7.2 —
  * see src/lib/agents/preflight.ts's checkConflicts). Additive context

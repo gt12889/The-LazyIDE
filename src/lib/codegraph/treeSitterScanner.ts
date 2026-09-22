@@ -8,7 +8,7 @@ import type { CodeNode, CodeEdge, SymbolKind } from './types.js';
 import type { ScanResult } from './scanner.js';
 import { getLanguageConfig, grammarWasmUrl } from './languageRegistry.js';
 
-// ── Lazy-loaded tree-sitter runtime ───────────────────────────────
+// ── lazygt-loaded tree-sitter runtime ───────────────────────────────
 
 interface TreeSitterNode {
   type: string;

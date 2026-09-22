@@ -47,7 +47,7 @@ export const DEVIN_MODELS_FALLBACK: readonly ModelInfo[] = [
   { id: 'kimi-k2-7', label: 'Kimi K2.7', provider: 'devin' },
 ];
 
-const LS_DEVIN_CATALOG = 'lazy.devin.catalog';
+const LS_DEVIN_CATALOG = 'lazygt.devin.catalog';
 
 interface CachedDevinCatalog {
   ts: number;

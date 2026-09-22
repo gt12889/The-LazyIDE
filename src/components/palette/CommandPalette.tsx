@@ -1,4 +1,4 @@
-/* CommandPalette.tsx — functional Cmd-K overlay for Lazy IDE.
+/* CommandPalette.tsx — functional Cmd-K overlay for lazygt.
    Opens via Cmd/Ctrl+K or Omnibar pill click.
    Sources: files (scanned from the open project), commands (space nav),
    brain nodes from platform.brain.search(), agent launcher.

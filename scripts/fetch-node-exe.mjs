@@ -1,78 +1,22 @@
 #!/usr/bin/env node
-/**
- * Downloads node.exe (win32-x64, v20 LTS) from the official Node.js distribution
- * and places it at src-tauri/resources/node.exe for Tauri bundling.
- *
- * This script runs on any OS; it downloads the win32-x64 binary specifically.
- * Skip if node.exe is already present.
- */
-
-import { createWriteStream, existsSync, mkdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+// Official Node.js 22 runtime matching the bundled native engine modules.
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pipeline } from 'node:stream/promises';
-import https from 'node:https';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, '..');
-const DEST = join(ROOT, 'src-tauri', 'resources', 'node.exe');
-
-// Node.js 20 LTS win32-x64 standalone binary
-const NODE_VERSION = '20.12.2';
-const NODE_URL = `https://nodejs.org/dist/v${NODE_VERSION}/win-x64/node.exe`;
-
-if (existsSync(DEST)) {
-  console.log(`node.exe already exists at ${DEST} — skipping download`);
-  process.exit(0);
-}
-
-mkdirSync(join(ROOT, 'src-tauri', 'resources'), { recursive: true });
-
-console.log(`Downloading node v${NODE_VERSION} win32-x64...`);
-console.log(`  From : ${NODE_URL}`);
-console.log(`  To   : ${DEST}`);
-
-function download(url, dest) {
-  return new Promise((resolve, reject) => {
-    const file = createWriteStream(dest);
-    let received = 0;
-
-    function request(u) {
-      https.get(u, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          // Follow redirect
-          return request(res.headers.location);
-        }
-        if (res.statusCode !== 200) {
-          reject(new Error(`HTTP ${res.statusCode} for ${u}`));
-          return;
-        }
-        const total = parseInt(res.headers['content-length'] || '0', 10);
-        res.on('data', (chunk) => {
-          received += chunk.length;
-          if (total > 0) {
-            const pct = ((received / total) * 100).toFixed(1);
-            process.stdout.write(`\r  ${pct}% (${(received / 1024 / 1024).toFixed(1)} MB)`);
-          }
-        });
-        res.pipe(file);
-        file.on('finish', () => {
-          file.close();
-          process.stdout.write('\n');
-          resolve();
-        });
-      }).on('error', reject);
-    }
-
-    request(url);
-    file.on('error', reject);
-  });
-}
-
-try {
-  await download(NODE_URL, DEST);
-  console.log('Done.');
-} catch (err) {
-  console.error('Download failed:', err.message);
-  process.exit(1);
+const version = '22.23.2';
+const expected = '0d0f5e39f9f3d9587bc19f73eab3c2c9c4903fd02d6dbf9c853dd81b3d95fad4';
+const dest = fileURLToPath(new URL('../src-tauri/resources/node.exe', import.meta.url));
+const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+if (existsSync(dest) && hash(readFileSync(dest)) === expected) {
+  console.log(`Verified Node ${version}: ${dest}`);
+} else {
+  const response = await fetch(`https://nodejs.org/dist/v${version}/win-x64/node.exe`);
+  if (!response.ok) throw new Error(`Node download failed: ${response.status}`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (hash(bytes) !== expected) throw new Error('Node SHA-256 mismatch');
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(`${dest}.download`, bytes);
+  renameSync(`${dest}.download`, dest);
+  console.log(`Installed verified Node ${version}: ${dest}`);
 }

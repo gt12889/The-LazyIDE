@@ -430,7 +430,7 @@ export function findOpenRouterModel(id: string): OpenRouterModel | undefined {
 
 /**
  * True when the given OpenRouter id is a FREE model — usable by ANY
- * authenticated user without a Lazy Pro subscription (the ai-proxy serves
+ * authenticated user without a lazygt Pro subscription (the ai-proxy serves
  * free models with zero reservation and zero charge). Undefined/unknown
  * ids are never free. Every client-side gate that would otherwise demand
  * an active Pro plan (picker groups, engine readiness, mission dispatch)

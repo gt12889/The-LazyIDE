@@ -1,6 +1,6 @@
 /* palettes.ts — Brain Canvas color palettes (pure data + color math).
    Exact swatch arrays ported from the design handoff prototype
-   (design_handoff_brain_redesign/Lazy IDE.dc.html, `PALETTES` on the
+   (design_handoff_brain_redesign/lazygt.dc.html, `PALETTES` on the
    Component class). Each palette is 5 index-ordered colors matching the
    5 semantic cluster slots used across the app (see brainAdapter.ts's
    resolveClusterColors, which maps real/mock cluster names onto these

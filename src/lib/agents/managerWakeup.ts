@@ -79,8 +79,8 @@ import type { JournalEventRow } from '../journal/eventTypes.js';
 
 // ── Configuration (localStorage-backed, same convention as fleetHygiene.ts) ──
 
-const ENABLED_STORAGE_KEY = 'lazy.managerWakeup.enabled';
-const MAX_PER_HOUR_STORAGE_KEY = 'lazy.managerWakeup.maxPerHour';
+const ENABLED_STORAGE_KEY = 'lazygt.managerWakeup.enabled';
+const MAX_PER_HOUR_STORAGE_KEY = 'lazygt.managerWakeup.maxPerHour';
 
 export const DEFAULT_DEBOUNCE_MS = 90_000;
 export const DEFAULT_MAX_AUTO_TURNS_PER_HOUR = 6;

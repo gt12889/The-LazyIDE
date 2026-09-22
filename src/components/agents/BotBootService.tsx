@@ -61,7 +61,7 @@ export function BotBootService() {
     const resolveModel = () => {
       let managerModel: string | undefined;
       try {
-        managerModel = localStorage.getItem('lazy.manager.model') ?? undefined;
+        managerModel = localStorage.getItem('lazygt.manager.model') ?? undefined;
       } catch {
         managerModel = undefined;
       }

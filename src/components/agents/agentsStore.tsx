@@ -26,7 +26,7 @@ import { runMission, mergeWorktree, discardWorktree, isManagedAgentAvailable, is
 import type { MissionUpdate, PermissionMode } from '../../lib/agents/runtime';
 import { runLearningLoop } from '../../lib/agents/learningLoop';
 import { runManagerActionHandler } from '../../lib/agents/managerActionDispatch';
-// LazyBots (A3) — the manager creates/manages LazyBots from the chat. The
+// lazygt Bots (A3) — the manager creates/manages lazygt Bots from the chat. The
 // bot storage/engine modules are deliberately imported at module top (no
 // circular dependency: they never import back from agentsStore).
 import { listBots, saveBot, deleteBot } from '../../lib/bots/botStorage';
@@ -209,7 +209,7 @@ import { getEngineReadiness, engineReasonKey } from '../../lib/models/entitlemen
 // STACK fix: the SAME mode-independent entitlements primitive every model
 // picker (LazyManager, New Mission, Composer) already uses — see
 // modelPickerOptions.ts's module doc comment (a Claude subscription and an
-// active Lazy Pro plan are independent, never mutually exclusive).
+// active lazygt Pro plan are independent, never mutually exclusive).
 import { detectModelEntitlements, buildModelPickerOptions, isSelectablePickerModel, isModelRailPending } from '../../lib/models/modelPickerOptions';
 import { recallForDirective, withTimeout } from '../../lib/models/brainSearchLoop';
 import { extractPendingQuestionText, recordMissionAnswer } from '../../lib/agents/missionQuestion';
@@ -232,7 +232,7 @@ import {
 import { getCostState } from '../../lib/models/costStore';
 // Cross-layer import by design (same established pattern as scheduler.ts's
 // own LS_AGENTS_MAX_PARALLEL import): AgentsPanel.tsx is the registry for
-// every `lazy.agents.*` localStorage key even though it is a component file.
+// every `lazygt.agents.*` localStorage key even though it is a component file.
 import { LS_AGENTS_COST_LIMIT } from '../settings/AgentsPanel';
 import { createManagerInterventionListener } from '../../lib/agents/lazyReasoningBlocks';
 import {
@@ -2230,11 +2230,11 @@ async function resolveOrchestratorRoot(planId: string): Promise<string> {
 }
 
 /**
- * T1.3 (spec §7.3/§8) — the global session cost cap: `lazy.agents.costLimitUsd`
+ * T1.3 (spec §7.3/§8) — the global session cost cap: `lazygt.agents.costLimitUsd`
  * (`AgentsPanel.tsx`'s LS_AGENTS_COST_LIMIT), read here for the first time
  * since it was introduced (previously a dead setting — spec §5.1's P0
  * hygiene list). Mirrors scheduler.ts's own globalCap() pattern for the
- * sibling `lazy.agents.maxParallel` key: try/catch-wrapped direct
+ * sibling `lazygt.agents.maxParallel` key: try/catch-wrapped direct
  * localStorage read, 0/absent/invalid -> 0 (unlimited), never throws.
  */
 function sessionCostCapUsd(): number {
@@ -3565,7 +3565,7 @@ async function resolveGroundingActions(
               const status = b.enabled ? (botState.activeRuns.length > 0 ? 'running' : 'idle') : 'disabled';
               return `${b.id} ("${b.name}", ${b.autonomy}, enabled=${b.enabled}, activeRuns=${botState.activeRuns.length}, status=${status})`;
             }).join('\n')
-          : '(no LazyBots saved yet)';
+          : '(no lazygt Bots saved yet)';
         observations.push(`list_lazybots:\n${lines}`);
       } catch {
         const fallback = '(list_lazybots unavailable: bot storage read failed)';
@@ -4499,7 +4499,7 @@ export function useAgentsStoreActionsOptional(): AgentsStoreActionsValue | null 
 // picker silently reset to getDefaultModelIdForMode() on every reload —
 // the ONE LazyManager setting that didn't survive a restart.
 
-const MANAGER_MODEL_STORAGE_KEY = 'lazy.manager.model';
+const MANAGER_MODEL_STORAGE_KEY = 'lazygt.manager.model';
 
 /**
  * Validates the persisted id against whichever catalog it actually belongs
@@ -4803,7 +4803,7 @@ interface Props {
 }
 
 export function AgentsStoreProvider({ children }: Props) {
-  // Lazy initializer (runs once, not on every render) — mints the ONE
+  // lazygt initializer (runs once, not on every render) — mints the ONE
   // default conversation every app session starts with. See
   // ManagerConversationState/AgentsState.conversations' own doc comments for
   // the id-space contract; the mount-restore effect below may re-key this
@@ -5021,13 +5021,13 @@ export function AgentsStoreProvider({ children }: Props) {
   // tabs" — a mission chain launched from a background tab kept running
   // while every open conversation silently vanished on restart). Wave 1
   // only ever persisted each conversation's OWN transcript/pendingApprovals
-  // (`lazy.managerSessions`, managerPersistence.ts's `sessions`) — WHICH
+  // (`lazygt.managerSessions`, managerPersistence.ts's `sessions`) — WHICH
   // conversations were open, in what order, and which was active never
   // left React state, so every restart collapsed back to exactly one
   // conversation (the single most-recently-updated session, restored into
   // the ONE default conversation this Provider always mints at mount).
   //
-  // `loadOpenWorkingSet` reads the NEW `lazy.managerOpenSessions` key
+  // `loadOpenWorkingSet` reads the NEW `lazygt.managerOpenSessions` key
   // (managerPersistence.ts) capturing conversationOrder + activeConversationId
   // (+ which conversations were busy at save time — see the system-marker
   // handling below). It is `null` on a first boot, or any boot before this
@@ -5039,7 +5039,7 @@ export function AgentsStoreProvider({ children }: Props) {
   // drift from it.
   //
   // Cross-referenced against `managerPersistedSessions` (the SESSION list,
-  // `lazy.managerSessions`) — never trust the working set's own id list
+  // `lazygt.managerSessions`) — never trust the working set's own id list
   // alone: a session the user deleted from history (deleteManagerSession)
   // must never be resurrected as a live tab just because it was still open
   // when the app last closed. Capped to MAX_OPEN_MANAGER_CONVERSATIONS —
@@ -6441,7 +6441,7 @@ export function AgentsStoreProvider({ children }: Props) {
     // see those call sites' own doc comments), this choke point had no
     // protection at all: ANY patch, from ANY caller, always applied
     // unconditionally. A mission already done+merged is the most final
-    // state Lazy has — refuse any patch here that would move its status
+    // state lazygt has — refuse any patch here that would move its status
     // away from 'done', mirroring the exact idempotent-no-op shape
     // approveMissionInner already uses for the equivalent stale-approval
     // case (agentsStore.staleApprovalIdempotent.test.tsx). A patch that
@@ -8198,7 +8198,7 @@ export function AgentsStoreProvider({ children }: Props) {
     // routing a task to another OPEN project via projectId / path-mention
     // resolution), it is a deliberate target — honored above instead of
     // resolveProjectRoot's ACTIVE project, which used to silently win and
-    // land the worktree in the wrong repo (Lazy-real-test while the task
+    // land the worktree in the wrong repo (lazygt-real-test while the task
     // named lazy-backoffice).
     //
     // Promise.resolve(...) guards the fire-and-forget .catch() below against
@@ -8250,7 +8250,7 @@ export function AgentsStoreProvider({ children }: Props) {
     // Launch the agent run loop — fire and forget, updates flow via onUpdate
     // Skip for loop parent missions: the loop scheduler creates child iterations.
     if (!input.loopConfig) {
-      // T1.3 session cap (spec §7.3/§8): lazy.agents.costLimitUsd, enforced
+      // T1.3 session cap (spec §7.3/§8): lazygt.agents.costLimitUsd, enforced
       // here for the first time (previously a dead setting — spec §5.1's P0
       // hygiene list). 0/absent -> unlimited. Refuses the launch honestly:
       // the mission stays 'queued' (already created + journaled above) but
@@ -8341,7 +8341,7 @@ export function AgentsStoreProvider({ children }: Props) {
       // addMission (see its own "Preflight (FIX B)" doc comment); the
       // manager's launch_mission executor case (agentsStore.tsx's
       // executeManagerAction) calls addMission directly with no readiness
-      // gate at all. Without this, a not-ready engine (Lazy Pro plan active
+      // gate at all. Without this, a not-ready engine (lazygt Pro plan active
       // but 0 credits, or an explicitly-requested native model with no CLI
       // detected) sailed straight past worktree creation and brain recall —
       // real, slow work for a mission already doomed — before failing deep
@@ -8442,7 +8442,7 @@ export function AgentsStoreProvider({ children }: Props) {
       // Provider-aware scheduler (T1.1): the actual runMission call is
       // wrapped as a launchFn thunk so the scheduler can decide WHEN it
       // runs — immediately when its pool (claude-cli/managed/byok:<hash>)
-      // and the global lazy.agents.maxParallel cap both have room, queued
+      // and the global lazygt.agents.maxParallel cap both have room, queued
       // otherwise. With no caps configured this launches in the exact same
       // synchronous tick as before (schedulerDispatch has no internal
       // await ahead of calling launchFn) — byte-identical to the direct
@@ -10184,7 +10184,7 @@ export function AgentsStoreProvider({ children }: Props) {
           // three launch_mission actions targeting a known-but-closed
           // project all sat "Blocked" in the approval list, and the user had
           // to separately ask the manager to open_project and retry by
-          // hand. AppContext's `lazy.projects.recent` MRU list (see
+          // hand. AppContext's `lazygt.projects.recent` MRU list (see
           // readRecentProjects's own doc comment) remembers real root paths
           // for projects this session has had open before, keyed only by
           // root — matched here against the requested NAME via basename(root),
@@ -11345,7 +11345,7 @@ stopAll(action.filter);
         // helper/concept as launch_mission's 2026-08-03 fix and
         // generate_plan's 2026-08-04 parity fix; see
         // resolveMentionedProjectRoot's own doc comment): the user had just
-        // been talking about a DIFFERENT open project ("Lazy-real-test")
+        // been talking about a DIFFERENT open project ("lazygt-real-test")
         // and a bare start_preview (no projectId) still camera-centered the
         // ACTIVE project's empty zone instead. Gated on the RAW
         // `action.projectId` being blank — deliberately NEVER on
@@ -11478,7 +11478,7 @@ stopAll(action.filter);
         // manager routinely refers to a project by name (the canvas digest
         // shows both). A name that never matched the raw `collapsed` key
         // used to silently toggle a bogus, invisible entry instead of the
-        // REAL zone — this is why "collapse/enlève le projet Lazy" (a name)
+        // REAL zone — this is why "collapse/enlève le projet lazygt" (a name)
         // used to visibly do nothing. Resolve it the same way every other
         // project-targeting action does; fall back to the raw value ONLY
         // when it resolves to nothing (never BLOCK a literal id that
@@ -12730,7 +12730,7 @@ stopAll(action.filter);
           toast('Browser recipe completed.', 'success');
         }
       },
-      // ── LazyBots (A3) — create/manage LazyBots from the manager chat.
+      // ── lazygt Bots (A3) — create/manage lazygt Bots from the manager chat.
       // Same honest-outcome shape as create_project/open_project: success
       // returns a `{ message }` real result (journaled for the manager),
       // failure returns `{ failed: true, message }` — never a fabricated
@@ -12806,7 +12806,7 @@ stopAll(action.filter);
           // comment for why the old headless loop was replaced.
           //
           // Model: a LazyBot must run whatever rail the user actually has
-          // (BYOK key, CLI subscription, Lazy Pro credits, free tier) — see
+          // (BYOK key, CLI subscription, lazygt Pro credits, free tier) — see
           // resolveLazyBotRunModel. Preference order: the model the action
           // named, then the manager's own model for this conversation
           // (`_model`), then the app's active model; the first one whose
@@ -12912,8 +12912,8 @@ stopAll(action.filter);
         });
         const lines = summary.length > 0
           ? summary.map((s) => `${s.id} ("${s.name}", ${s.autonomy}, enabled=${s.enabled}, activeRuns=${s.activeRuns}, status=${s.status})`).join('\n')
-          : '(no LazyBots saved yet)';
-        toast(summary.length > 0 ? `LazyBots found: ${summary.length}` : 'No LazyBots saved yet', 'info');
+          : '(no lazygt Bots saved yet)';
+        toast(summary.length > 0 ? `lazygt Bots found: ${summary.length}` : 'No lazygt Bots saved yet', 'info');
         return { message: `list_lazybots:\n${lines}` };
       },
       delete_lazybot: async () => {
@@ -12938,7 +12938,7 @@ stopAll(action.filter);
         await deleteBot(bot.id);
         const msg = `delete_lazybot: deleted LazyBot "${bot.name}" (${bot.id})`
           + (runs.length > 0 ? ` — stopped ${runs.length} active run(s) first.` : '.')
-          + ' The bot config is permanently removed (no archive); its run history is kept in .lazy.';
+          + ' The bot config is permanently removed (no archive); its run history is kept in .lazygt.';
         toast(msg, 'success');
         return { message: msg };
       },
@@ -13190,7 +13190,7 @@ stopAll(action.filter);
       isOutOfCredits(subscription.credits_remaining_cents, subscription.status);
 
     // STACK fix: a user can hold both a Claude CLI/BYOK subscription and an
-    // active Lazy Pro plan at once (they stack, never mutually exclusive —
+    // active lazygt Pro plan at once (they stack, never mutually exclusive —
     // see modelPickerOptions.ts's module doc comment). 0 Pro credits must
     // never refuse the manager's OWN turn outright when a CLI subscription
     // is ready to serve it instead — isNativeModelReady() is the SAME
@@ -13434,7 +13434,7 @@ stopAll(action.filter);
         // of sequentially after. Bounded to 6s — same budget as
         // fetchManagerStartupContext. Falls back to '.' on timeout/failure.
         boundedContext(resolveProjectRoot().catch(() => '.'), '.', 'manager project root', 6_000),
-        // LazyBots every turn (ManagerContext.lazyBots) — one small local
+        // lazygt Bots every turn (ManagerContext.lazyBots) — one small local
         // JSON read (.lazy/bots.json), so it is NOT gated on
         // skipHeavyContext: "lance le bot X" is short enough to skip the
         // heavy blocks yet is exactly the turn that needs the bot ids.
@@ -13553,7 +13553,7 @@ stopAll(action.filter);
         proRailActive: modelEntitlements.pro === 'active',
         brainStatus: formatBrainStatus(brainInfo, brainSidecarReachable),
         canvasDigest,
-        // Real saved LazyBots (ids + runtime state) every turn — see
+        // Real saved lazygt Bots (ids + runtime state) every turn — see
         // ManagerContext.lazyBots (managerEngine.ts): the model can emit
         // run_lazybot with a grounded botId in the SAME reply instead of a
         // list_lazybots round-trip, and the repair/Layer-3 fallbacks map a
@@ -13762,7 +13762,7 @@ stopAll(action.filter);
       // Credit-metering gate (2026-09-08): the "credits" label only means
       // something on the managed rail — a native CLI turn (claude/codex/devin
       // subscription), a BYOK key, or a managed :free model consumes ZERO
-      // Lazy credits, so attaching the token-derived estimate there renders
+      // lazygt credits, so attaching the token-derived estimate there renders
       // a fake "~3 credits" under every CLI/BYOK/Devin reply.
       const costAfterTurn = getCostState();
       const deltaCostUsd = Math.max(0, costAfterTurn.totalCostUsd - costBeforeTurn.totalCostUsd);
@@ -14475,7 +14475,7 @@ stopAll(action.filter);
               const zoneGraphEdges: DraftGraphEdge[] = ir.edges
                 .filter((edge) => edge.kind === 'control')
                 .map((edge) => ({ id: edge.id, source: edge.from, target: edge.to }));
-              // Lazy import: layout.ts statically pulls in elk.bundled.js
+              // lazygt import: layout.ts statically pulls in elk.bundled.js
               // (~1.4 MB vendor-elkjs chunk). A static import here kept that
               // whole chunk in the app's eager boot path (agentsStore is in
               // the entry chunk); the draft-plan layout only runs when a
@@ -14708,7 +14708,7 @@ stopAll(action.filter);
 
   /**
    * Tab-strip close ("x" / Delete key on a focused tab). Closing is NOT
-   * deleting: `id`'s own persisted session (`lazy.managerSessions`,
+   * deleting: `id`'s own persisted session (`lazygt.managerSessions`,
    * managerPersistence.ts) is left completely untouched — only removed from
    * the LIVE `conversations`/`conversationOrder` here, so it stays fully
    * reachable from the history drawer afterwards (loadManagerSession reopens
@@ -14806,7 +14806,7 @@ stopAll(action.filter);
    * load-bearing there to stop a busy conversation's per-second elapsed-
    * time ticker from rescheduling every sibling's debounce timer) — a
    * rename touches neither of those fields, so without this explicit call
-   * it would never reach `lazy.managerSessions` at all, only live in
+   * it would never reach `lazygt.managerSessions` at all, only live in
    * memory until the next unrelated message-driven autosave happened to
    * fire (or never, if the conversation stays quiet). A brand-new,
    * still-empty conversation (no messages yet) is the one case this can't

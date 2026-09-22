@@ -1,12 +1,12 @@
 /* ModelsAssistantPanel — per-mode model selection (ask / plan / edit)
    and default agent model, persisted to the same accessSettings store.
 
-   localStorage key: lazy.accessSettings (via loadAccessSettings/saveAccessSettings)
+   localStorage key: lazygt.accessSettings (via loadAccessSettings/saveAccessSettings)
    Additional keys added here:
-     lazy.models.modeAsk     — model id for ask mode
-     lazy.models.modePlan    — model id for plan mode
-     lazy.models.modeEdit    — model id for edit mode
-     lazy.models.agentModel  — default model id for agent sub-tasks
+     lazygt.models.modeAsk     — model id for ask mode
+     lazygt.models.modePlan    — model id for plan mode
+     lazygt.models.modeEdit    — model id for edit mode
+     lazygt.models.agentModel  — default model id for agent sub-tasks
 */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -18,10 +18,10 @@ import { useI18n } from '../../i18n';
 
 // ── localStorage keys ──────────────────────────────────────────────
 
-export const LS_MODE_ASK    = 'lazy.models.modeAsk';
-export const LS_MODE_PLAN   = 'lazy.models.modePlan';
-export const LS_MODE_EDIT   = 'lazy.models.modeEdit';
-export const LS_AGENT_MODEL = 'lazy.models.agentModel';
+export const LS_MODE_ASK    = 'lazygt.models.modeAsk';
+export const LS_MODE_PLAN   = 'lazygt.models.modePlan';
+export const LS_MODE_EDIT   = 'lazygt.models.modeEdit';
+export const LS_AGENT_MODEL = 'lazygt.models.agentModel';
 
 // ── All models flattened ───────────────────────────────────────────
 

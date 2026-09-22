@@ -41,7 +41,7 @@ export {
 // in localStorage (lib/ai/chatPersistence.ts's ChatSession[]) — this reads
 // that same storage key directly rather than plumbing a new field through
 // assistantStore, to derive an equivalent first-user-message preview.
-const CHAT_SESSIONS_STORAGE_KEY = 'lazy.chatSessions'; // must match chatPersistence.ts's STORAGE_KEY
+const CHAT_SESSIONS_STORAGE_KEY = 'lazygt.chatSessions'; // must match chatPersistence.ts's STORAGE_KEY
 const PREVIEW_MAX_CHARS = 60;
 
 function truncatePreview(text: string): string {
@@ -70,7 +70,7 @@ function loadChatSessionPreviews(): Map<string, string> {
 
 // ── Mode persistence ──────────────────────────────────────────────
 
-const MODE_KEY = 'lazy.manager.unifiedMode';
+const MODE_KEY = 'lazygt.manager.unifiedMode';
 
 function loadMode(): ManagerMode {
   try {

@@ -1,6 +1,6 @@
 import type { ConversationGoal } from './managerEngine.js';
 
-const STORAGE_KEY = 'lazy.managerGoals.v1';
+const STORAGE_KEY = 'lazygt.managerGoals.v1';
 
 function readAll(): Record<string, ConversationGoal> {
   try {

@@ -1,6 +1,6 @@
 /* codeEvents.ts — IDE-native event system (D).
    Instead of GitNexus's PreToolUse/PostToolUse MCP hooks, this integrates
-   directly into Lazy's event loop: before the agent edits a file, we inject
+   directly into lazygt's event loop: before the agent edits a file, we inject
    impact context; after a git commit, we detect staleness and prompt re-index;
    after a file save, we trigger incremental re-index of that file.
 

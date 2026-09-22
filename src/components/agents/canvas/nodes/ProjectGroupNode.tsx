@@ -843,7 +843,7 @@ export function ProjectGroupNodeCard({ data, selected, aggregate, headerTier = '
           padding: '0 12px',
           // fix/canvas-zone-title-overlap round 2 (David's measured repro,
           // real packaged app, 12% zoom / 8 zones: two neighbouring headers
-          // still overprinted each other — "uc=smokez2(", "Lazy-real-t"
+          // still overprinted each other — "uc=smokez2(", "lazygt-real-t"
           // colliding with "debounce" — even after the 22-character
           // reserved-name-chars fix. His own diagnosis: that fix was
           // TYPOGRAPHIC (bounds the NAME text's character count) while the

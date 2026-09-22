@@ -1,13 +1,13 @@
 [package]
-name = "lazy-ide"
+name = "lazygt"
 version = "0.1.19"
-description = "Lazy IDE — AI-native code editor with LazyBrain"
+description = "lazygt — local and CLI coding workspace"
 authors = ["David"]
 license = "MIT"
-repository = "https://github.com/david/lazy-ide"
+repository = "https://github.com/gt12889/The-LazyIDE"
 edition = "2021"
 rust-version = "1.77.2"
-default-run = "lazy-ide"  # second bin lazy_runnerd requires an explicit default
+default-run = "lazygt"  # second bin lazy_runnerd requires an explicit default
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -39,12 +39,11 @@ gix = { version = "0.70", default-features = false, features = ["revision", "sta
 tempfile = "3"
 reqwest = { version = "0.12", features = ["blocking", "stream", "json"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync"] }
 futures-util = "0.3"
 tungstenite = { version = "0.24", features = ["native-tls"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-os = "2"
-tauri-plugin-updater = { version = "2", optional = false }
 cron = "0.12"
 urlencoding = "2"
 regex = "1"

@@ -81,9 +81,9 @@ export interface CompletedMissionReport {
    * codex CLI's own self-reported total_cost_usd (agent.rs's
    * parse_result_usage, emitted with payload.source:'real' at runtime.ts's
    * doneHandler): an exact calculation of the tokens' API-list-price
-   * EQUIVALENT, never an amount Lazy actually billed. A user on a flat
+   * EQUIVALENT, never an amount lazygt actually billed. A user on a flat
    * Claude subscription (or a personal API key configured straight into the
-   * CLI) pays Lazy nothing extra for this mission — Lazy's own ai-proxy/
+   * CLI) pays lazygt nothing extra for this mission — lazygt's own ai-proxy/
    * credits system is never involved for native missions. false when the
    * mission's `mission.started` model carried a '/' (OpenRouter id), which
    * only ever routes through the managed engine (real ai-proxy billing —
@@ -119,14 +119,14 @@ export interface ProjectReportTotals {
    *  rail so each can be labeled honestly (real vs equivalent). */
   costUsd: number;
   /** Sum of costUsd across missions where `costIsApiEquivalent === false`
-   *  (managed/BYOK — real spend, either Lazy's managed credits or the
+   *  (managed/BYOK — real spend, either lazygt's managed credits or the
    *  user's own BYOK key). Excludes missions with `costIsApiEquivalent`
    *  undefined (no mission.started event observed — unknown rail, honestly
    *  left out of both splits rather than guessed into either). */
   costUsdManaged: number;
   /** Sum of costUsd across missions where `costIsApiEquivalent === true`
    *  (native claude-code/codex CLI rail — an API-list-price EQUIVALENT,
-   *  never money Lazy actually billed; see CompletedMissionReport.
+   *  never money lazygt actually billed; see CompletedMissionReport.
    *  costIsApiEquivalent's own doc comment). */
   costUsdApiEquivalent: number;
   tokensIn: number;

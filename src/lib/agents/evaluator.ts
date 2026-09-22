@@ -1580,7 +1580,7 @@ async function evaluateLive(
 
 /** Shell command used to run the test suite for the tester role in managed
  *  mode. Matches the assumption already baked into the native tester's own
- *  prompt above ("npm test or equivalent") — Lazy IDE and the missions it
+ *  prompt above ("npm test or equivalent") — lazygt and the missions it
  *  evaluates are npm-based projects. */
 const MANAGED_TEST_COMMAND = 'npm test';
 const MANAGED_TEST_TIMEOUT_MS = 120000;
@@ -1910,7 +1910,7 @@ function sanitizeWorktreeSegment(segment: string): string {
  * std::fs::canonicalize() result, which on Windows is \\?\-prefixed
  * (verbatim). Verbatim paths disable all separator normalization, so
  * appending "/.lazy/worktrees/..." with a literal slash produces a
- * mixed-separator string (e.g. `\\?\C:\...\Lazy/.lazy/worktrees/...`) that
+ * mixed-separator string (e.g. `\\?\C:\...\lazygt/.lazy/worktrees/...`) that
  * Rust's Path::canonicalize() fails to resolve even though the directory
  * exists on disk — the exact "Tester unavailable — run_shell failed: path
  * canonicalize failed" bug. joinPath (../paths) reuses whatever separator

@@ -68,7 +68,7 @@ export async function askUser(args: Record<string, unknown>, _ctx: ToolExecution
   return `Question for user: ${question}${optionsSuffix}`;
 }
 
-// Lazy tool loading (toolRegistryLazy.ts) — most tools are advertised as
+// lazygt tool loading (toolRegistryLazy.ts) — most tools are advertised as
 // a one-line index hint only; find_tool fetches a tool's full definition
 // (schema + ACI-optimized description) on demand, by exact name,
 // substring, tag, or keyword. Read-only/documentation lookup only — it

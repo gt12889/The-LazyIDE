@@ -14,7 +14,7 @@
    main.tsx before the first render.
 */
 
-const STORAGE_KEY = 'lazy.theme.accent';
+const STORAGE_KEY = 'lazygt.theme.accent';
 
 /** Swatch choices shown in Réglages > Apparence. First entry is the
  *  design system's own default violet (design-system.css's --color-accent). */

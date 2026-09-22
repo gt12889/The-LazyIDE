@@ -4,7 +4,7 @@
    Problem this solves: the brain seed runs in the lazybrain child process
    spawned by Rust, which used to auto-detect its LLM backend (claude CLI on
    PATH → ANTHROPIC_API_KEY env → heuristic) with no input from the app. A
-   user who just configured DeepSeek BYOK, or only holds a free Lazy account,
+   user who just configured DeepSeek BYOK, or only holds a free lazygt account,
    got heuristic notes even though a perfectly usable rail existed. This
    module turns the SAME entitlements the chat model picker reads into a
    serializable SeedExtractorSpec that crosses IPC into the child's env
@@ -12,7 +12,7 @@
 
    Rails offered, in display order:
      free       — the managed free rail (GLM 5.2 / Union Alpha) served by
-                  Lazy's ai-proxy; needs a signed-in account, NOT LazyPro.
+                  lazygt's ai-proxy; needs a signed-in account, NOT LazyPro.
      pro        — the paid managed catalog through the same proxy, for
                   LazyPro users who want a specific (cheap) model.
      claude-cli — the user's Claude Code subscription via the `claude` CLI.
@@ -69,10 +69,10 @@ export interface SeedRail {
   modelLabel?: string;
   /** i18n key resolved at render time — the one-line cost/quality hint next
    *  to the option ("onboarding.brain.railFree.hint" → "Free — provided by
-   *  LazyIDE"). Never a literal string: this module is locale-agnostic. */
+   *  lazygt"). Never a literal string: this module is locale-agnostic. */
   hintKey: string;
   /** For lazy-proxy rails: whether the model is a `:free` catalog entry —
-   *  lets the UI say "offert par LazyIDE" vs "sur vos crédits LazyPro". */
+   *  lets the UI say "offert par lazygt" vs "sur vos crédits LazyPro". */
   free?: boolean;
 }
 
@@ -125,7 +125,7 @@ export async function listSeedRails(): Promise<SeedRail[]> {
       rails.push({
         id: `free:${free.id}`,
         kind: 'lazy-proxy',
-        label: 'LazyIDE Free',
+        label: 'lazygt Free',
         model: free.id,
         modelLabel: free.label,
         hintKey: 'onboarding.brain.railFree.hint',
@@ -231,7 +231,7 @@ export async function resolveSeedExtractor(rail: SeedRail, modelId?: string): Pr
         anonKey: supabaseAnonKey || undefined,
         // Backend-facing label (estimate's `backend` field, engine logs) —
         // the friendly model name, not the raw catalog id. The "offert par
-        // LazyIDE" message lives in the picker's localized hint, not here.
+        // lazygt" message lives in the picker's localized hint, not here.
         label: `${rail.label} · ${rail.modelLabel ?? model}`,
       };
     }
@@ -272,7 +272,7 @@ export async function resolveSeedExtractor(rail: SeedRail, modelId?: string): Pr
 // LLM-enriched seed or an explicit dismiss, never by time alone (the offer
 // stays relevant until acted on).
 
-const HEURISTIC_SEED_FLAG = 'lazy.brainSeedHeuristicOnly';
+const HEURISTIC_SEED_FLAG = 'lazygt.brainSeedHeuristicOnly';
 
 /** What the deferred offer is about: 'heuristic' = a seed ran without LLM
  *  (re-run to enrich), 'deferred' = the user picked "faire plus tard" and

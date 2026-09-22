@@ -7,7 +7,7 @@
    The PROMISE-STALL nudge (LAYER 1) and the extraction repair call (LAYER 2)
    both ran the SAME weak model again and both came back prose-only, so the
    turn ended on the honest "[system] No executable action was emitted"
-   notice. Honest, but the founder's requirement is that LazyBots run
+   notice. Honest, but the founder's requirement is that lazygt Bots run
    regardless of which model drives the manager (BYOK, CLI, LazyPro).
 
    This LAYER 3 does not ask the model anything: when (a) the turn already

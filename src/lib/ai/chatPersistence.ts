@@ -62,7 +62,7 @@ export interface ChatSession {
   updatedAt: number;
 }
 
-const STORAGE_KEY = 'lazy.chatSessions';
+const STORAGE_KEY = 'lazygt.chatSessions';
 
 function loadSessions(): ChatSession[] {
   try {

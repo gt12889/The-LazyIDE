@@ -8,7 +8,6 @@ import type { ProjectEntryOut } from '../lib/platform/tauri';
 import { initProviderMode } from '../lib/models';
 import { on } from '../lib/bus';
 import type { NavigateSpacePayload } from '../lib/bus';
-import { useTeamsSync } from '../lib/teams/useTeamsSync';
 import { stripVerbatimPrefix } from '../lib/paths';
 import { invalidateProjectRootCache } from '../lib/agents/projectRootCache';
 
@@ -22,11 +21,11 @@ export type SpaceId = 'home' | 'code' | 'agents' | 'brain' | 'review' | 'termina
  *  "project entries", not the platform wrapper's wire type. */
 export type ProjectEntry = ProjectEntryOut;
 
-const LAST_PROJECT_KEY = 'lazy.lastProject';
-const RECENT_PROJECTS_KEY = 'lazy.projects.recent';
+const LAST_PROJECT_KEY = 'lazygt.lastProject';
+const RECENT_PROJECTS_KEY = 'lazygt.projects.recent';
 const MAX_RECENT_PROJECTS = 8;
 
-/** One entry in the `lazy.projects.recent` MRU list — newest first, max
+/** One entry in the `lazygt.projects.recent` MRU list — newest first, max
  *  `MAX_RECENT_PROJECTS`. Separate from `openProjects`: recents survive a
  *  project being closed and are never auto-reopened on boot (only the
  *  legacy-upgrade path or an already non-empty registry restore anything
@@ -37,7 +36,7 @@ export interface RecentProjectEntry {
   lastOpenedMs: number;
 }
 
-/** Exported read-only accessor for `lazy.projects.recent` — used by
+/** Exported read-only accessor for `lazygt.projects.recent` — used by
  *  agentsStore.tsx's `launch_mission` executor (BUG 1 fix, 2026-08-07) to
  *  resolve a project NAME the user named but that isn't currently open
  *  (`resolveDraftProjectId`'s `unresolvedName`) against a real root path
@@ -76,7 +75,7 @@ function touchRecentProject(root: string): void {
 }
 
 /** Normalizes a project root before it reaches React state or either
- *  localStorage key (`lazy.lastProject` / `lazy.projectRoot`): strips a
+ *  localStorage key (`lazygt.lastProject` / `lazygt.projectRoot`): strips a
  *  Windows extended-length ("verbatim") `\\?\` / `\\?\UNC\` prefix (see
  *  `stripVerbatimPrefix`, src/lib/paths.ts) and trims a trailing separator
  *  (mirrors src-tauri/src/commands/util.rs's `project_id_for_root`).
@@ -117,12 +116,12 @@ function sameProjectEntries(a: ProjectEntry[], b: ProjectEntry[]): boolean {
 }
 
 /** REAL-APP FIX (2026-08-04, UC3 dogfood — canvas rendered the SAME project
- *  node 3-4 times: `project:...cerveau\Lazy` at three positions + a
+ *  node 3-4 times: `project:...cerveau\lazygt` at three positions + a
  *  `project:...cerveau\lazy` twin, 214 edges for 26 nodes, completely
  *  unreadable): the Rust ProjectRegistry can end up holding several entries
  *  for the SAME real directory under different spellings — a `\\?\`-prefixed
  *  form vs a plain form, a trailing separator, or a different casing of the
- *  path (`...\cerveau\Lazy` vs `...\cerveau\lazy`; `projectIdFromRoot` only
+ *  path (`...\cerveau\lazygt` vs `...\cerveau\lazy`; `projectIdFromRoot` only
  *  folds the drive letter, so those mint two different project ids). Every
  *  such twin renders as a separate, overlapping project zone on the canvas.
  *
@@ -313,7 +312,6 @@ export function AppProvider({ children }: AppProviderProps) {
   // Teams auth reconciliation: sync org-context + store JWT on login / token refresh.
   // No-op in solo mode (scope !== 'team'), on the web build, and when not connected.
   // projectRoot drives scope resolution — re-registers when the project switches.
-  useTeamsSync({ projectRoot });
 
   // On mount: init provider mode (claude CLI availability check) + project root
   useEffect(() => {
@@ -379,12 +377,12 @@ export function AppProvider({ children }: AppProviderProps) {
     const normalizedRoot = normalizeProjectRoot(entry.root);
     setProjectRoot(normalizedRoot);
     localStorage.setItem(LAST_PROJECT_KEY, normalizedRoot);
-    // Defensive backstop: 'lazy.projectRoot' is a DIFFERENT key from
-    // LAST_PROJECT_KEY ('lazy.lastProject') that assistantToolLoop.ts's
+    // Defensive backstop: 'lazygt.projectRoot' is a DIFFERENT key from
+    // LAST_PROJECT_KEY ('lazygt.lastProject') that assistantToolLoop.ts's
     // getProjectRoot() falls back to reading when a caller doesn't thread
     // the live projectRoot through StreamChatRequest — self-heals any such
     // stale reader instead of leaving it permanently stuck on '.'.
-    localStorage.setItem('lazy.projectRoot', normalizedRoot);
+    localStorage.setItem('lazygt.projectRoot', normalizedRoot);
     touchRecentProject(normalizedRoot);
   }, [platform.name, refreshOpenProjects]);
 
@@ -405,7 +403,7 @@ export function AppProvider({ children }: AppProviderProps) {
       setProjectRoot(normalizedRoot);
       localStorage.setItem(LAST_PROJECT_KEY, normalizedRoot);
       // Defensive backstop — see the same write in registerProject above.
-      localStorage.setItem('lazy.projectRoot', normalizedRoot);
+      localStorage.setItem('lazygt.projectRoot', normalizedRoot);
       touchRecentProject(normalizedRoot);
     }
   }, [platform.name, openProjects]);
@@ -457,13 +455,13 @@ export function AppProvider({ children }: AppProviderProps) {
           // on Windows) — normalize before it reaches state/storage (see
           // normalizeProjectRoot's doc comment). This restore path is the
           // one the boot-race bug traced to: it wrote LAST_PROJECT_KEY but
-          // never the 'lazy.projectRoot' backstop, so a fresh boot left that
+          // never the 'lazygt.projectRoot' backstop, so a fresh boot left that
           // key permanently null even after registerProject/switchProject
           // were patched to write it.
           const normalizedRoot = normalizeProjectRoot(active.root);
           setProjectRoot(normalizedRoot);
           localStorage.setItem(LAST_PROJECT_KEY, normalizedRoot);
-          localStorage.setItem('lazy.projectRoot', normalizedRoot);
+          localStorage.setItem('lazygt.projectRoot', normalizedRoot);
           touchRecentProject(normalizedRoot);
         }
         return;
@@ -518,14 +516,14 @@ export function AppProvider({ children }: AppProviderProps) {
         // event.payload is project_set_active_inner's active_root() — the
         // same canonicalize() (verbatim-prefixed on Windows) origin as
         // registerProject/switchProject's entry.root/target.root above.
-        // Normalize here too and also write the 'lazy.projectRoot' backstop
+        // Normalize here too and also write the 'lazygt.projectRoot' backstop
         // (previously only LAST_PROJECT_KEY was written on this path) so a
         // project activated behind AppContext's back (raw invoke, deep
         // link, future LazyManager tool) self-heals both keys the same way.
         const normalizedRoot = normalizeProjectRoot(event.payload);
         setProjectRoot(normalizedRoot);
         localStorage.setItem(LAST_PROJECT_KEY, normalizedRoot);
-        localStorage.setItem('lazy.projectRoot', normalizedRoot);
+        localStorage.setItem('lazygt.projectRoot', normalizedRoot);
 
         // Invalidate the resolveProjectRoot IPC cache so the next manager
         // turn / mission launch sees the new root instead of the stale one.

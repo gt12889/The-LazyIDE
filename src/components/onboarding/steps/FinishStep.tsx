@@ -1,5 +1,5 @@
 /* FinishStep — step 4 of 4.
-   Marks onboarding complete (lazy.onboarded = '1'), shows a brief summary
+   Marks onboarding complete (lazygt.onboarded = '1'), shows a brief summary
    of next steps, and lets the user open the IDE.
 */
 

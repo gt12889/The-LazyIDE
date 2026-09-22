@@ -1,4 +1,4 @@
-/* botVmWindows.ts — which LazyBots currently show their connected VM window as
+/* botVmWindows.ts — which lazygt Bots currently show their connected VM window as
    a canvas node (`botVm:<botId>`). A plain module-level Set + bus events so the
    bot node's ▶ VM toggle and the reconciler/canvas stay decoupled. Ephemeral
    UI state (not persisted) — reopening the app starts with every window closed.

@@ -71,7 +71,7 @@ export function routineTriggerToken(
 
 /** C67 — clear message when routines cannot run (web / no Tauri). */
 export const WEB_ROUTINES_DISABLED_MESSAGE =
-  'LazyBot routines require the Lazy Desktop app (Tauri). Web mode queues due routines for the next desktop session and will not fire cron schedules live.';
+  'LazyBot routines require the lazygt Desktop app (Tauri). Web mode queues due routines for the next desktop session and will not fire cron schedules live.';
 
 const TICK_INTERVAL_MS = 60_000;
 

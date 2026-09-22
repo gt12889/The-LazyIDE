@@ -174,7 +174,7 @@ function ComposerReady({
   // (getManagedModelDisplay), a different question from "what CAN be
   // picked" just below, which now comes from the same entitlement helper
   // NewMissionModal/LazyManager use (modelPickerOptions.ts): a user with
-  // both a Claude subscription (CLI/BYOK) and a Lazy Pro subscription sees
+  // both a Claude subscription (CLI/BYOK) and a lazygt Pro subscription sees
   // both catalogs, independent of which one accessMode currently privileges
   // for routing (see that module's header for the full rationale).
   const providerMode = getProviderMode();
@@ -266,6 +266,11 @@ function ComposerReady({
     // native Anthropic ids don't (e.g. 'claude-sonnet-5').
     const isOpenRouter = id.includes('/');
 
+    if (id.startsWith('local/')) {
+      saveAccessSettings({ ...current, accessMode: 'local', model: id });
+      setModel({ id, label: id.slice(6), provider: 'local' });
+      return;
+    }
     if (isOpenRouter) {
       // Switch to Pro mode and persist the chosen OpenRouter model id
       saveAccessSettings({ ...current, accessMode: 'pro', model: id });
@@ -365,7 +370,7 @@ function ComposerReady({
       const resolved = await resolveContextItem(item, platform, projectRoot);
       enriched = enriched.split(item.ref).join(resolved);
     }
-    try { localStorage.setItem('lazy.firstAssistantSend', '1'); } catch { /* ignore */ } // W3.2 getting-started signal
+    try { localStorage.setItem('lazygt.firstAssistantSend', '1'); } catch { /* ignore */ } // W3.2 getting-started signal
     send(enriched);
   }, [text, send, contextItems, platform, projectRoot, clearConversation, compactConversation, chatSessions, loadChatSession, applyModelById, openModelPicker, toast, t]);
 
@@ -378,7 +383,7 @@ function ComposerReady({
     }
     setText('');
     void (async () => {
-      try { localStorage.setItem('lazy.firstAssistantSend', '1'); } catch { /* ignore */ }
+      try { localStorage.setItem('lazygt.firstAssistantSend', '1'); } catch { /* ignore */ }
       send(builtText);
     })();
   }, [text, send, toast, t]);

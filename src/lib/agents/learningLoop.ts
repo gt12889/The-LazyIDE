@@ -2,7 +2,7 @@
    After each mission completes, this module analyzes the results and
    feeds insights back to the brain, creating a continuous improvement cycle.
 
-   This is Lazy's unique differentiator: the brain learns from every mission,
+   This is lazygt's unique differentiator: the brain learns from every mission,
    and future missions are adapted based on that learning.
 
    Inspired by Millrace's learning plane concept — deeply integrated with

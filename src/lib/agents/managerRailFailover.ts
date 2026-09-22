@@ -47,7 +47,7 @@ export function railAttemptLabel(attempt: ManagerRailAttempt): string {
 
 function modeRailLabel(mode: ProviderMode): string {
   switch (mode) {
-    case 'managed': return 'Lazy Pro (ai-proxy)';
+    case 'managed': return 'lazygt Pro (ai-proxy)';
     case 'claude-code': return 'Claude Code';
     case 'codex': return 'Codex';
     case 'devin': return 'Devin';
@@ -101,7 +101,7 @@ export function fallbackModeRails(primary: ManagerRailAttempt): ManagerRailAttem
     const selected = resolveByokDef(loadAccessSettings().byokProvider);
     if (selected?.id === primary.def.id) excludedModes.add('live-key');
   }
-  const order: ProviderMode[] = ['managed', 'claude-code', 'codex', 'devin', 'live-key'];
+  const order: ProviderMode[] = ['claude-code', 'codex', 'devin'];
   return order
     .filter((mode) => !excludedModes.has(mode) && modeRailAvailable(mode))
     .map((mode) => ({ kind: 'mode', mode, model: getDefaultModelIdForMode(mode) }));

@@ -27,7 +27,7 @@
    never a thrown error.
 */
 
-const STORAGE_KEY = 'lazy.canvas.autoPreviewDismissed';
+const STORAGE_KEY = 'lazygt.canvas.autoPreviewDismissed';
 
 /** How long a dismissal lasts before the auto-preview suggestion is allowed
  *  to reappear for that project — see this module's own header for why this

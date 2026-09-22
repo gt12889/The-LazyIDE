@@ -763,7 +763,7 @@ function CanvasViewTree({
   const handleExportYaml = useCallback(() => {
     const yaml = exportYamlWorkflow({
       name: 'Canvas Workflow',
-      description: 'Exported from Lazy Canvas',
+      description: 'Exported from lazygt Canvas',
       steps: [],
     } as unknown as Parameters<typeof exportYamlWorkflow>[0]);
     const blob = new Blob([yaml], { type: 'text/yaml' });

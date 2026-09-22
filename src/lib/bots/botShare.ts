@@ -1,4 +1,4 @@
-/* botShare — sanitised bot sharing for LazyBots.
+/* botShare — sanitised bot sharing for lazygt Bots.
 
    When a user shares a bot, the BotConfig must be sanitised to remove any
    private data (Solari profile ids, routine history, timestamps) before it

@@ -2,7 +2,7 @@
 
    Behavior:
    - Web build: pass-through (demo + Playwright).
-   - Desktop without Lazy Cloud config: pass-through (OSS / BYOK / CLI).
+   - Desktop without lazygt Cloud config: pass-through (OSS / BYOK / CLI).
    - Desktop with Cloud: show AuthScreen. The user may create an account
      or skip (guest mode, persisted in localStorage) and use CLI/BYOK/local.
 */

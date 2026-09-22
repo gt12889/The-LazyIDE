@@ -1,9 +1,9 @@
-/* botShareLink — deep-link encoding/decoding for shared LazyBots.
+/* botShareLink — deep-link encoding/decoding for shared lazygt Bots.
 
    A shared bot is encoded as a URL-safe base64 JSON payload in a deep-link:
      lazy://bot/<base64-encoded-ShareableBot>
 
-   The deep-link can be opened by the LazyIDE app to import the bot. The
+   The deep-link can be opened by the lazygt app to import the bot. The
    encoding uses URL-safe base64 (RFC 4648) so the link works in browsers,
    messaging apps, and email.
 */

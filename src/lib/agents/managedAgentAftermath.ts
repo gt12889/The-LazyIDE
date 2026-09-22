@@ -227,7 +227,7 @@ export async function applyManagedAftermath(opts: {
         {
           role: 'user',
           content:
-            `[Lazy] ${repeated.action} has failed ${repeated.count} times in a row — ` +
+            `[lazygt] ${repeated.action} has failed ${repeated.count} times in a row — ` +
             'one more consecutive error stops the run. Stop retrying the same call: ' +
             'work around the failure and report it in your FINAL report; if it ' +
             'blocks the task, escalate to the user first.',

@@ -8,7 +8,7 @@
 
 import type { Lesson, LessonStatus, LessonProvenance } from './types.js';
 
-const STORAGE_KEY = 'lazy.lessons.v1';
+const STORAGE_KEY = 'lazygt.lessons.v1';
 const EMA_ALPHA = 0.3;
 
 // ── Store state ─────────────────────────────────────────────────────

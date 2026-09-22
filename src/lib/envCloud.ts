@@ -1,7 +1,1 @@
-/** True when Lazy Cloud (Supabase) client config is present. */
-export function isCloudConfigured(
-  url?: string | null,
-  anonKey?: string | null,
-): boolean {
-  return Boolean(url?.trim() && anonKey?.trim());
-}
+export function isCloudConfigured(_url?: string | null, _key?: string | null): boolean { return false; }

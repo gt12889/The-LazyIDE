@@ -146,7 +146,7 @@ export function buildNodeTooltip(title: string, statusLabel: string, stageLabel?
 //
 // Inline SVG paths only — never an emoji in a JSX icon prop (footgun:
 // some platform fonts render emoji as literal fallback glyphs/tofu, see
-// the "Lazy concurrent Cursor hazard" note). Kept intentionally simple
+// the "lazygt concurrent Cursor hazard" note). Kept intentionally simple
 // (single-color stroke/fill, currentColor) so callers tint via `color`.
 
 export type CanvasGlyphKind = 'mission' | 'loop' | 'schedule' | 'draft' | 'note' | 'router' | 'join';
@@ -1120,7 +1120,7 @@ export function formatCountdown(deltaMs: number, t: (key: string) => string): st
   return `${days} j`;
 }
 
-// ── Agent Persona & Role Classification (LazyIDE glanceability) ──────────
+// ── Agent Persona & Role Classification (lazygt glanceability) ──────────
 
 export interface AgentRoleConfig {
   displayName: string;

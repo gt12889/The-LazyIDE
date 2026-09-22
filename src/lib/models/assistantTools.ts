@@ -128,7 +128,7 @@ const GIT_LOG_TOOL: ChatTool = {
   },
 };
 
-// Lazy tool loading (toolRegistryLazy.ts) — every tool above is already
+// lazygt tool loading (toolRegistryLazy.ts) — every tool above is already
 // "core" for the codeur/assistant surface (see TOOL_META's coreFor:'codeur'
 // entries), so this list stays small on purpose. find_tool still earns its
 // keep here: it returns the FULLER ACI-optimized description from the

@@ -57,7 +57,7 @@ export function ImportVsCode({ onClose, onImported }: ImportVsCodeProps) {
           {status === 'idle' && (
             <div>
               <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>
-                Import your VS Code settings, keybindings, and extensions into Lazy IDE.
+                Import your VS Code settings, keybindings, and extensions into lazygt.
               </p>
               <button onClick={scan} style={{ background: 'rgba(124,92,255,0.15)', border: '1px solid rgba(124,92,255,0.2)', borderRadius: 6, padding: '8px 16px', color: '#A78BFF', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
                 Scan for VS Code Settings

@@ -1,6 +1,6 @@
 // toolPermissions.ts — Tool permission system with glob patterns.
 //
-// Inspired by Continue's allow/ask/exclude model, but adapted for Lazy's
+// Inspired by Continue's allow/ask/exclude model, but adapted for lazygt's
 // agent system and enhanced with brain-powered permission learning.
 //
 // Permission levels:
@@ -185,8 +185,8 @@ export function resolvePermission(
 
 // ── Persistence ───────────────────────────────────────────────────
 
-const USER_PERMS_KEY = 'lazy.permissions.user';
-const PROJECT_PERMS_KEY = 'lazy.permissions.project';
+const USER_PERMS_KEY = 'lazygt.permissions.user';
+const PROJECT_PERMS_KEY = 'lazygt.permissions.project';
 
 const VALID_PERMISSION_LEVELS: ReadonlySet<PermissionLevel> = new Set(['allow', 'ask', 'exclude']);
 const VALID_RULE_SOURCES: ReadonlySet<PermissionRule['source']> = new Set([
@@ -335,7 +335,7 @@ interface PermissionDecision {
   timestamp: string;
 }
 
-const DECISIONS_KEY = 'lazy.permissionDecisions';
+const DECISIONS_KEY = 'lazygt.permissionDecisions';
 const AUTO_RULE_THRESHOLD = 3;
 
 function loadDecisions(): PermissionDecision[] {

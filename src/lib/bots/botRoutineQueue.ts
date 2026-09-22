@@ -2,11 +2,11 @@
 
    Web builds cannot run an always-on scheduler. When a routine is due (or the
    user is on web with enabled routines), we persist a small queue in
-   localStorage. Opening the same project in Lazy Desktop drains the queue
+   localStorage. Opening the same project in lazygt Desktop drains the queue
    and launches the missed routines once.
 */
 
-const STORAGE_KEY = 'lazy.bots.routineQueue.v1';
+const STORAGE_KEY = 'lazygt.bots.routineQueue.v1';
 
 export interface QueuedRoutineFire {
   botId: string;

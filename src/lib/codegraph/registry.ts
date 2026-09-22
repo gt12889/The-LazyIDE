@@ -9,8 +9,8 @@ import { basename, normalizeForPathCompare } from '../paths.js';
 
 // ── Registry storage ──────────────────────────────────────────────
 
-const REGISTRY_KEY = 'lazy.codegraph.registry';
-const GROUPS_KEY = 'lazy.codegraph.groups';
+const REGISTRY_KEY = 'lazygt.codegraph.registry';
+const GROUPS_KEY = 'lazygt.codegraph.groups';
 
 function loadRegistry(): RepoEntry[] {
   try {

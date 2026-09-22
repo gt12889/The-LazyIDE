@@ -16,8 +16,8 @@ interface Extension {
 
 const SAMPLE_EXTENSIONS: Extension[] = [
   { id: 'prettier', name: 'Prettier', publisher: 'Prettier', description: 'Code formatter using prettier', installed: false, version: '3.0.0' },
-  { id: 'eslint', name: 'ESLint', publisher: 'Microsoft', description: 'Integrates ESLint into Lazy', installed: true, version: '2.4.0' },
-  { id: 'gitlens', name: 'GitLens', publisher: 'GitKraken', description: 'Supercharge Git within Lazy', installed: false, version: '14.0.0' },
+  { id: 'eslint', name: 'ESLint', publisher: 'Microsoft', description: 'Integrates ESLint into lazygt', installed: true, version: '2.4.0' },
+  { id: 'gitlens', name: 'GitLens', publisher: 'GitKraken', description: 'Supercharge Git within lazygt', installed: false, version: '14.0.0' },
   { id: 'tailwind', name: 'Tailwind CSS', publisher: 'Tailwind Labs', description: 'Intelligent Tailwind CSS tooling', installed: false, version: '0.12.0' },
   { id: 'docker', name: 'Docker', publisher: 'Microsoft', description: 'Build and manage Docker containers', installed: false, version: '1.29.0' },
   { id: 'python', name: 'Python', publisher: 'Microsoft', description: 'Python language support', installed: true, version: '1.20.0' },

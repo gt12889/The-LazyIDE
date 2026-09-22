@@ -4,7 +4,7 @@
    harness rules, stored as brain neurons in `trial` status, then lets the
    evalGate-style evidence decide promotion to `proven` or eviction.
 
-   This closes the deck's "the harness compounds" loop in Lazy's own data
+   This closes the deck's "the harness compounds" loop in lazygt's own data
    model:
      repeated mistake → anti-pattern entry (frictionMiner)
        → NEW rule neuron, status=trial, provenance=missionId

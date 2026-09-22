@@ -1,4 +1,4 @@
-/* managedProvider — Lazy-managed model backend (Pro tier).
+/* managedProvider — lazygt-managed model backend (Pro tier).
 
    Calls the `ai-proxy` Supabase Edge Function with the user's JWT, streaming
    the proxy's plain-text response body into an AsyncIterable<string>.
@@ -81,11 +81,7 @@ import {
 } from './openrouterCatalog.js';
 import { loadAccessSettings } from './accessSettings.js';
 import { supabase } from '../supabase/client.js';
-import { addUsage } from './costStore.js';
-import { emitBuffered } from '../journal/journal.js';
 import { buildSystemPrompt } from './systemPrompts.js';
-import { supabaseAnonKey, getAiProxyUrl } from '../env.js';
-import { emit } from '../bus.js';
 import { stripInvisibleLines } from './brainSearchLoop.js';
 import { withAssistantToolLoop as withBrainSearchLoop } from './assistantToolLoop.js';
 import { streamChatEventsImpl } from './managedProviderEvents.js';
@@ -136,33 +132,6 @@ export interface RealUsage {
  *  not present-and-undefined — keeps exact-shape test assertions
  *  (`toEqual`/`toHaveBeenCalledWith`) on the pre-existing 3-field call shape
  *  passing unchanged for an older ai-proxy deployment's marker. */
-function cacheFieldsFromRealUsage(
-  usage: RealUsage,
-): Pick<Partial<RealUsage>, 'cacheReadTokens' | 'cacheCreationTokens' | 'cacheSavingsUsd'> {
-  return {
-    ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
-    ...(usage.cacheCreationTokens !== undefined ? { cacheCreationTokens: usage.cacheCreationTokens } : {}),
-    ...(usage.cacheSavingsUsd !== undefined ? { cacheSavingsUsd: usage.cacheSavingsUsd } : {}),
-  };
-}
-
-// BUG-1/BUG-3 — the header wallet badge (AccountChip.tsx, wave B) can show a
-// stale balance for tens of minutes: nothing tells it to refetch when a
-// mission's spend actually settles or when the wallet hits empty. Emitting
-// 'billing:walletMaybeStale' on the bus lets it refresh on demand instead of
-// polling. Coalesced to one emit per WALLET_STALE_NOTICE_WINDOW_MS so a
-// parallel fleet hammering the same no_credits wall (or settling several
-// missions at once) doesn't spam the subscriber with N identical refreshes.
-let lastWalletStaleNoticeMs = 0;
-const WALLET_STALE_NOTICE_WINDOW_MS = 5_000;
-
-function notifyWalletMaybeStale(): void {
-  const now = Date.now();
-  if (now - lastWalletStaleNoticeMs < WALLET_STALE_NOTICE_WINDOW_MS) return;
-  lastWalletStaleNoticeMs = now;
-  emit('billing:walletMaybeStale', undefined);
-}
-
 /** Matches the marker anywhere in a line (not just at its start — same
  *  tolerance as the reasoning marker, see brainSearchLoop.ts) and captures
  *  the single-line JSON payload that follows it. The ESC byte is optional
@@ -322,10 +291,6 @@ export function generateRequestId(): string {
   return `mp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-interface ProxyErrorBody {
-  error?: string;
-  code?: string;
-}
 
 // ── Prompt caching (chantier 2 — stop retransmitting the ~73k-char manager
 // core every turn) ──────────────────────────────────────────────────────
@@ -498,95 +463,11 @@ export interface ProxyRequestBody {
  * below) so managedProviderEvents.ts's structured-event counterpart can reuse
  * this exact same fetch/usage-marker-capture logic instead of a second copy.
  */
-export async function* streamProxyBody(
-  body: ProxyRequestBody,
-  accessToken: string,
-  modelId: string,
-  signal?: AbortSignal,
-): AsyncIterable<string> {
-  const res = await fetch(getAiProxyUrl(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(body),
-    signal,
-  });
-
-  if (!res.ok) {
-    let parsed: ProxyErrorBody = {};
-    try {
-      parsed = (await res.json()) as ProxyErrorBody;
-    } catch {
-      // non-JSON error body — ignore
-    }
-    const message = parsed.error ?? `Proxy error ${res.status}`;
-    const code = parsed.code ?? String(res.status);
-    if (code === 'no_credits') notifyWalletMaybeStale();
-    // 503 (key not set) is recoverable — the gateway falls back.
-    throw new ManagedUnavailableError(message, code);
-  }
-
-  if (!res.body) {
-    throw new ManagedUnavailableError('Réponse vide du proxy géré', 'empty_response');
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let outputChars = 0;
-  // Real settled usage, captured when the proxy's final marker line is seen
-  // (see module header). The raw marker text is left in `text` untouched
-  // here — it still needs to reach the shared loop's visible-text stripping
-  // pass (assistantToolLoop.ts's stripVisibleDirectives, which composes
-  // brainSearchLoop.ts's stripInvisibleLines) to be hidden from the UI.
-  let realUsage: RealUsage | null = null;
-
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (signal?.aborted) break;
-      const text = decoder.decode(value, { stream: true });
-      if (text) {
-        for (const line of text.split('\n')) {
-          const usage = parseUsageMarker(line);
-          if (usage) realUsage = usage;
-        }
-        outputChars += text.length;
-        yield text;
-      }
-    }
-  } finally {
-    reader.releaseLock();
-    // The proxy is the source of truth for billing. Prefer its real settled
-    // usage (parseUsageMarker) when present; fall back to the rough ≈4
-    // chars/token estimate for older proxy deployments that don't emit the
-    // marker yet — identical behavior to before this change.
-    if (realUsage) {
-      addUsage({
-        inputTokens: realUsage.inputTokens,
-        outputTokens: realUsage.outputTokens,
-        model: modelId,
-        ...cacheFieldsFromRealUsage(realUsage),
-      });
-    } else if (outputChars > 0) {
-      addUsage({
-        inputTokens: 0,
-        outputTokens: Math.ceil(outputChars / 4),
-        model: modelId,
-      });
-    }
-  }
+export async function* streamProxyBody(_body: ProxyRequestBody, _accessToken: string, _modelId: string, _signal?: AbortSignal): AsyncIterable<string> {
+ throw new ManagedUnavailableError('Hosted AI has been removed. Select Local or CLI.');
 }
 
 
-/** Bundles the per-request context resolved ONCE before the ReAct loop
- *  starts: the session token, the resolved model id, and the static parts of
- *  the proxy body (system prompt, reasoning effort, plugin toggles). Exported
- *  so managedProviderEvents.ts's streamChatEventsImpl can reuse the exact
- *  same resolution instead of a second copy — see this file's header. */
 export interface ManagedTurnContext {
   baseBody: ProxyRequestBody;
   accessToken: string;
@@ -764,154 +645,8 @@ export interface AgentTurnOpts {
  * real-usage marker (lines prefixed with \x1b[usage] — reported via
  * opts.onUsage instead) are filtered out before yielding to the caller.
  */
-export async function* streamManagedAgentTurn(opts: AgentTurnOpts): AsyncIterable<string> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const accessToken = sessionData.session?.access_token;
-  if (!accessToken) {
-    throw new ManagedUnavailableError(
-      'Session requise pour le mode géré (agent)',
-      'not_subscribed',
-    );
-  }
-
-  const body: ProxyRequestBody = {
-    messages: opts.messages,
-    system: resolveProxySystemField(opts),
-    model: opts.model,
-    request_id: generateRequestId(),
-    feature: 'assistant',
-    ...(opts.reasoningEffort ? { reasoningEffort: opts.reasoningEffort } : {}),
-  };
-
-  const res = await fetch(getAiProxyUrl(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(body),
-    signal: opts.signal,
-  });
-
-  if (!res.ok) {
-    let parsed: ProxyErrorBody = {};
-    try {
-      parsed = (await res.json()) as ProxyErrorBody;
-    } catch {
-      // non-JSON error body — ignore
-    }
-    const message = parsed.error ?? `Proxy error ${res.status}`;
-    const code = parsed.code ?? String(res.status);
-    if (code === 'no_credits') notifyWalletMaybeStale();
-    throw new ManagedUnavailableError(message, code);
-  }
-
-  if (!res.body) {
-    throw new ManagedUnavailableError('Réponse vide du proxy géré (agent)', 'empty_response');
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let outputChars = 0;
-  // Real settled usage for THIS turn, captured when the marker line is seen
-  // — used both to notify opts.onUsage (managedAgent.ts's onMetrics) and to
-  // improve this turn's contribution to the session-local cost badge below.
-  // A one-field mutable box (not a bare `let` reassigned from inside the
-  // createManagedLineBuffer callback below): TypeScript's control-flow
-  // narrowing does not track a `let` mutated only from within a passed-in
-  // callback, so a later `if (capturedUsage.value)` read would otherwise
-  // narrow against the variable's ORIGINAL `null` initializer instead of
-  // its true possible types, typing the guarded block as `never`. Mutating
-  // a property on an object read through this same reference sidesteps
-  // that limitation entirely.
-  const capturedUsage: { value: RealUsage | null } = { value: null };
-  // Line-buffered filter — see createManagedLineBuffer's doc comment for why
-  // this must never classify a raw decoded chunk in isolation (a chunk
-  // boundary can split the usage marker itself, leaking its tail as visible
-  // text — the exact manager-bubble JSON leak this buffer exists to fix).
-  const lineBuffer = createManagedLineBuffer((usage: RealUsage) => {
-    capturedUsage.value = usage;
-    opts.onUsage?.(usage);
-  });
-
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (opts.signal?.aborted) break;
-      const text = decoder.decode(value, { stream: true });
-      if (!text) continue;
-      const visible = lineBuffer.feed(text);
-      if (visible) {
-        outputChars += visible.length;
-        yield visible;
-      }
-    }
-    // Stream ended — the buffer's trailing partial line (no terminating
-    // '\n' was ever seen for it) is now known-complete: no more bytes are
-    // coming that could still finish a split marker, so it is safe to
-    // classify and flush.
-    const tail = lineBuffer.flush();
-    if (tail) {
-      outputChars += tail.length;
-      yield tail;
-    }
-  } finally {
-    reader.releaseLock();
-    const settledUsage = capturedUsage.value;
-    if (settledUsage) {
-      addUsage({
-        inputTokens: settledUsage.inputTokens,
-        outputTokens: settledUsage.outputTokens,
-        model: opts.model,
-        // Forward the REAL settled cost (0 for free models like ox alpha) so
-        // costStore never re-estimates a free turn at the hard-coded Haiku
-        // rates and surfaces a fake "~1 credit" in the manager/agent UI.
-        costUsd: settledUsage.costUsd,
-        ...cacheFieldsFromRealUsage(settledUsage),
-      });
-      // BUG-3(c) — a real spend just settled; the header wallet badge may
-      // now be stale (coalesced, see notifyWalletMaybeStale's doc comment).
-      notifyWalletMaybeStale();
-      // T0.4 — corrective journal event: the ai-proxy's settled totals
-      // supersede whatever estimate the caller (managedAgent.ts) may already
-      // have reported for this turn. Carries the settled totals rather than
-      // a delta against that estimate — this function has no visibility
-      // into what the caller already emitted (that bookkeeping lives in
-      // managedAgent.ts's own closure), so the settled totals are the only
-      // figure it can report accurately.
-      //
-      // Cache fields (cacheReadTokens/cacheCreationTokens/cacheSavingsUsd)
-      // are deliberately NOT added to this payload — spend.tokens is a
-      // fixed shape consumed by the Rust journal store (journal.ts maps
-      // exactly tokens_in/tokens_out/cost_usd), out of this change's
-      // perimeter. costStore.addUsage above is the observable surface for
-      // cache savings this wave; extending the journal event is a separate,
-      // cross-cutting follow-up.
-      if (opts.missionId && opts.projectId) {
-        emitBuffered({
-          tsMs: Date.now(),
-          projectId: opts.projectId,
-          missionId: opts.missionId,
-          actor: 'agent',
-          type: 'spend.tokens',
-          payload: {
-            tokensIn: settledUsage.inputTokens,
-            tokensOut: settledUsage.outputTokens,
-            costUsd: settledUsage.costUsd,
-            source: 'settled',
-          },
-        });
-      }
-    } else if (outputChars > 0) {
-      addUsage({
-        inputTokens: 0,
-        outputTokens: Math.ceil(outputChars / 4),
-        model: opts.model,
-      });
-    }
-  }
+export async function* streamManagedAgentTurn(_opts: AgentTurnOpts): AsyncIterable<string> {
+ throw new ManagedUnavailableError('Hosted AI has been removed. Select Local or CLI.');
 }
 
 export const managedProvider: ModelProvider = {

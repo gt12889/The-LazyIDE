@@ -44,15 +44,15 @@ function interpolate(template: string, params?: Record<string, string | number>)
 const FALLBACK_FR: Record<string, string> = {
   'settings.readiness.claudeCode.label':       'Claude Code (abonnement)',
   'settings.readiness.claudeCode.notFound':    'Binaire claude introuvable sur PATH.',
-  'settings.readiness.claudeCode.howToEnable': 'Installe Claude Code : https://claude.ai/download, puis redémarre Lazy.',
+  'settings.readiness.claudeCode.howToEnable': 'Installe Claude Code : https://claude.ai/download, puis redémarre lazygt.',
   'settings.readiness.codex.label':            'Codex CLI (OpenAI)',
   'settings.readiness.codex.notFound':         'Binaire codex introuvable sur PATH.',
-  'settings.readiness.codex.howToEnable':      'Installe OpenAI Codex CLI (npm i -g @openai/codex), puis redémarre Lazy.',
+  'settings.readiness.codex.howToEnable':      'Installe OpenAI Codex CLI (npm i -g @openai/codex), puis redémarre lazygt.',
   'settings.readiness.detectingCli':           'Détection CLI en cours...',
   'settings.readiness.byok.label':             'Clé API {provider} (BYOK)',
   'settings.readiness.byok.noKey':             'Aucune clé API {provider} configurée.',
   'settings.readiness.byok.howToEnable':       'Ajoute ta clé dans Réglages > Modèles, puis clique « Utiliser {provider} ».',
-  'settings.readiness.managed.label':          'Pro · géré par Lazy',
+  'settings.readiness.managed.label':          'Pro · géré par lazygt',
   'settings.readiness.managed.inactive':       "Abonnement Pro inactif ou crédits épuisés. Note : la disponibilité côté serveur est vérifiée à l'envoi — une erreur 503 provoque un basculement automatique.",
   'settings.readiness.managed.howToEnable':    'Active un abonnement Pro dans Réglages > Compte.',
 };

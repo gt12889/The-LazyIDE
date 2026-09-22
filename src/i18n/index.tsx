@@ -4,7 +4,7 @@ import { fr } from './locales/fr';
 import { en } from './locales/en';
 import { isTauri } from '../lib/platform';
 
-const LS_KEY = 'lazy.locale';
+const LS_KEY = 'lazygt.locale';
 
 // ── Dictionary loading ───────────────────────────────────────────────
 //

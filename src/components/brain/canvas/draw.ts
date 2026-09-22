@@ -1,6 +1,6 @@
 /* draw.ts — imperative Canvas2D drawing for the Brain Canvas, ported from
    the design handoff prototype's `loop()` / `drawHud()` (see
-   design_handoff_brain_redesign/Lazy IDE.dc.html, class Component).
+   design_handoff_brain_redesign/lazygt.dc.html, class Component).
 
    Every function here takes a 2D context plus already-computed frame data
    and issues draw calls — no state mutation, no per-frame allocation

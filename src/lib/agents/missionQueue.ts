@@ -3,7 +3,7 @@
    a queue that persists execution state, enabling crash recovery and
    resume-from-last-stage.
 
-   Inspired by Millrace's durable queue concept — adapted for Lazy's
+   Inspired by Millrace's durable queue concept — adapted for lazygt's
    Tauri/TS stack using the filesystem for persistence.
 */
 

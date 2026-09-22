@@ -449,8 +449,8 @@ export async function generateBriefingNarrative(digest: BriefingDigest, locale: 
 
 // ── lastSeen + cache (localStorage) ──────────────────────────────────
 
-const CACHE_PREFIX = 'lazy.briefing.';
-const LAST_SEEN_PREFIX = 'lazy.lastSeen.';
+const CACHE_PREFIX = 'lazygt.briefing.';
+const LAST_SEEN_PREFIX = 'lazygt.lastSeen.';
 /** First-run lookback window (no persisted lastSeen yet): last 24h. */
 const FIRST_RUN_WINDOW_MS = 24 * 60 * 60 * 1000;
 

@@ -27,7 +27,7 @@ import { useI18n } from '../../../i18n';
 
 // ── Favorites (localStorage) ──────────────────────────────────────
 
-const FAV_KEY = 'lazy.agent.favorites';
+const FAV_KEY = 'lazygt.agent.favorites';
 
 function loadFavorites(): Set<string> {
   try {

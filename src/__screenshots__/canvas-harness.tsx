@@ -87,7 +87,7 @@ import type { Mission, ReviewerVerdict, RiskLevel } from '../lib/agents/types';
 
 // ── Set locale to French before first render (matches every other harness) ──
 try {
-  localStorage.setItem('lazy.locale', 'fr');
+  localStorage.setItem('lazygt.locale', 'fr');
 } catch { /* noop */ }
 
 const NOW = Date.now();

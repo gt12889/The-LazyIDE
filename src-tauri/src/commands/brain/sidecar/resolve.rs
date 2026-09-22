@@ -112,7 +112,7 @@ pub(crate) fn pick_lazybrain_bin(
     resource_dir: Option<&std::path::Path>,
 ) -> Option<LazyBrainBin> {
     // 1. Internal engine build.
-    if engine_dist_script.exists() {
+    if cfg!(debug_assertions) && engine_dist_script.exists() {
         return Some(LazyBrainBin {
             node_exe: "node".to_string(),
             script: engine_dist_script.to_string_lossy().into_owned(),
@@ -331,12 +331,13 @@ mod tests {
         let lb = super::pick_lazybrain_bin(&engine_script, Some(res_dir.path()))
             .expect("both candidates exist — must resolve");
 
-        assert_eq!(
-            lb.script,
-            engine_script.to_string_lossy().into_owned(),
-            "internal engine build must win over the bundled resources copy"
-        );
-        assert_eq!(lb.node_exe, "node", "internal engine build must run with system node");
+        if cfg!(debug_assertions) {
+            assert_eq!(lb.script, engine_script.to_string_lossy().into_owned());
+            assert_eq!(lb.node_exe, "node");
+        } else {
+            assert_eq!(lb.script, res_dir.path().join("lazybrain/lazybrain.js").to_string_lossy().into_owned());
+            assert_eq!(lb.node_exe, res_dir.path().join("node.exe").to_string_lossy().into_owned());
+        }
         eprintln!("pick_lazybrain_bin_prefers_internal_engine_over_resources PASSED");
     }
 

@@ -254,14 +254,14 @@ function normalizeQuery(query: string): string {
 
 /** Fallback project root when req.projectRoot is absent (callers that
  *  predate that field, or a test/mock built before it existed) — reads the
- *  same 'lazy.projectRoot' localStorage key AppContext's registerProject/
+ *  same 'lazygt.projectRoot' localStorage key AppContext's registerProject/
  *  switchProject now write as a defensive backstop (see AppContext.tsx).
  *  Prefer req.projectRoot (the live AppContext value threaded through
  *  assistantStore.tsx) wherever a request is available — see the two
  *  rootPath call sites below. */
 function getProjectRoot(): string {
   try {
-    return localStorage.getItem('lazy.projectRoot') ?? '.';
+    return localStorage.getItem('lazygt.projectRoot') ?? '.';
   } catch {
     return '.';
   }

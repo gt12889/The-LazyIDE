@@ -1,7 +1,7 @@
 /**
  * src/cli/lib/agentLoop.ts — LazyManager-level autonomous agent loop for the CLI.
  *
- * The desktop LazyIDE runs a managed agent with real tools (read_dir, find_file,
+ * The desktop lazygt runs a managed agent with real tools (read_dir, find_file,
  * search_code, bash, edits). This module reproduces that same loop headless so
  * the CLI can honestly be benchmarked as a harness (Terminal-Bench / DeepSWE):
  *
@@ -327,7 +327,7 @@ function claudeCall(messages: LlmMessage[], model: string): LlmReply {
 
 function buildSystemPrompt(workdir: string): string {
   return [
-    'You are LazyAgent, the headless equivalent of the LazyIDE LazyManager — an autonomous software engineering agent.',
+    'You are LazyAgent, the headless equivalent of the lazygt LazyManager — an autonomous software engineering agent.',
     `You operate in the directory: ${workdir}`,
     'You complete real tasks by calling the available tools (function calling protocol). When the task is fully done, call the `finish` tool with a summary.',
     '',

@@ -43,7 +43,7 @@ export type { AgentPermissionMode } from './toolPermissions.js';
  * Maps a managedAgent tool action to the pattern-space tool name
  * toolPermissions rules are written against (Continue-style names, see
  * toolPermissions.ts's header — Read/Write/Edit/Bash/...). run_tests and
- * brain_record have no Continue analog, so they get Lazy-specific pattern
+ * brain_record have no Continue analog, so they get lazygt-specific pattern
  * names of their own (still individually rule-addressable).
  */
 const TOOL_PATTERN_NAME: Record<string, string> = {

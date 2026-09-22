@@ -99,7 +99,7 @@ You DO NOT refactor or rewrite code — you report findings only.
 - **Route guards (beforeEnter, beforeEach) returning \`false\` without navigation alternative**: User is stuck — must redirect or show a reason.
 - **Missing \`scrollBehavior\` when navigating to a non-top position**: Without it, the page jumps to top unconditionally.
 - **\`useRoute().params\` destructured at setup top-level**: Params change on route navigation within the same component — destructuring captures one snapshot. Access via \`toRefs(useRoute().params)\` or \`computed()\`.
-- **Lazy-loaded routes missing error/loading components**: Chunky bundle split without fallback — show fallback UI.
+- **lazygt-loaded routes missing error/loading components**: Chunky bundle split without fallback — show fallback UI.
 
 ### HIGH — State Management (Pinia)
 

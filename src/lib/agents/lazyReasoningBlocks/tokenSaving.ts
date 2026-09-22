@@ -6,7 +6,7 @@
    - shouldEarlyExit: detects when the agent should stop (task likely done)
    - buildEarlyExitNudge: generates a nudge to finalize
 
-   Inspired by ReasonBlocks' TokenSavingMiddleware, adapted for Lazy's
+   Inspired by ReasonBlocks' TokenSavingMiddleware, adapted for lazygt's
    tool execution pipeline.
 */
 

@@ -43,7 +43,7 @@ const EMPTY_RECALL: BrainRecallResult = {
 // GettingStarted.tsx's readDismissed/writeDismissed) so the dismissal
 // survives across sessions, not just this mount.
 
-const ENV_OVERRIDE_NOTICE_DISMISSED_KEY = 'lazy.brain.envOverrideNoticeDismissed';
+const ENV_OVERRIDE_NOTICE_DISMISSED_KEY = 'lazygt.brain.envOverrideNoticeDismissed';
 
 function readEnvOverrideNoticeDismissed(): boolean {
   try {

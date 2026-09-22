@@ -2,10 +2,10 @@
 
    ROOT CAUSE (Brain space defect, 2026-08): a neuron derived from a mission
    prompt can carry raw HTML markup straight from that prompt (e.g. a mission
-   asking to write a file containing `<title>Lazy demo</title>`), and some
+   asking to write a file containing `<title>lazygt demo</title>`), and some
    upstream step then hard-truncates the resulting title at a fixed character
    offset with no regard for where that offset lands — landing mid-tag and
-   with no ellipsis: "...avec un <title>Lazy demo</titl". Both the leaked
+   with no ellipsis: "...avec un <title>lazygt demo</titl". Both the leaked
    markup and the raw cut are display bugs: nothing recovers text that was
    already cut off upstream, but the render layer must never show a `<tag>`
    fragment, and any truncation IT performs must land on a word boundary and

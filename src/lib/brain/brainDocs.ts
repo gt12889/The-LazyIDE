@@ -48,7 +48,7 @@ export interface BrainDocSearchResult {
 
 // ── Storage ───────────────────────────────────────────────────────
 
-const DOCS_KEY = 'lazy.brainDocs';
+const DOCS_KEY = 'lazygt.brainDocs';
 const MAX_DOCS = 500;
 
 function loadDocs(): BrainDocEntry[] {

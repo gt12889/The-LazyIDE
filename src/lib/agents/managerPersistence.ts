@@ -84,7 +84,7 @@ export interface ManagerSession {
   title?: string;
 }
 
-const STORAGE_KEY = 'lazy.managerSessions';
+const STORAGE_KEY = 'lazygt.managerSessions';
 
 /** Keep-last cap for how many past manager conversations localStorage
  *  retains — same "keep-last N" convention as MAX_MANAGER_MESSAGES/
@@ -408,8 +408,8 @@ export function useManagerPersistence() {
 // wave 1 (agentsStore.tsx's AgentsState.conversations/conversationOrder)
 // only ever persisted each conversation's OWN transcript/pendingApprovals
 // (saveMessages above) — WHICH conversations were open, in what order, and
-// which one was active never left React state. `lazy.managerSessions` kept
-// every past history, but `lazy.managerOpenSessions` (this key) simply did
+// which one was active never left React state. `lazygt.managerSessions` kept
+// every past history, but `lazygt.managerOpenSessions` (this key) simply did
 // not exist: every restart collapsed back to exactly one conversation,
 // silently discarding every other open tab even while a mission chain
 // launched from one of them kept running unattended in the background.
@@ -423,7 +423,7 @@ export function useManagerPersistence() {
 // conversation's live state and MUST drop any id no longer present there
 // (a session the user deleted from history) rather than resurrecting a
 // tab with no backing data.
-const OPEN_SESSIONS_KEY = 'lazy.managerOpenSessions';
+const OPEN_SESSIONS_KEY = 'lazygt.managerOpenSessions';
 
 export interface PersistedOpenWorkingSet {
   /** Open conversation ids, in tab-strip order — same id space as

@@ -1278,10 +1278,10 @@ const LEGACY_ROW_GAP_BLOAT_FACTOR = 3;
  * inferred — his own instruction: "read the real persisted data ... the
  * mismatch will be obvious once both are in front of you"): this migration
  * NEVER fired on his real, months-old profile. Root cause found in the
- * data itself — a real pinned row `["Lazy" x:718, "lazy-backoffice"
+ * data itself — a real pinned row `["lazygt" x:718, "lazy-backoffice"
  * x:2607.6, "LazySite-internet" x:3253.52]` (y:0, the exact row driving
- * the live 3767.52px bounds) has an actual "Lazy" -> "lazy-backoffice" gap
- * of ~1543.6 flow px against a `zoneSameRowPackGap('Lazy')` of only
+ * the live 3767.52px bounds) has an actual "lazygt" -> "lazy-backoffice" gap
+ * of ~1543.6 flow px against a `zoneSameRowPackGap('lazygt')` of only
  * ~345.9 — a ~4.5x overspend, unmistakable legacy bloat by the SAME
  * {@link LEGACY_ROW_GAP_BLOAT_FACTOR} multiplier already in this file —
  * yet silently passed through, because the OLD floor here (2000) was
@@ -1310,7 +1310,7 @@ const LEGACY_ROW_GAP_BLOAT_FACTOR = 3;
  * direction ("Aucune migration silencieuse de positions: « Ranger » remplace
  * la stratégie des migrations"). Raised so this migration keeps catching the
  * SAME real, documented bloat it was built for (David's own profile: a
- * ~1543.6px "Lazy" -> "lazy-backoffice" gap, comfortably above 900) while no
+ * ~1543.6px "lazygt" -> "lazy-backoffice" gap, comfortably above 900) while no
  * longer silently recompacting an ordinary ~400-800px manual arrangement
  * that was never actually broken — that residual is what "Ranger" (the
  * explicit, undoable auto-layout command) is for now, not a background
@@ -1429,7 +1429,7 @@ export function migrateBloatedZoneRowPositions(
       const entry = sorted[i]!;
       const practicalGap = zoneSameRowPackGap(entry.name);
       // fix/canvas-legacy-row-migration-envelope (David's round-6 real-profile
-      // finding: a row can carry bloat in only ONE internal gap — "Lazy" ->
+      // finding: a row can carry bloat in only ONE internal gap — "lazygt" ->
       // "lazy-backoffice" was ~4.5x over, but "lazy-backoffice" ->
       // "LazySite-internet" was already tight) — `actualGap` is always
       // measured against THIS pair's own UNTOUCHED historical right edge

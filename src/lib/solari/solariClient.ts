@@ -10,61 +10,16 @@
 
 import type { DesktopClient as SolariDesktopClient } from '@solarisdk/desktop';
 import type { SandboxClient as SolariSandboxClient } from '@solarisdk/sandbox';
-import { getSecretPresence, getSecretRaw } from '../vault/vaultClient.js';
 import { emit } from '../bus.js';
 
 export const SOLARI_VAULT_KEY = 'solari';
 
-const SOLARI_BASE_URL = 'https://api.getsolari.com';
 
-/** Cached base from the Tauri Rust Origin-strip proxy (C72). */
-let cachedTauriCdpProxyBase: string | null = null;
-
-export interface SolariCdpProxyOpts {
-  /** Override import.meta.env.DEV — tests only. */
-  isDev?: boolean;
-}
-
-/** CDP/ws base: Vite same-origin proxy in DEV (strips Origin). Packaged
- *  Tauri prefers the local Rust proxy (`solari_cdp_proxy_base`) which
- *  mirrors vite `/solari-cdp` Origin stripping; falls back to direct
- *  `wss://api.getsolari.com` until hydrateSolariCdpProxy() succeeds. */
-export function solariCdpProxyBase(opts?: SolariCdpProxyOpts): string {
-  const isDev = opts?.isDev ?? import.meta.env.DEV;
-  if (typeof window === 'undefined') return 'wss://api.getsolari.com';
-  if (isDev) return `${window.location.origin}/solari-cdp`;
-  if (cachedTauriCdpProxyBase) return cachedTauriCdpProxyBase;
-  return 'wss://api.getsolari.com';
-}
-
-/** Resolve the Rust CDP proxy URL once at boot (packaged Tauri only). */
-export async function hydrateSolariCdpProxy(opts?: {
-  force?: boolean;
-  isDev?: boolean;
-}): Promise<string | null> {
-  const isDev = opts?.isDev ?? import.meta.env.DEV;
-  if (isDev) return null;
-  if (cachedTauriCdpProxyBase && !opts?.force) return cachedTauriCdpProxyBase;
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    const base = await invoke<string>('solari_cdp_proxy_base');
-    if (typeof base === 'string' && base.startsWith('ws')) {
-      cachedTauriCdpProxyBase = base;
-      return base;
-    }
-  } catch (err) {
-    console.warn('[solari] solari_cdp_proxy_base unavailable — using direct wss:', err);
-  }
-  return null;
-}
-
-export function resetSolariCdpProxyCache(): void {
-  cachedTauriCdpProxyBase = null;
-}
-
-/** Human-readable note for Settings / ops when CDP fails in packaged builds. */
-export const SOLARI_PROD_CORS_NOTE =
-  'C72: packaged Tauri dials the Rust solari_cdp_proxy (Origin-strip, mirrors vite /solari-cdp); falls back to direct wss://api.getsolari.com if the proxy is down.';
+export interface SolariCdpProxyOpts { isDev?: boolean }
+export function solariCdpProxyBase(_opts?: SolariCdpProxyOpts): string { throw new Error('Cloud browser support was removed from lazygt.'); }
+export async function hydrateSolariCdpProxy(_opts?: { force?: boolean; isDev?: boolean }): Promise<string | null> { return null; }
+export function resetSolariCdpProxyCache(): void {}
+export const SOLARI_PROD_CORS_NOTE = 'Cloud browser support was removed from lazygt.';
 export interface SolariClients {
   browser: CloudSolariBrowserClient;
   desktop: SolariDesktopClient;
@@ -128,62 +83,12 @@ export class SolariApiError extends Error {
   }
 }
 
-let cachedClients: SolariClients | null = null;
-let cachedKey: string | undefined;
 
 /** True when the vault holds a non-empty Solari API key. */
-export async function isSolariConfigured(): Promise<boolean> {
-  const presence = await getSecretPresence(SOLARI_VAULT_KEY);
-  return presence.present && (presence.hint ?? '').length > 0;
-}
-
-/** Throws SolariNotConfiguredError unless a non-empty key is configured. */
-export async function assertSolariConfigured(): Promise<void> {
-  if (!(await isSolariConfigured())) throw new SolariNotConfiguredError();
-}
-
-/** Lazily constructs and caches the three Solari SDK clients for the vault
- *  key, reconstructing whenever the stored key changes value. */
-export async function getSolariClients(): Promise<SolariClients> {
-  const apiKey = await getSecretRaw(SOLARI_VAULT_KEY);
-  if (cachedClients && cachedKey === apiKey) return cachedClients;
-  cachedKey = apiKey;
-  cachedClients = null;
-  if (!apiKey || apiKey.length === 0) throw new SolariNotConfiguredError();
-  // In dev the Vite proxy (/solari-api) forwards gateway calls same-origin so
-  // CORS never blocks the webview; the packaged build talks to the gateway
-  // directly (a Rust-side proxy is the follow-up if CORS applies there too).
-  const baseUrl = import.meta.env.DEV ? `${window.location.origin}/solari-api` : SOLARI_BASE_URL;
-  const opts = {
-    apiKey,
-    baseUrl,
-    // WebView2 requires `fetch` to be invoked with the Window receiver — a bare
-    // `globalThis.fetch` reference in the SDK's HttpTransport throws
-    // "Illegal invocation". Bind through the member expression below.
-    fetch: (input: RequestInfo | URL, init?: RequestInit) => window.fetch(input, init),
-  };
-  // Dynamic imports: the Solari SDKs must never be part of the eager module
-  // graph. Desktop + sandbox are clean (@solarisdk/core only). The BROWSER SDK
-  // pulls in patchright-core which Vite cannot bundle for the webview (no ESM
-  // default / zipBundle deep-import), so it is loaded separately and — if it
-  // fails — degrades to a throwing proxy instead of blocking desktop/sandbox.
-  const [{ DesktopClient }, { SandboxClient }] = await Promise.all([
-    import('@solarisdk/desktop'),
-    import('@solarisdk/sandbox'),
-  ]);
-  cachedClients = {
-    browser: new CloudSolariBrowserClient(apiKey, baseUrl),
-    desktop: new DesktopClient(opts),
-    sandbox: new SandboxClient(opts),
-  };
-  return cachedClients;
-}
-
-/** Clears the client cache; call after the vault key is set or deleted. */
-export function resetSolariClients(): void {
-  cachedClients = null;
-  cachedKey = undefined;
-}
+export async function isSolariConfigured(): Promise<boolean> { return false; }
+export async function assertSolariConfigured(): Promise<void> { throw new Error('Cloud tools are removed from lazygt.'); }
+export async function getSolariClients(): Promise<SolariClients> { throw new Error('Cloud tools are removed from lazygt.'); }
+export function resetSolariClients(): void {}
 
 /** Emits 'solari:configuredChange' with the current configured state; call
  *  after the vault key is set or deleted. */
@@ -282,50 +187,8 @@ export interface CloudBrowserLaunchOptions {
  *  the LazyBot cloud tools rely on, without the patchright dependency that
  *  cannot bundle in the webview. */
 export class CloudSolariBrowserClient {
-  private readonly apiKey: string;
-  private readonly baseUrl: string;
-
-  constructor(apiKey: string, baseUrl: string) {
-    this.apiKey = apiKey;
-    this.baseUrl = baseUrl;
-  }
-
-  private async http(method: string, path: string, body?: unknown): Promise<Response> {
-    const res = await window.fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers: {
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      let code: string | undefined;
-      try {
-        const parsed = JSON.parse(text);
-        if (typeof parsed?.code === 'string') code = parsed.code;
-      } catch {
-        // ignore
-      }
-      throw new SolariApiError(
-        res.status === 401
-          ? 'auth'
-          : res.status === 402
-            ? 'credit'
-            : res.status === 409
-              ? 'conflict'
-              : res.status === 429
-                ? 'concurrency'
-                : res.status >= 500
-                  ? 'transient'
-                  : 'badRequest',
-        res.status,
-        code,
-      );
-    }
-    return res;
-  }
+  constructor(_apiKey: string, _baseUrl: string) { throw new Error('Cloud browser support was removed from lazygt.'); }
+  private async http(_method: string, _path: string, _body?: unknown): Promise<Response> { throw new Error('Cloud browser support was removed from lazygt.'); }
 
   private async createSession(opts: CloudBrowserLaunchOptions = {}): Promise<CdpBrowserSession> {
     const body: Record<string, unknown> = {};
@@ -377,16 +240,7 @@ export class CloudSolariBrowserClient {
    *  /solari-replay proxy: a direct webview fetch to storage.googleapis.com
    *  is CORS-blocked (verified live). Packaged Tauri callers should prefer
    *  the Rust solari_replay_download command instead of this path. */
-  async downloadReplay(id: string): Promise<ArrayBuffer> {
-    const { url } = await this.getReplayUrl(id);
-    const parsed = new URL(url);
-    const fetchUrl = import.meta.env.DEV
-      ? `/solari-replay${parsed.pathname}${parsed.search}`
-      : url;
-    const res = await window.fetch(fetchUrl);
-    if (!res.ok) throw new Error(`Solari: replay download failed (${res.status})`);
-    return res.arrayBuffer();
-  }
+  async downloadReplay(_id: string): Promise<ArrayBuffer> { throw new Error('Cloud replay support was removed from lazygt.'); }
 
   async listProfiles(): Promise<Array<{ id: string; name: string }>> {
     const res = await this.http('GET', '/profiles');

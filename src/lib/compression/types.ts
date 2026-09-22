@@ -1,5 +1,5 @@
 /* Compression pipeline types.
-   Simplified for Lazy IDE: Caveman prose compression only, no RTK/LLMLingua. */
+   Simplified for lazygt: Caveman prose compression only, no RTK/LLMLingua. */
 
 export type CompressionMode = 'off' | 'lite' | 'standard' | 'aggressive' | 'ultra';
 export type CavemanIntensity = 'lite' | 'full' | 'ultra';

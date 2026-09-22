@@ -122,7 +122,7 @@ export function isProjectCommandToolLike(value: unknown): value is ProjectComman
 
 const store = createToolCollectionStore<ProjectCommandTool>({
   storageFileName: 'projectCommandTools.json',
-  localStorageKey: 'lazy.agents.projectCommandTools',
+  localStorageKey: 'lazygt.agents.projectCommandTools',
   isLike: isProjectCommandToolLike,
 });
 

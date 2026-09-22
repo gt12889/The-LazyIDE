@@ -267,7 +267,7 @@ export type ModelRouteKind = 'managed' | 'native' | 'byok' | 'devin';
  *  set — the user's own key, no CLI, no Pro credits. Returns undefined for
  *  an empty/absent model — callers fall back to mode-based routing. */
 export function classifyMissionModel(model: string | undefined): ModelRouteKind | undefined {
-  if (!model) return undefined;
+  if (!model || model.startsWith('local/')) return undefined;
   if (model.includes('/')) return 'managed';
   for (const def of BYOK_PROVIDER_DEFS) {
     if (def.id === 'anthropic') continue;
@@ -315,7 +315,7 @@ export async function worktreeDiff(worktreePath: string): Promise<string> {
   return invoke<string>('agent_worktree_diff', { worktreePath: normalizeRepoPathForGit(worktreePath) });
 }
 
-/** True when `relPath` (forward-slash, as `git status` prints it) is Lazy's
+/** True when `relPath` (forward-slash, as `git status` prints it) is lazygt's
  *  own worktree-management infrastructure rather than mission output —
  *  mirrors git.rs's `is_agent_infra_path`. The worktree carries no
  *  .gitignore (the root project's own ignore file is itself untracked, so a
@@ -337,7 +337,7 @@ function isAgentInfraPath(relPath: string): boolean {
  * files but never commits them inside its own worktree leaves them
  * untracked/modified. Nothing durably records that work as a commit, so a
  * later discard/checkout/crash can still lose it. Stages and commits
- * whatever is dirty (excluding Lazy's own infra paths, see
+ * whatever is dirty (excluding lazygt's own infra paths, see
  * isAgentInfraPath) under a clearly-labelled harness message, so the
  * worktree's on-disk state is never silently lost after this point.
  *
@@ -516,7 +516,7 @@ export function classifyBudget(costUsd: number, capUsd: number | undefined): Bud
  * native/subscription rail before `budgetExceeded` is ever set, so this
  * only fires for the managed engine's own live enforcement (onBudgetExceeded)
  * or the BYOK rail (the user's own provider key — still real money, just not
- * Lazy's). Rendered in CREDITS via billing/credits.ts's usdToCredits (the
+ * lazygt's). Rendered in CREDITS via billing/credits.ts's usdToCredits (the
  * single "1 credit == 1 USD cent" conversion every other real-spend surface
  * in this app already uses — CostChip.tsx's real-spend branch, the Pro
  * balance), never a raw `$`/`€` figure — `spentUsd`/`capUsd` stay the
@@ -972,6 +972,7 @@ export async function planAndAct(opts: {
   // isTauriRuntime() up front so a non-Tauri call (web/browser demo) always
   // falls through to the unchanged mode-based branch below, which already
   // resolves correctly to planAndActScripted there.
+  if (getProviderMode() === 'local') throw new Error('Local chat is ready. Autonomous missions require a CLI engine in Settings.');
   const chosenKind = isTauriRuntime() ? classifyMissionModel(opts.managedModel) : undefined;
   if (chosenKind === 'managed') return dispatchChosenManaged(opts);
   if (chosenKind === 'byok') return dispatchChosenByok(opts);
@@ -1018,7 +1019,7 @@ async function dispatchChosenManaged(opts: PlanAndActOpts): Promise<void> {
 }
 
 async function dispatchChosenDevin(opts: PlanAndActOpts): Promise<void> {
-  // Devin-catalog model: the mission runs Lazy's own ReAct loop
+  // Devin-catalog model: the mission runs lazygt's own ReAct loop
   // (planAndActManaged) with the Devin CLI as its brain — createCliAgentTurnStreamer
   // builds the ACP-backed turn streamer; undefined means the devin CLI
   // isn't installed on this box (precise mismatch, one-step fix).
@@ -1456,7 +1457,7 @@ export async function runMission(
   // 'budget.exceeded'/'budget.warning' journal event (those events mean
   // "enforced", and nothing was) — only the honest, non-terminal
   // noteNativeBudgetEquivalent FYI above. BYOK and the mode-based fallback
-  // (real money, just not Lazy's) keep the ORIGINAL behavior below
+  // (real money, just not lazygt's) keep the ORIGINAL behavior below
   // unchanged: a >=90% crossing is reported as a timeline note (documented
   // asymmetry vs. the managed engine's real pause, same spirit as the Pause
   // button staying disabled for native/byok missions); a >=100% crossing

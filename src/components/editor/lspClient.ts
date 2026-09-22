@@ -599,7 +599,7 @@ export async function createLspClient(
   try {
     await lsp.request(repoPath, language, 'initialize', {
       processId: null,
-      clientInfo: { name: 'Lazy IDE', version: '0.1.0' },
+      clientInfo: { name: 'lazygt', version: '0.1.0' },
       rootUri: pathToUri(repoPath),
       capabilities: {
         textDocument: {

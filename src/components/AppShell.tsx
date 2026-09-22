@@ -28,16 +28,11 @@ import { BotApprovalPanel } from './agents/BotApprovalPanel';
 import { BotVmHost } from './agents/BotVmHost';
 import { AssistantStoreProvider } from './assistant/assistantStore';
 import { ToastProvider } from './ui/Toast';
-import { UpdaterService } from './updater/UpdaterService';
 import { StartupRecoveryCheck } from './startup/StartupRecoveryCheck';
 import { MemoryPressureIndicator } from './MemoryPressureIndicator';
 import { useMemoryPressureReservedHeight } from './memoryPressureReservedHeight';
-import { OnboardingModal } from './onboarding/OnboardingModal';
 import { BrainEnrichmentPrompt } from './onboarding/BrainEnrichmentPrompt';
-import { useOnboarding } from './onboarding/useOnboarding';
 import { Spinner, useToast } from './ui';
-import { useAuth } from '../lib/auth';
-import { SubscriptionProvider } from '../lib/billing';
 import { setActiveTeamSnapshot } from '../lib/features';
 import { ActiveTeamProvider, useActiveTeamContext } from '../lib/teams/ActiveTeamContext';
 import { shortcutRegistry, useShortcut, SHORTCUT_PRIORITY } from '../lib/shortcuts';
@@ -471,20 +466,12 @@ function AppShellInner() {
 // (e.g. the Omnibar AccountChip) read the same fetch instead of duplicating it.
 
 function BillingSync({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  return (
-    <SubscriptionProvider user={user}>
-      <ActiveTeamProvider user={user}>
-        {children}
-      </ActiveTeamProvider>
-    </SubscriptionProvider>
-  );
+  return <ActiveTeamProvider user={null}>{children}</ActiveTeamProvider>;
 }
 
 // ── AppShell — wraps with PaletteProvider + AgentsUiProvider + ToastProvider ─────
 
 export function AppShell() {
-  const { showOnboarding, completeOnboarding, userEmail, isNewAccount } = useOnboarding();
 
   // Global brain seed-progress listener — subscribed ONCE for the entire
   // app session, here rather than inside BrainSpace (lazy-loaded, only
@@ -508,7 +495,6 @@ export function AppShell() {
         <AgentsUiProvider>
           <PaletteProvider>
             <BillingSync>
-              <UpdaterService />
               <StartupRecoveryCheck />
               <BotApprovalPanel />
               <BotVmHost />
@@ -523,13 +509,6 @@ export function AppShell() {
                   <AssistantStoreProvider>
                     <AppShellInner />
                     <BrainEnrichmentPrompt />
-                    {showOnboarding && (
-                      <OnboardingModal
-                        onComplete={completeOnboarding}
-                        userEmail={userEmail}
-                        isNewAccount={isNewAccount}
-                      />
-                    )}
                   </AssistantStoreProvider>
                 </BotsStoreProvider>
               </AgentsStoreProvider>

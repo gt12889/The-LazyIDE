@@ -1,9 +1,9 @@
+import { getActiveModel } from '../../lib/models/index.js';
 /* Assistant store — conversation state with immutable updates */
 
 import React, { createContext, useCallback, useContext, useRef, useState, useEffect } from 'react';
 import type { ChatMessage, ChatMode, ModelInfo, StreamChatRequest, StreamEvent, StreamPart } from '../../lib/models';
-import { DEFAULT_MODEL, getProvider, describeProviderReadiness, findModelById, findOpenRouterModel } from '../../lib/models';
-import { migrateRetiredOpenRouterId } from '../../lib/models/openrouterCatalog';
+import { getProvider, describeProviderReadiness } from '../../lib/models';
 import { streamTimeout, StreamTimeoutError } from '../../lib/models/streamTimeout';
 import { DEFAULT_CEILING_MS as CLAUDE_CODE_ACTIVITY_CEILING_MS } from '../../lib/models/activityWatchdog';
 import { withTimeout, BRAIN_RECALL_TIMEOUT_MS, BRAIN_RECALL_FALLBACK_TIMEOUT_MS } from '../../lib/models/brainSearchLoop';
@@ -69,7 +69,7 @@ interface AssistantStoreValue extends AssistantState {
 // ── Persistence helpers ───────────────────────────────────────────
 
 const BRAIN_ENABLED_KEY = 'assistant:brainEnabled';
-const BRAIN_SCOPE_KEY = 'lazy.brain.scope';
+const BRAIN_SCOPE_KEY = 'lazygt.brain.scope';
 
 function loadBrainEnabled(): boolean {
   try {
@@ -112,7 +112,7 @@ function saveBrainScope(scope: BrainScope): void {
   }
 }
 
-const SELECTED_MODEL_KEY = 'lazy.assistant.model';
+const SELECTED_MODEL_KEY = 'lazygt.assistant.model';
 
 /** Restore the last model the user picked for this composer, validated
  *  against the live catalogs before trusting it — a stale id (removed
@@ -123,20 +123,7 @@ const SELECTED_MODEL_KEY = 'lazy.assistant.model';
  *  can set either (see Composer.tsx's handleModelSelect), so restricting
  *  validation to one namespace would silently drop a Pro user's persisted
  *  choice on every reload. */
-function loadSelectedModel(): ModelInfo {
-  try {
-    const raw = localStorage.getItem(SELECTED_MODEL_KEY);
-    if (!raw) return DEFAULT_MODEL;
-    const id = migrateRetiredOpenRouterId(raw);
-    const native = findModelById(id);
-    if (native) return native;
-    const openRouter = findOpenRouterModel(id);
-    if (openRouter) return { id: openRouter.id, label: openRouter.label, provider: openRouter.provider };
-    return DEFAULT_MODEL;
-  } catch {
-    return DEFAULT_MODEL;
-  }
-}
+function loadSelectedModel(): ModelInfo { return getActiveModel(); }
 
 function saveSelectedModel(model: ModelInfo): void {
   try {
@@ -360,7 +347,7 @@ export function AssistantStoreProvider({ children, initialSessionId }: Props) {
   // Prefetch brain highlights for the current project root. Safe to re-run when
   // the project root resolves; stored for the first user turn only.
   useEffect(() => {
-    const cwd = localStorage.getItem('lazy.projectRoot') ?? projectRoot ?? '';
+    const cwd = localStorage.getItem('lazygt.projectRoot') ?? projectRoot ?? '';
     if (!cwd) return;
     const timeout = new Promise<string>(resolve => setTimeout(() => resolve(''), 5000));
     Promise.race([getPlatform().brain.startupContext(cwd), timeout])
@@ -568,7 +555,7 @@ export function AssistantStoreProvider({ children, initialSessionId }: Props) {
           // populated the CURRENT project's own brain is (confirmed empty
           // on a real machine that had never used the "add project"
           // feature). BrainScopeSelector's "All brains" choice persists in
-          // localStorage (lazy.brain.scope) across app restarts AND project
+          // localStorage (lazygt.brain.scope) across app restarts AND project
           // switches with no reset and no warning, so a user who ever
           // clicked it once (even in an unrelated session) is silently
           // stuck getting zero recall on every future project until they
@@ -717,7 +704,7 @@ export function AssistantStoreProvider({ children, initialSessionId }: Props) {
         // The real, live AppContext project root — see StreamChatRequest.
         // projectRoot's doc comment for the trust bug this replaces
         // (assistantToolLoop.ts's tool directives used to always run
-        // against '.' because localStorage's 'lazy.projectRoot' was never
+        // against '.' because localStorage's 'lazygt.projectRoot' was never
         // written by any code path).
         projectRoot: projectRoot || undefined,
         // Offer on-demand memory recall when the brain is enabled so the model

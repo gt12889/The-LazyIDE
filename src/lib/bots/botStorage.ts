@@ -118,7 +118,7 @@ async function readStore(waitForRoot = true): Promise<{ store: BotsStore; root: 
  *  The root is captured once at the start of the read-modify-write and bound
  *  to the whole op. */
 async function writeStore(root: string, store: BotsStore): Promise<void> {
-  if (!root) throw new Error('LazyBots: no active project root — open a project before saving a bot.');
+  if (!root) throw new Error('lazygt Bots: no active project root — open a project before saving a bot.');
   const platform = getPlatform();
   await platform.fs.createDir?.(root);
   await platform.fs.writeFile(joinPath(root, BOTS_FILE), JSON.stringify(store, null, 2));

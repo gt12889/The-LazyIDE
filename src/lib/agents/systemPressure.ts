@@ -131,7 +131,7 @@ function ensureInit(): void {
       // Tauri app, but never worse than staying at 'normal'.
     });
 
-  // Lazy fetch for the snapshot that exists BEFORE the first live event. An
+  // lazygt fetch for the snapshot that exists BEFORE the first live event. An
   // older Rust build without this command simply rejects once here and
   // this module stays at 'normal' forever — exactly today's behavior.
   invoke('get_system_pressure').then(applyRaw).catch(() => {});

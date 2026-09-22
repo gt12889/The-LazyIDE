@@ -1,4 +1,4 @@
-; Custom NSIS installer hooks for Lazy.
+; Custom NSIS installer hooks for lazygt.
 ;
 ; Why this exists:
 ; The app spawns a LazyBrain sidecar (resources/node.exe) that loads
@@ -7,7 +7,7 @@
 ; a previous session), Windows locks those files and the installer fails with
 ; "error opening file for writing ... better_sqlite3.node".
 ;
-; The default Tauri template only kills the main binary (lazy-ide.exe), never
+; The default Tauri template only kills the main binary (lazygt.exe), never
 ; the node sidecar. These hooks kill ANY process running from the install dir
 ; ($INSTDIR) right before files are written, then again before uninstall.
 ;

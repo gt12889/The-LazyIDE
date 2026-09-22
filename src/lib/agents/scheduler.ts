@@ -5,13 +5,13 @@
    will run it (resolveProvider): the native CLI subscription tool
    ('claude-cli' — shared by claude-code AND codex, both spawn a real OS
    process via runtime.ts's planAndActLive, the actual scarce resource), the
-   managed Lazy Pro engine ('managed', via the shared ai-proxy), or a direct
+   managed lazygt Pro engine ('managed', via the shared ai-proxy), or a direct
    BYOK API key ('byok:<8-char-hash>' — one pool per distinct key, so
    unrelated keys never share a budget and one key's own rate limit is
    respected).
 
    dispatch() launches immediately when a pool AND the global cap
-   (lazy.agents.maxParallel) both have a free slot; otherwise it queues the
+   (lazygt.agents.maxParallel) both have a free slot; otherwise it queues the
    mission (FIFO within priority) and emits `scheduler.queued` — additive
    context alongside, never a replacement for, the `mission.queued`
    lifecycle event agentsStore.tsx already emits at creation.
@@ -97,7 +97,7 @@ import { loadAccessSettings, type ByokProvider } from '../models/accessSettings.
 // Secret-storage hardening (audit 2026-08-12): BYOK keys now live in the OS
 // credential vault on desktop (see byokProviders.ts's header comment), not
 // always in localStorage — byokPool() below must read through the shared,
-// vault-aware loadByokKey() rather than hitting `lazy.apikey.<provider>` in
+// vault-aware loadByokKey() rather than hitting `lazygt.apikey.<provider>` in
 // localStorage directly, or it would silently degrade to "one pool per
 // provider" (hashing the provider name instead of the key) for every user
 // who has migrated.
@@ -113,7 +113,7 @@ import {
   resolveGlobalMaxParallel,
 } from './schedulerHardware.js';
 // AgentsPanel.tsx (src/components/settings/AgentsPanel.tsx) remains the
-// registry of record for every `lazy.agents.*` localStorage key, but as a
+// registry of record for every `lazygt.agents.*` localStorage key, but as a
 // .tsx component file it cannot be imported from tsconfig.cli.json's
 // program (no --jsx support) — scheduler.ts is reachable from there via
 // runtime.ts's dynamic `import('./scheduler.js')`. LS_AGENTS_MAX_PARALLEL
@@ -125,7 +125,7 @@ import { LS_AGENTS_MAX_PARALLEL } from './agentSettingsKeys.js';
 
 /** localStorage key for per-pool cap overrides — optional JSON object, e.g.
  *  `{"claude-cli": 1, "byok:*": 2}`. Absent/invalid -> built-in defaults. */
-export const LS_AGENTS_POOLS = 'lazy.agents.pools';
+export const LS_AGENTS_POOLS = 'lazygt.agents.pools';
 
 const DEFAULT_POOL_CAPS: Readonly<Record<string, number>> = {
   'claude-cli': 2,
@@ -462,7 +462,7 @@ function handlePressureSnapshot(snapshot: { level: PressureLevel }): void {
 }
 
 /**
- * Lazy, idempotent — mirrors this file's own "no background timer, only
+ * lazygt, idempotent — mirrors this file's own "no background timer, only
  * react to what's already happening" posture (see this file's header):
  * registers ONE subscription to systemPressure.ts's shared store the first
  * time dispatch() ever runs, rather than at module load, so a session that
@@ -841,7 +841,7 @@ function emitStalledSignals(): void {
 }
 
 /**
- * Lazy, idempotent — mirrors ensurePressureWatch's own "register once, on
+ * lazygt, idempotent — mirrors ensurePressureWatch's own "register once, on
  * first real use" posture. A deliberate, narrow exception to this file's
  * otherwise event-driven design (see the header's root-cause fix note): a
  * low-frequency safety net that (1) re-drains the queue in case a settle or

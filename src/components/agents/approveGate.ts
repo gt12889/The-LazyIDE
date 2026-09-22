@@ -498,7 +498,7 @@ export function evaluateAutoMerge(mission: AutoMergeMission, mode: ApprovalMode)
   if (greenPath) {
     return { eligible: true, useForce: false, reason: 'green: verdict passed, proofs present' };
   }
-  // Lazy-mode floor (real-user feedback 2026-08-03: "le mode lazy accepte
+  // lazygt-mode floor (real-user feedback 2026-08-03: "le mode lazy accepte
   // direct" — Cursor/Windsurf apply real work without a per-mission merge
   // prompt): a REAL, non-empty deliverable whose verdict is TECHNICALLY
   // unavailable (scoreUnavailable — the evaluator rail failed with an API

@@ -117,11 +117,11 @@ export const DEFAULT_HYGIENE_CONFIG: FleetHygieneConfig = {
   idleTerminalTtlMs: DEFAULT_IDLE_TERMINAL_TTL_MS,
 };
 
-const GRACE_PERIOD_STORAGE_KEY = 'lazy.fleetHygiene.gracePeriodMs';
-const STALE_FAILED_STORAGE_KEY = 'lazy.fleetHygiene.staleFailedMs';
-const CANCELLED_GRACE_PERIOD_STORAGE_KEY = 'lazy.fleetHygiene.cancelledGracePeriodMs';
-const TRANSIENT_SURFACE_TTL_STORAGE_KEY = 'lazy.fleetHygiene.transientSurfaceTtlMs';
-const IDLE_TERMINAL_TTL_STORAGE_KEY = 'lazy.fleetHygiene.idleTerminalTtlMs';
+const GRACE_PERIOD_STORAGE_KEY = 'lazygt.fleetHygiene.gracePeriodMs';
+const STALE_FAILED_STORAGE_KEY = 'lazygt.fleetHygiene.staleFailedMs';
+const CANCELLED_GRACE_PERIOD_STORAGE_KEY = 'lazygt.fleetHygiene.cancelledGracePeriodMs';
+const TRANSIENT_SURFACE_TTL_STORAGE_KEY = 'lazygt.fleetHygiene.transientSurfaceTtlMs';
+const IDLE_TERMINAL_TTL_STORAGE_KEY = 'lazygt.fleetHygiene.idleTerminalTtlMs';
 
 function readStoredMs(key: string, fallback: number): number {
   try {
@@ -565,7 +565,7 @@ export function dedupePreviewSurfaces(
  * (PreviewNode.tsx's own client-local probe is never persisted to the
  * canvas store) — the existing event-driven removal on an explicit
  * `devPreview:serverStopped` (useCanvasAutoComposition.ts) already covers
- * the one case that IS tracked today (an auto-detected dev server Lazy
+ * the one case that IS tracked today (an auto-detected dev server lazygt
  * itself started and later stopped).
  *
  * Same "unknown age -> never touch, never guess" honesty as rule (a): a
@@ -792,7 +792,7 @@ import { planLoopSupervision, type HygieneLoop, type LoopSupervisionAlert } from
 // ONE carrying the entire Next.js scaffold the app had produced but NEVER
 // merged into main (work lost from the user's perspective until a human
 // manually merged the branch). Other agents never leave this
-// debris: they edit the working tree directly. Lazy's worktree isolation
+// debris: they edit the working tree directly. lazygt's worktree isolation
 // must therefore be paired with an automatic sweep that:
 //   (1) DETECTS every orphan branch (agent/* or M*-wt) not merged into the
 //       current branch,

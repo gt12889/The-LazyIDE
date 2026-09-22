@@ -108,7 +108,7 @@ export function subscribeUpdateStore(listener: Listener): () => void {
   return () => _listeners.delete(listener);
 }
 
-// ── Lazy init: hydrate from Rust + subscribe to the two updater:// events,
+// ── lazygt init: hydrate from Rust + subscribe to the two updater:// events,
 // exactly once per app session (mirrors systemPressure.ts's ensureInit) ──
 
 let _initialized = false;
@@ -357,7 +357,7 @@ export function useUpdateStore(): UpdateStoreValue {
 
 // ── Toast-shown-once persistence (UI-only; see this file's header) ─────
 
-const TOAST_SHOWN_STORAGE_KEY = 'lazy.updater.toastShownFor';
+const TOAST_SHOWN_STORAGE_KEY = 'lazygt.updater.toastShownFor';
 
 /** True once a "update ready" toast has already been shown for this exact
  *  version — only the most recent version is remembered (matches the

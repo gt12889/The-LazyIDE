@@ -47,7 +47,7 @@ export interface Objective {
 }
 
 const STORAGE_FILE_NAME = 'objectives.json';
-const LOCAL_STORAGE_KEY = 'lazy.cockpit.objectives';
+const LOCAL_STORAGE_KEY = 'lazygt.cockpit.objectives';
 
 type Listener = (objectives: Objective[]) => void;
 
