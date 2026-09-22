@@ -2087,10 +2087,8 @@ export const zh: TranslationDict = {
   'team.credits.topup.error': '充值失败：{error}',
 
   // ── Engine readiness — preflight (v0.1.5) ───────────────────────
-  'engine.reason.cli-not-found': '这台电脑上没有检测到 Claude Code。请安装它，或在设置中选择其他引擎。',
-  'engine.reason.byok-no-key': '请在设置中添加你的 API 密钥，才能使用这个引擎。',
-  'engine.reason.pro-inactive': '由 Forge 托管的模型需要 Pro 订阅。',
-  'engine.reason.pro-no-credits': '本月的 Pro 额度已用完。请充值或升级到更高的套餐。',
+  'engine.reason.cli-not-found': '这台电脑上没有检测到 CLI 引擎。请安装 Claude Code、Codex 或 Devin，或在设置中选择本地引擎。',
+  'engine.reason.local-unreachable': '本地引擎无法连接。请启动 Ollama（或 LM Studio），并确认已拉取配置的模型。',
   'engine.preflight.configure': '配置引擎',
   'engine.preflight.goPro': '升级 Pro',
   'engine.preflight.proFallback': 'LazyPro / 积分',

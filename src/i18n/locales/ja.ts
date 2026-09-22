@@ -2086,10 +2086,8 @@ export const ja: TranslationDict = {
   'team.credits.topup.error': 'チャージに失敗しました：{error}',
 
   // ── Engine readiness — preflight (v0.1.5) ───────────────────────
-  'engine.reason.cli-not-found': 'このパソコンでClaude Codeが見つかりません。インストールするか、設定で別のエンジンを選んでください。',
-  'engine.reason.byok-no-key': 'このエンジンを使うには、設定でAPIキーを追加してください。',
-  'engine.reason.pro-inactive': 'Lazyが管理するモデルを使うには、Proプランが必要です。',
-  'engine.reason.pro-no-credits': '今月のProクレジットを使い切りました。チャージするか、上位プランに変更してください。',
+  'engine.reason.cli-not-found': 'このPCではCLIエンジンが検出されませんでした。Claude Code・Codex・Devinのいずれかをインストールするか、設定でローカルエンジンを選んでください。',
+  'engine.reason.local-unreachable': 'ローカルエンジンに接続できません。Ollama（またはLM Studio）を起動し、設定したモデルがプル済みか確認してください。',
   'engine.preflight.configure': 'エンジンを設定',
   'engine.preflight.goPro': 'Proにアップグレード',
   'engine.preflight.proFallback': 'LazyPro / クレジット',

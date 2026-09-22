@@ -20,7 +20,7 @@ import { isCliBackendAvailable } from './cliBackendProvider.js';
 import { getProviderMode } from './index.js';
 import { getEngineReadiness } from './entitlement.js';
 import type { EngineReadiness } from './entitlement.js';
-import { loadLocalModelName, DEFAULT_LOCAL_MODEL_ID } from './localProvider.js';
+import { loadLocalModelName, getDiscoveredLocalNames, DEFAULT_LOCAL_MODEL_ID } from './localProvider.js';
 
 /** i18n translate function shape. Optional everywhere: omitting `t` falls
  *  back to the hardcoded English copy. */
@@ -170,13 +170,16 @@ function nativeOptions(): ModelOption[] {
 }
 
 function localOptions(): ModelOption[] {
-  const name = loadLocalModelName();
-  return [{
+  // Discovered names (from the last refreshLocalModels probe) first —
+  // configured model always present even before/after a failed probe.
+  const discovered = getDiscoveredLocalNames();
+  const names = discovered.length > 0 ? discovered : [loadLocalModelName()];
+  return names.map((name) => ({
     id: `local/${name}`,
     label: name,
     provider: 'local',
     description: 'Local model (Ollama/LM Studio)',
-  }];
+  }));
 }
 
 /**
@@ -235,8 +238,11 @@ export function getModelPickerOptions(t?: Translate): ModelPickerOptions {
   return buildModelPickerOptions(detectModelEntitlements(), t);
 }
 
-/** True when `id` is in an unlocked picker group. */
+/** True when `id` is in an unlocked picker group. Any `local/` id counts:
+ *  Ollama serves models by name, so a discovered-or-typed local name is
+ *  selectable even when no discovery probe has run (or listed it). */
 export function isSelectablePickerModel(id: string): boolean {
+  if (id.startsWith('local/') && id.length > 'local/'.length) return true;
   const opts = getModelPickerOptions();
   return opts.groups.some((g) => g.models.some((m) => m.id === id));
 }

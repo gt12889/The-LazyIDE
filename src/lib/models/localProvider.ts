@@ -81,7 +81,8 @@ export async function detectLocalBaseUrl(): Promise<string | null> {
 }
 
 /** List models from the local server's /v1/models endpoint.
- *  Async — for a future model picker that auto-discovers available local models. */
+ *  Async — powers the Settings picker's auto-discovered local rows (see
+ *  refreshLocalModels) as well as any future picker enhancement. */
 export async function listLocalModels(): Promise<ModelInfo[]> {
   const baseUrl = loadBaseUrl();
   try {
@@ -97,6 +98,38 @@ export async function listLocalModels(): Promise<ModelInfo[]> {
     }));
   } catch {
     return [];
+  }
+}
+
+// ── Discovered-model cache (sync pickers + async refresh) ──────────
+
+/** Raw model names from the last successful discovery (`/v1/models`),
+ *  null until the first refresh attempt. Module-level on purpose: every
+ *  picker instance shares one fetch, and synchronous option builders
+ *  (modelPickerOptions.localOptions) can read it without awaiting. */
+let discoveredLocalNames: string[] | null = null;
+
+/** Synchronous snapshot of discovered names (no fetch). Empty when no
+ *  discovery has succeeded yet — callers fall back to the configured model. */
+export function getDiscoveredLocalNames(): string[] {
+  return discoveredLocalNames ?? [];
+}
+
+/** Probe `/v1/models` once and cache the names. Resolves to the names
+ *  (possibly empty when unreachable) — never throws. The configured model
+ *  is always prepended so the current selection never vanishes from the
+ *  picker even when discovery fails. */
+export async function refreshLocalModels(): Promise<string[]> {
+  const configured = loadModel();
+  try {
+    const found = await listLocalModels();
+    const names = found.map((m) => toLocalModelName(m.id)).filter(Boolean);
+    const merged = [configured, ...names.filter((n) => n !== configured)];
+    discoveredLocalNames = merged;
+    return merged;
+  } catch {
+    discoveredLocalNames = [configured];
+    return [configured];
   }
 }
 

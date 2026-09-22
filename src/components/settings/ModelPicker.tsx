@@ -6,12 +6,12 @@
    the user point the local rail at any pulled Ollama model.
 */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ALL_MODELS } from '../../lib/models/registry';
 import { devinModelInfos } from '../../lib/models/devinCatalog';
 import { loadAccessSettings, saveAccessSettings } from '../../lib/models/accessSettings';
 import type { ReasoningEffort } from '../../lib/models/accessSettings';
-import { loadLocalModelName, DEFAULT_LOCAL_MODEL_ID } from '../../lib/models/localProvider';
+import { loadLocalModelName, refreshLocalModels, DEFAULT_LOCAL_MODEL_ID } from '../../lib/models/localProvider';
 import { getModelPickerOptions } from '../../lib/models/modelPickerOptions';
 import { getEngineReadiness, engineReasonKey } from '../../lib/models/entitlement';
 import { emit } from '../../lib/bus';
@@ -166,6 +166,16 @@ export function ModelPicker() {
   const [effort, setEffort] = useState<EffortOption>(initial.reasoningEffort ?? 'medium');
   const [localName, setLocalName] = useState<string>(loadLocalModelName());
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  // Auto-discover pulled Ollama models once per mount so the local group
+  // lists what is actually installed (not just the configured name).
+  // The tick re-renders with the discovered rows; failures keep the
+  // single configured row (refreshLocalModels never throws).
+  const [, setLocalTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    refreshLocalModels().then(() => { if (live) setLocalTick((n) => n + 1); });
+    return () => { live = false; };
+  }, []);
 
   const readiness = getEngineReadiness();
   const supportsReasoning = ALL_MODELS.some((m) => m.id === selectedId);

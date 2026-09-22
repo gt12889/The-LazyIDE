@@ -291,7 +291,11 @@ describe('isSelectablePickerModel', () => {
     expect(isSelectablePickerModel('claude-sonnet-5')).toBe(false);
     expect(isSelectablePickerModel('swe-2-medium')).toBe(false);
     expect(isSelectablePickerModel(DEFAULT_LOCAL_MODEL_ID)).toBe(true);
-    expect(isSelectablePickerModel('local/does-not-exist')).toBe(false);
+    // Any non-empty local/ id is selectable: Ollama resolves model names
+    // at call time, so a typed-or-discovered name survives validation and
+    // fails loudly at launch (not silently reset) when genuinely absent.
+    expect(isSelectablePickerModel('local/does-not-exist')).toBe(true);
+    expect(isSelectablePickerModel('local/')).toBe(false);
   });
 
   it('Tauri + Claude CLI: native Sonnet is selectable', () => {

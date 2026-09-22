@@ -2084,10 +2084,8 @@ export const de: TranslationDict = {
   'team.credits.topup.error': 'Aufladung fehlgeschlagen: {error}',
 
   // ── Engine readiness — preflight (v0.1.5) ───────────────────────
-  'engine.reason.cli-not-found': 'Claude Code wurde auf diesem Rechner nicht gefunden. Installiere es oder wähle in den Einstellungen eine andere Engine.',
-  'engine.reason.byok-no-key': 'Füge in den Einstellungen deinen API-Schlüssel hinzu, um diese Engine zu nutzen.',
-  'engine.reason.pro-inactive': 'Von Lazy verwaltete Modelle erfordern ein Pro-Abo.',
-  'engine.reason.pro-no-credits': 'Deine Pro-Credits sind diesen Monat aufgebraucht. Lade auf oder wechsle zu einem höheren Plan.',
+  'engine.reason.cli-not-found': 'Keine CLI-Engine auf diesem Rechner gefunden. Installiere Claude Code, Codex oder Devin — oder wähle in den Einstellungen die lokale Engine.',
+  'engine.reason.local-unreachable': 'Die lokale Engine ist nicht erreichbar. Starte Ollama (oder LM Studio) und stelle sicher, dass das konfigurierte Modell geladen ist.',
   'engine.preflight.configure': 'Engine einrichten',
   'engine.preflight.goPro': 'Pro werden',
   'engine.preflight.proFallback': 'LazyPro / Guthaben',

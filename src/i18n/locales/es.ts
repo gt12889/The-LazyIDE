@@ -2086,10 +2086,8 @@ export const es: TranslationDict = {
   'team.credits.topup.error': 'Error de recarga: {error}',
 
   // ── Engine readiness — preflight (v0.1.5) ───────────────────────
-  'engine.reason.cli-not-found': 'Claude Code no se detecta en este equipo. Instálalo o elige otro motor en los ajustes.',
-  'engine.reason.byok-no-key': 'Añade tu clave API en los ajustes para usar este motor.',
-  'engine.reason.pro-inactive': 'Los modelos gestionados por Lazy requieren una suscripción Pro.',
-  'engine.reason.pro-no-credits': 'Tus créditos Pro se han agotado este mes. Recarga o pasa a un plan superior.',
+  'engine.reason.cli-not-found': 'No se detecta ningún motor CLI en este equipo. Instala Claude Code, Codex o Devin, o elige el motor local en los ajustes.',
+  'engine.reason.local-unreachable': 'El motor local no responde. Inicia Ollama (o LM Studio) y comprueba que el modelo configurado esté descargado.',
   'engine.preflight.configure': 'Configurar el motor',
   'engine.preflight.goPro': 'Pasar a Pro',
   'engine.preflight.proFallback': 'LazyPro / Créditos',

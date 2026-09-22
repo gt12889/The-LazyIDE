@@ -1331,7 +1331,7 @@ export const fr: TranslationDict = {
   'settings.access.cli.title': 'Abonnement (CLI d\'agent)',
   'settings.access.cli.desc': 'Utilise ton propre abonnement CLI — aucune clé API requise, aucun coût Lazy.',
   'settings.access.local.title': 'Moteur local (Ollama / LM Studio)',
-  'settings.access.local.desc': 'Z�ro co�t, z�ro compte � Hermes 3 sur ta propre machine.',
+  'settings.access.local.desc': 'Z�ro co�t, z�ro compte � Hermes 3 sur ta propre machine.',
   'settings.access.cli.claudeDesc': 'Anthropic — modèle par défaut : Haiku',
   'settings.access.cli.codexDesc': 'OpenAI codex-cli — nécessite un compte OpenAI',
   'settings.access.cli.devinDesc': 'Cognition — SWE-2 et le catalogue de ton compte via ACP',
@@ -1347,14 +1347,14 @@ export const fr: TranslationDict = {
   'settings.engine.pro.detail': 'Abonne-toi dans l\'onglet Compte pour activer l\'accès géré.',
   'settings.engine.mock': 'Aucun fournisseur détecté',
   'settings.engine.local': 'Moteur local (Ollama)',
-  'settings.engine.local.detail': 'Hermes 3 sur ta propre machine � z�ro co�t, z�ro compte.',
+  'settings.engine.local.detail': 'Hermes 3 sur ta propre machine � z�ro co�t, z�ro compte.',
   'settings.engine.mock.detail': 'Ajoute une clé API ou connecte-toi via Claude Code.',
 
   // ── Settings — models by mode ─────────────────────────────────
   'settings.models.byMode': 'Modèles par mode',
   'settings.models.byokLocalNote': 'Clés BYOK stockées localement, jamais envoyées ailleurs.',
-  'settings.models.localNote': 'Local d�abord : Ollama sur localhost sert {default}, sans co�t ni compte.',
-  'settings.models.localModel': 'Mod�le Ollama',
+  'settings.models.localNote': 'Local d�abord : Ollama sur localhost sert {default}, sans co�t ni compte.',
+  'settings.models.localModel': 'Mod�le Ollama',
   'settings.models.useLocal': 'Utiliser',
 
   // ── Settings — billing extras ─────────────────────────────────
@@ -1375,7 +1375,7 @@ export const fr: TranslationDict = {
 
   // ── Omnibar — account chip & popover ──────────────────────────
   'account.chip.label': 'Compte et abonnement',
-  'account.chip.models': 'Mod�les',
+  'account.chip.models': 'Mod�les',
   'account.chip.pro': 'Pro',
   'account.chip.free': 'Gratuit',
   'account.chip.goPro': 'Passer Pro',
@@ -1472,7 +1472,7 @@ export const fr: TranslationDict = {
   'settings.readiness.codex.howToEnable': 'Installe OpenAI Codex CLI (npm i -g @openai/codex), puis redémarre Lazy.',
   'settings.readiness.detectingCli': 'Détection CLI en cours...',
   'settings.readiness.local.label': 'LLM local (Ollama / LM Studio)',
-  'settings.readiness.local.howToEnable': 'Lance Ollama (ollama serve) � Hermes 3 est inclus avec Forge.',
+  'settings.readiness.local.howToEnable': 'Lance Ollama (ollama serve) � Hermes 3 est inclus avec Forge.',
   'settings.readiness.byok.label': 'Clé API {provider} (BYOK)',
   'settings.readiness.byok.noKey': 'Aucune clé API {provider} configurée.',
   'settings.readiness.byok.howToEnable': 'Ajoute ta clé dans Réglages > Modèles, puis clique « Utiliser {provider} ».',
@@ -2097,10 +2097,8 @@ export const fr: TranslationDict = {
   'team.credits.topup.error': 'Erreur de recharge : {error}',
 
   // ── Engine readiness — preflight (v0.1.5) ───────────────────────
-  'engine.reason.cli-not-found': "Claude Code n'est pas détecté sur cette machine. Installe-le ou choisis un autre moteur dans les réglages.",
-  'engine.reason.byok-no-key': 'Ajoute ta clé API dans les réglages pour utiliser ce moteur.',
-  'engine.reason.pro-inactive': 'Les modèles gérés par Lazy nécessitent un abonnement Pro.',
-  'engine.reason.pro-no-credits': 'Tes crédits Pro sont épuisés ce mois-ci. Recharge ou passe à un plan supérieur.',
+  'engine.reason.cli-not-found': 'Aucun moteur CLI détecté sur cette machine. Installe Claude Code, Codex ou Devin — ou choisis le moteur local dans les réglages.',
+  'engine.reason.local-unreachable': 'Le moteur local est injoignable. Démarre Ollama (ou LM Studio) et vérifie que le modèle configuré est bien téléchargé.',
   'engine.preflight.configure': 'Configurer le moteur',
   'engine.preflight.goPro': 'Passer Pro',
  'engine.preflight.proFallback': 'LazyPro / Crédits',

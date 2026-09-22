@@ -1472,7 +1472,7 @@ export const en: TranslationDict = {
   'settings.access.cli.title': 'Subscription (agent CLI)',
   'settings.access.cli.desc': 'Use your own CLI subscription — no API key required, no Lazy cost.',
   'settings.access.local.title': 'Local engine (Ollama / LM Studio)',
-  'settings.access.local.desc': 'Zero cost, zero account � runs Hermes 3 on your own machine.',
+  'settings.access.local.desc': 'Zero cost, zero account � runs Hermes 3 on your own machine.',
   'settings.access.cli.claudeDesc': 'Anthropic — default model: Haiku',
   'settings.access.cli.codexDesc': 'OpenAI codex-cli — requires an OpenAI account',
   'settings.access.cli.devinDesc': 'Cognition — SWE-2 and your account model catalog via ACP',
@@ -1488,7 +1488,7 @@ export const en: TranslationDict = {
   'settings.engine.pro.detail': 'Subscribe in the Account tab to activate managed access.',
   'settings.engine.mock': 'No provider detected',
   'settings.engine.local': 'Local engine (Ollama)',
-  'settings.engine.local.detail': 'Runs Hermes 3 on your own machine � zero cost, zero account.',
+  'settings.engine.local.detail': 'Runs Hermes 3 on your own machine � zero cost, zero account.',
   'settings.engine.mock.detail': 'Add an API key or sign in via Claude Code.',
 
   // ── Settings — models by mode ─────────────────────────────────
@@ -1613,7 +1613,7 @@ export const en: TranslationDict = {
   'settings.readiness.codex.howToEnable': 'Install OpenAI Codex CLI (npm i -g @openai/codex), then restart Forge.',
   'settings.readiness.detectingCli': 'Detecting CLI...',
   'settings.readiness.local.label': 'Local LLM (Ollama / LM Studio)',
-  'settings.readiness.local.howToEnable': 'Start Ollama (ollama serve) � Hermes 3 is bundled with the Forge setup.',
+  'settings.readiness.local.howToEnable': 'Start Ollama (ollama serve) � Hermes 3 is bundled with the Forge setup.',
   'settings.readiness.byok.label': '{provider} API key (BYOK)',
   'settings.readiness.byok.noKey': 'No {provider} API key configured.',
   'settings.readiness.byok.howToEnable': 'Add your key in Settings > Models, then click "Use {provider}".',
@@ -2120,10 +2120,8 @@ export const en: TranslationDict = {
   'team.credits.topup.error': 'Top-up failed: {error}',
 
   // ── Engine readiness — preflight (v0.1.5) ───────────────────────
-  'engine.reason.cli-not-found': "Claude Code isn't detected on this machine. Install it or pick another engine in the settings.",
-  'engine.reason.byok-no-key': 'Add your API key in the settings to use this engine.',
-  'engine.reason.pro-inactive': 'Models managed by Lazy require a Pro subscription.',
-  'engine.reason.pro-no-credits': 'Your Pro credits are used up for this month. Top up or move to a higher plan.',
+  'engine.reason.cli-not-found': 'No CLI engine detected on this machine. Install Claude Code, Codex, or Devin — or pick the local engine in the settings.',
+  'engine.reason.local-unreachable': 'The local engine is unreachable. Start Ollama (or LM Studio) and make sure the configured model is pulled.',
   'engine.preflight.configure': 'Set up the engine',
   'engine.preflight.goPro': 'Go Pro',
  'engine.preflight.proFallback': 'LazyPro / Credits',
