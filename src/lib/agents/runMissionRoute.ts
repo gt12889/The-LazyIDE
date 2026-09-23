@@ -41,7 +41,7 @@ export function resolveMissionCliRoute(mission: Mission, isTauri: boolean): {
   budgetCapUsd: number | undefined;
 } {
   const missionRouteKind = isTauri ? classifyMissionModel(mission.model) : undefined;
-  const willRunManaged = missionRouteKind === 'managed' || (!missionRouteKind && isManagedAgentAvailable());
+  const willRunManaged = missionRouteKind === 'opencode-go' || missionRouteKind === 'managed' || (!missionRouteKind && isManagedAgentAvailable());
   const isNativeRail = missionRouteKind === 'native';
   const providerMode = isTauri ? getProviderMode() : 'mock';
   return {

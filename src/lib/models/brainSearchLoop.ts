@@ -347,14 +347,14 @@ export function describeBrainDirective(directive: BrainDirective, t?: Translate)
       return {
         toolName: 'brain_query_css',
         toolInput: { selector: directive.arg },
-        statusLine: `\n\n🔎 ${t ? t('assistant.tool.brainQueryCss', { value: directive.arg }) : `Requête mémoire (CSS) : ${directive.arg}`}\n\n`,
+        statusLine: `\n\n🔎 ${t ? t('assistant.tool.brainQueryCss', { value: directive.arg }) : `Memory query (CSS): ${directive.arg}`}\n\n`,
         observationHeader: `[brain_query_css results for "${directive.arg}"]`,
       };
     case 'neighbours':
       return {
         toolName: 'brain_neighbours',
         toolInput: { id: directive.arg },
-        statusLine: `\n\n🔎 ${t ? t('assistant.tool.brainNeighbours', { value: directive.arg }) : `Voisins mémoire : ${directive.arg}`}\n\n`,
+        statusLine: `\n\n🔎 ${t ? t('assistant.tool.brainNeighbours', { value: directive.arg }) : `Memory neighbors: ${directive.arg}`}\n\n`,
         observationHeader: `[brain_neighbours results for "${directive.arg}"]`,
       };
     case 'search':
@@ -362,7 +362,7 @@ export function describeBrainDirective(directive: BrainDirective, t?: Translate)
       return {
         toolName: 'brain_search',
         toolInput: { query: directive.arg },
-        statusLine: `\n\n🔎 ${t ? t('assistant.tool.brainSearch', { query: directive.arg }) : `Recherche mémoire : ${directive.arg}`}\n\n`,
+        statusLine: `\n\n🔎 ${t ? t('assistant.tool.brainSearch', { query: directive.arg }) : `Memory search: ${directive.arg}`}\n\n`,
         observationHeader: `[brain_search results for "${directive.arg}"]`,
       };
   }

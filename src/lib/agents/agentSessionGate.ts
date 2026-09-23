@@ -1,3 +1,5 @@
+import { getSecretPresence } from '../vault/vaultClient.js';
+import { GO_KEY } from '../models/opencodeGoProvider.js';
 /* agentSessionGate — unified preflight per access rail.
 
    Manager turns have managerSessionGate.ts; mission launches used to
@@ -12,7 +14,7 @@ import { isOpenRouterFreeModel } from '../models/openrouterCatalog.js';
 import { BYOK_PROVIDER_DEFS, hasByokKey } from '../models/byokProviders.js';
 import { supabase } from '../supabase/client.js';
 
-export type AgentRail = 'free' | 'pro' | 'byok' | 'cli';
+export type AgentRail = 'opencode-go' | 'free' | 'pro' | 'byok' | 'cli';
 
 export interface AgentSessionGateOk {
   ok: true;
@@ -38,6 +40,7 @@ function byokDefForModel(model: string | undefined) {
 }
 
 export function classifyAgentRail(model: string | undefined, mode: ProviderMode): AgentRail {
+  if (model?.startsWith('opencode-go/') || (!model && mode === 'opencode-go')) return 'opencode-go';
   if (model && isOpenRouterFreeModel(model)) return 'free';
   // Managed/Pro ai-proxy owns OpenRouter-format ids — the BYOK openrouter
   // catalog lists the same id strings and must not steal managed routing.
@@ -60,6 +63,7 @@ export async function hasManagedAuthSession(): Promise<boolean> {
 }
 
 const REASONS: Record<AgentRail, { key: string; fallback: string }> = {
+  'opencode-go': { key: 'agents.sessionGate.needGo', fallback: 'Add your OpenCode Go key in Settings > AI engines.' },
   free: {
     key: 'agents.sessionGate.needSession',
     fallback: 'Sign in to use the free model rail.',
@@ -100,6 +104,10 @@ export async function gateAgentSession(opts: {
 }): Promise<AgentSessionGateResult> {
   const rail = classifyAgentRail(opts.model, opts.mode);
 
+  if (rail === 'opencode-go') {
+    try { return (await getSecretPresence(GO_KEY)).present ? { ok: true, rail } : blocked(rail); }
+    catch { return blocked(rail); }
+  }
   if (rail === 'free' || rail === 'pro') {
     if (!(await hasManagedAuthSession())) return blocked(rail);
     if (rail === 'pro' && opts.proReady === false) return blocked('pro');

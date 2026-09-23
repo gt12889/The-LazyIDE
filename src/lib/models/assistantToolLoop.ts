@@ -176,15 +176,15 @@ function toolDirectiveArgs(directive: ToolDirective): Record<string, unknown> {
 function toolDirectiveStatusLine(directive: ToolDirective, t?: Translate): string {
   switch (directive.kind) {
     case 'web_search':
-      return `\n\n🔍 ${t ? t('assistant.tool.webSearch', { value: directive.arg }) : `Recherche web : ${directive.arg}`}\n\n`;
+      return `\n\n🔍 ${t ? t('assistant.tool.webSearch', { value: directive.arg }) : `Web search: ${directive.arg}`}\n\n`;
     case 'web_fetch':
-      return `\n\n🌐 ${t ? t('assistant.tool.webFetch', { value: directive.arg }) : `Récupération web : ${directive.arg}`}\n\n`;
+      return `\n\n🌐 ${t ? t('assistant.tool.webFetch', { value: directive.arg }) : `Web fetch: ${directive.arg}`}\n\n`;
     case 'read_file':
       return `\n\n📂 ${t ? t('assistant.tool.readFile', { value: directive.arg }) : `Lecture fichier : ${directive.arg}`}\n\n`;
     case 'read_dir':
       return `\n\n📂 ${t ? t('assistant.tool.readDir', { value: directive.arg || '.' }) : `Listing dossier : ${directive.arg || '.'}`}\n\n`;
     case 'search_code':
-      return `\n\n🔎 ${t ? t('assistant.tool.searchCode', { value: directive.arg }) : `Recherche code : ${directive.arg}`}\n\n`;
+      return `\n\n🔎 ${t ? t('assistant.tool.searchCode', { value: directive.arg }) : `Code search: ${directive.arg}`}\n\n`;
     case 'git_status':
       return `\n\n📋 ${t ? t('assistant.tool.gitStatus') : 'Git status'}\n\n`;
     case 'git_diff':
@@ -192,7 +192,7 @@ function toolDirectiveStatusLine(directive: ToolDirective, t?: Translate): strin
     case 'git_log':
       return `\n\n📋 ${t ? t('assistant.tool.gitLog', { value: directive.arg || '10' }) : `Git log (${directive.arg || '10'})`}\n\n`;
     case 'find_tool':
-      return `\n\n🔧 Détail de l'outil : ${directive.arg}\n\n`;
+      return `\n\n🔧 Tool detail: ${directive.arg}\n\n`;
   }
 }
 

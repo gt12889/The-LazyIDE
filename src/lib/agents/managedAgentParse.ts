@@ -18,7 +18,7 @@ function cleanReActText(text: string): string {
     .join('\n')
     // eslint-disable-next-line no-control-regex -- \x1b is the intentional ANSI escape prefix being stripped, not accidental
     .replace(/\x1b\[[0-9;]*m/g, '');
-  return cleaned.replace(/^```(?:json|text)?\s*\n([\s\S]*?)\n```\s*$/m, '$1');
+  return cleaned.replace(/^```(?:json|text)?\s*\n([\s\S]*?)\n```\s*$/, '$1');
 }
 
 function matchActionLine(unfenced: string): { action: string; actionLower: string; match: RegExpMatchArray } | null {

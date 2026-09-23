@@ -25,10 +25,10 @@ export async function guardManagedLoopStep(opts: {
       time: opts.capIo.nowTime(),
       text: opts.t
         ? opts.t('agents.managedAgent.iterationCapExceeded', { cap: opts.maxLoopIterations })
-        : `agent loop exceeded iteration cap (${opts.maxLoopIterations}) — arrêt de sécurité`,
+        : `agent loop exceeded iteration cap (${opts.maxLoopIterations}) — safety stop`,
       isLive: false,
     });
-    opts.capIo.onStep(4, 'done', `plafond d'itérations dépassé · ${opts.capIo.nowTime()}`);
+    opts.capIo.onStep(4, 'done', `iteration cap exceeded · ${opts.capIo.nowTime()}`);
     opts.capIo.onProgress(100);
     opts.capIo.emitMetrics({ type: 'failed', reason: 'iteration_cap_exceeded' });
     return 'stop';

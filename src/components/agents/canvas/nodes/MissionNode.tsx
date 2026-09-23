@@ -1,3 +1,4 @@
+import { sanitizeAgentDisplayText } from '../../../../lib/agents/displayText';
 /* MissionNode.tsx — one-shot mission card (spec §4.2/§4.3/§4.5).
 
    W-CARDS (product owner, 2026-07-18): "je veux pareil zoomé et dézoomé;
@@ -453,7 +454,7 @@ export function MissionNodeCard({ data, selected }: MissionNodeCardProps) {
           // pin_chain action; one chain.pinned journal row per chain.
           if (chain.pinnedContext == null) void pinChainWithAudit(chain.id, fullMission);
         }
-        toast(t('canvas.pin.toastPinned', { title: fullMission.title }), 'success');
+        toast(t('canvas.pin.toastPinned', { title: sanitizeAgentDisplayText(fullMission.title) }), 'success');
       },
     });
   }
@@ -470,7 +471,7 @@ export function MissionNodeCard({ data, selected }: MissionNodeCardProps) {
         selected={selected}
         faded
         testId={`mission-node-summary-${mission.id}`}
-        tooltip={buildNodeTooltip(mission.title, t('agents.status.done'), 'Summary')}
+        tooltip={buildNodeTooltip(sanitizeAgentDisplayText(mission.title), t('agents.status.done'), 'Summary')}
         className="canvas-summary-mode"
         style={{
           padding: '10px 12px',
@@ -496,7 +497,7 @@ export function MissionNodeCard({ data, selected }: MissionNodeCardProps) {
               color: 'var(--color-text-secondary)',
             }}
           >
-            {stripTrailingEllipsis(mission.title)}
+            {stripTrailingEllipsis(sanitizeAgentDisplayText(mission.title))}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
@@ -552,7 +553,7 @@ export function MissionNodeCard({ data, selected }: MissionNodeCardProps) {
           onAdjustPlan={
             agentsActions
               ? (adjustedPlanText) => {
-                  agentsActions.interveneMission(mission.id, `PLAN AJUSTÉ:\n${adjustedPlanText}`);
+                  agentsActions.interveneMission(mission.id, `PLAN ADJUSTED:\n${adjustedPlanText}`);
                   agentsActions.resumeMission(mission.id);
                 }
               : undefined
@@ -600,7 +601,7 @@ export function MissionNodeCard({ data, selected }: MissionNodeCardProps) {
       faded={liveness === 'merged' || isStaleRelic}
       connectionHighlight={connectionHighlight}
       testId={`mission-node-${mission.id}`}
-      tooltip={buildNodeTooltip(mission.title, t(`agents.status.${mission.status}`), t(STAGE_LABEL_KEYS[mission.stage]))}
+      tooltip={buildNodeTooltip(sanitizeAgentDisplayText(mission.title), t(`agents.status.${mission.status}`), t(STAGE_LABEL_KEYS[mission.stage]))}
       hoverActions={<HoverActionStrip actions={hoverActions} groupLabel={t('canvas.hover.actions')} />}
       // P2 node visual language — the rotating running/review ring is now
       // NodeCard's own `liveness`-driven halo (statusHaloClassName ->
@@ -701,7 +702,7 @@ export function MissionNodeCard({ data, selected }: MissionNodeCardProps) {
           textOverflow: 'ellipsis',
         }}
       >
-        {stripTrailingEllipsis(mission.title)}
+        {stripTrailingEllipsis(sanitizeAgentDisplayText(mission.title))}
       </span>
 
       {/* Row 1: Agent Persona & Environment Context */}

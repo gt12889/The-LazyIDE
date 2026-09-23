@@ -1,3 +1,4 @@
+import { sanitizeAgentDisplayText } from '../../lib/agents/displayText';
 /* MissionDetail — full drill-in view for a mission.
 
    Split across several files for cohesion/size (each self-contained, "should
@@ -315,9 +316,9 @@ export function MissionDetail({ mission, onBack, layout = 'page', focusSection, 
 
     return createNewAgent({
       name: name || 'mission-agent',
-      displayName: mission.title.slice(0, 60),
-      description: `Agent derived from mission: ${mission.title}. Use this agent to repeat or adapt the task originally performed in this mission.`,
-      systemPrompt: `You are an autonomous agent. Your task: ${mission.title}. Complete it fully and autonomously.`,
+      displayName: sanitizeAgentDisplayText(mission.title).slice(0, 60),
+      description: `Agent derived from mission: ${sanitizeAgentDisplayText(mission.title)}. Use this agent to repeat or adapt the task originally performed in this mission.`,
+      systemPrompt: `You are an autonomous agent. Your task: ${sanitizeAgentDisplayText(mission.title)}. Complete it fully and autonomously.`,
       modelTier,
       isolation: 'worktree',
       scope: 'project',
@@ -478,7 +479,7 @@ export function MissionDetail({ mission, onBack, layout = 'page', focusSection, 
               lineHeight: 1.25,
             }}
           >
-            {mission.title}
+            {sanitizeAgentDisplayText(mission.title)}
           </h1>
           <StatusPill status={mission.status} paused={mission.paused} />
         </div>

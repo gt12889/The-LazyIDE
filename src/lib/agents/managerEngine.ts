@@ -210,7 +210,7 @@ const MANAGER_NATIVE_MODEL_ID = 'claude-sonnet-5';
  * nothing valid was ever explicitly selected).
  */
 export function getManagerDefaultModelId(mode: ProviderMode): string {
-  if (mode === 'local') return getDefaultModelIdForMode(mode);
+  if (mode === 'opencode-go' || mode === 'local') return getDefaultModelIdForMode(mode);
   if (mode === 'managed' || mode === 'pro' || mode === 'codex' || mode === 'devin') {
     return getDefaultModelIdForMode(mode);
   }
@@ -2412,10 +2412,11 @@ const MAX_LLM_CALLS_BEFORE_REPAIR_SKIPPED = 6;
  *  converges to an honest final answer within the existing `maxTurns` budget. */
 export async function runManagerTurn(opts: ManagerTurnOptions): Promise<ManagerTurnResult> {
   const { messages, context, model, signal, engineOverride, maxTurns = 3, onChunk, onPartial } = opts;
+  const providerMode = getProviderMode();
   // Local chat has no action loop: never force an informational response to
   // fabricate executable actions, retry it as a mission, or route it to cloud.
-  if (getProviderMode() === 'local') {
-    const rawResponse = await streamManagerCompletion({ mode: 'local', model: model ?? '', system: '', apiMessages: messages, signal, onChunk, onPartial });
+  if (providerMode === 'local') {
+    const rawResponse = await streamManagerCompletion({ mode: providerMode, model: model ?? '', system: '', apiMessages: messages, signal, onChunk, onPartial });
     return { responseText: rawResponse, actions: [], rawResponse, announcementNudged: false };
   }
 
@@ -2468,7 +2469,7 @@ export async function runManagerTurn(opts: ManagerTurnOptions): Promise<ManagerT
     federated: maybeFederatedRecallForManager,
   });
   const core = buildManagerCorePrompt({
-    compact: shouldUseCompactManagerCore(model, lastUserMessageContentEarly),
+    compact: providerMode === 'opencode-go' || shouldUseCompactManagerCore(model, lastUserMessageContentEarly),
   });
   const dynamicContext = buildManagerDynamicContext(contextForTurn);
   const system = `${core}\n\n${dynamicContext}`;
@@ -2546,7 +2547,7 @@ export async function runManagerTurn(opts: ManagerTurnOptions): Promise<ManagerT
       // (managed/pro mode, empty Pro wallet, native CLI ready) and leaves every
       // other turn's mode resolution — including every BUG-6-guarded scenario
       // above, none of which pass engineOverride — byte-for-byte unchanged.
-      const mode = resolveManagerTurnMode(getProviderMode(), engineOverride, nativeEngineMode());
+      const mode = resolveManagerTurnMode(providerMode, engineOverride, nativeEngineMode());
       lastResolvedMode = mode;
       llmCallCount++;
       // Mode dispatch (claude-code / codex / live-key / managed-Pro) lives in

@@ -51,39 +51,39 @@ interface ReasonEntry {
 const KNOWN_REASONS: Record<string, ReasonEntry> = {
   consecutive_failures: {
     key: 'agents.statusReason.consecutiveFailures',
-    fallback: 'Mission arrêtée — trop d’échecs consécutifs, intervention requise.',
+    fallback: 'Mission stopped — too many consecutive failures, intervention required.',
   },
   stuck_repeated_identical_failure: {
     key: 'agents.statusReason.stuckRepeatedIdenticalFailure',
-    fallback: 'Mission arrêtée — boucle bloquée : le même échec se répète.',
+    fallback: 'Mission stopped — stuck loop: the same failure keeps repeating.',
   },
   stuck_repeated_action_observation: {
     key: 'agents.statusReason.stuckRepeatedActionObservation',
-    fallback: 'Mission arrêtée — boucle bloquée : la même action se répète sans progrès.',
+    fallback: 'Mission stopped — stuck loop: the same action repeats without progress.',
   },
   no_credits: {
     key: 'agents.statusReason.noCredits',
-    fallback: 'Mission arrêtée — crédits Pro épuisés.',
+    fallback: 'Mission stopped — Pro credits exhausted.',
   },
   provider_definitive_error: {
     key: 'agents.statusReason.providerDefinitiveError',
-    fallback: 'Mission arrêtée — clé du fournisseur inutilisable.',
+    fallback: 'Mission stopped — provider key unusable.',
   },
   iteration_cap_exceeded: {
     key: 'agents.statusReason.iterationCapExceeded',
-    fallback: 'Mission arrêtée — plafond de sécurité des itérations atteint.',
+    fallback: 'Mission stopped — safety iteration cap reached.',
   },
   max_steps_exhausted: {
     key: 'agents.statusReason.maxStepsExhausted',
-    fallback: 'Mission arrêtée — nombre maximum d’étapes atteint.',
+    fallback: 'Mission stopped — maximum step count reached.',
   },
   budget_exceeded: {
     key: 'agents.statusReason.budgetExceeded',
-    fallback: 'Mission arrêtée — budget dépassé.',
+    fallback: 'Mission stopped — budget exceeded.',
   },
   duration_exceeded: {
     key: 'agents.statusReason.durationExceeded',
-    fallback: 'Mission arrêtée — délai maximum dépassé.',
+    fallback: 'Mission stopped — maximum time exceeded.',
   },
   interrupted_by_crash: {
     key: 'agents.statusReason.interruptedByCrash',
@@ -91,7 +91,7 @@ const KNOWN_REASONS: Record<string, ReasonEntry> = {
   },
   launch_stalled: {
     key: 'agents.statusReason.launchStalled',
-    fallback: 'Mission bloquée en attente de lancement — aucun emplacement libre depuis un moment.',
+    fallback: 'Mission blocked waiting to launch — no slot has been free for a while.',
   },
 };
 
@@ -130,7 +130,7 @@ export function translateStatusReason(reason: string | undefined, t?: TFunc): st
     return translate(
       {
         key: 'agents.statusReason.worktreeCreationFailed',
-        fallback: `Création du worktree impossible : ${detail}`,
+        fallback: `Worktree creation failed: ${detail}`,
       },
       { detail },
     );
@@ -143,7 +143,7 @@ export function translateStatusReason(reason: string | undefined, t?: TFunc): st
   // entry) — the safe fallback: honest and human, never the raw identifier.
   return translate({
     key: 'agents.statusReason.unknown',
-    fallback: 'Mission arrêtée — raison non reconnue.',
+    fallback: 'Mission stopped — unrecognized reason.',
   });
 }
 

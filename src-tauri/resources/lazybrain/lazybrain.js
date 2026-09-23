@@ -26155,32 +26155,65 @@ var handleResolve = (_req, res, url) => {
 init_inject_context();
 init_markers();
 init_logger();
+function readBody(req) {
+  return new Promise((resolve9, reject) => {
+    let body = "";
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 1024 * 1024) {
+        req.destroy(new Error("Request body too large"));
+      }
+    });
+    req.on("end", () => resolve9(body));
+    req.on("error", reject);
+  });
+}
+async function recallRequestFrom(req, url) {
+  if (req.method === "POST") {
+    const body = await readBody(req);
+    const parsed = JSON.parse(body || "{}");
+    return {
+      query: typeof parsed.query === "string" ? parsed.query : "",
+      cwd: typeof parsed.cwd === "string" ? parsed.cwd : void 0,
+      sessionId: typeof parsed.sessionId === "string" ? parsed.sessionId : void 0,
+      maxTokens: typeof parsed.maxTokens === "number" ? parsed.maxTokens : void 0,
+      nudge: typeof parsed.nudge === "string" ? parsed.nudge : null
+    };
+  }
+  return {
+    query: url.searchParams.get("q") ?? "",
+    cwd: url.searchParams.get("cwd") ?? void 0,
+    sessionId: url.searchParams.get("sessionId") ?? void 0,
+    maxTokens: Number.parseInt(url.searchParams.get("maxTokens") ?? "1500", 10),
+    nudge: url.searchParams.get("nudge")
+  };
+}
 var handleRecall = (req, res, url) => {
   const log = getLogger();
   try {
-    const q = url.searchParams.get("q");
-    if (!q) {
-      sendError(res, 400, "Missing q parameter");
-      return;
-    }
-    const cwd = url.searchParams.get("cwd") ?? void 0;
-    const sessionId = url.searchParams.get("sessionId") ?? void 0;
-    const maxTokens = Number.parseInt(url.searchParams.get("maxTokens") ?? "1500", 10);
-    const nudge = parseNudgeStyle(url.searchParams.get("nudge"));
-    const skipTelemetry = req.headers["x-lazy-warmup"] === "1";
-    runTurnInjectDetailed({
-      query: q,
-      cwd,
-      sessionId,
-      maxTokens: Number.isFinite(maxTokens) ? maxTokens : void 0,
-      nudge,
-      skipTelemetry
+    recallRequestFrom(req, url).then(({ query, cwd, sessionId, maxTokens, nudge }) => {
+      if (!query) {
+        sendError(res, 400, "Missing q parameter");
+        return null;
+      }
+      const parsedNudge = parseNudgeStyle(nudge);
+      const skipTelemetry = req.headers["x-lazy-warmup"] === "1";
+      return runTurnInjectDetailed({
+        query,
+        cwd,
+        sessionId,
+        maxTokens: Number.isFinite(maxTokens) ? maxTokens : void 0,
+        nudge: parsedNudge,
+        skipTelemetry
+      }).then((result) => ({ query, result }));
     }).then((result) => {
+      if (!result) return;
       const data = {
-        query: q,
-        text: result.text,
-        level: result.levelUsed,
-        tokens: result.tokens
+        query: result.query,
+        text: result.result.text,
+        level: result.result.levelUsed,
+        tokens: result.result.tokens
       };
       return sendJsonCached(req, res, 200, data);
     }).catch((err) => {

@@ -78,7 +78,7 @@ export function formatManagerUserError(err: unknown): string {
  *  upstream. Name the actual condition; keep the code for support. */
 function decorateWithDiagnosticCode(stripped: string, code: string | undefined): string {
   if (code === 'upstream_error_429') {
-    return 'Limite de débit atteinte côté fournisseur (quota partagé) — réessayez dans quelques instants ou changez de modèle (upstream_error_429)';
+    return 'Provider rate limit reached (shared quota) — retry in a moment or change model (upstream_error_429)';
   }
   if (code && code !== 'managed_unavailable' && !stripped.includes(code)) {
     return `${stripped} (${code})`;

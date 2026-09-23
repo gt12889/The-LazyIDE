@@ -1,3 +1,4 @@
+import { opencodeGoProvider } from '../models/opencodeGoProvider.js';
 import { localProvider } from '../models/localProvider.js';
 /* managerStreamCompletion — per-rail LLM dispatch for LazyManager.
 
@@ -409,11 +410,11 @@ async function streamLiveKeyRail(
 ): Promise<void> {
   const byokDef = resolveByokDef(loadAccessSettings().byokProvider);
   if (!byokDef) {
-    throw new Error('LazyManager error: aucun provider BYOK sélectionné — choisis-en un dans Réglages > Modèles.');
+    throw new Error('LazyManager error: no BYOK provider selected — choose one in Settings > Models.');
   }
   const byokApiKey = loadByokKey(byokDef.id);
   if (!byokApiKey) {
-    throw new Error(`LazyManager error: aucune clé API ${byokDef.label} configurée — ajoute-la dans Réglages > Modèles.`);
+    throw new Error(`LazyManager error: no API key ${byokDef.label} configured — add it in Settings > Models.`);
   }
   const byokModel =
     byokDef.models.some((m) => m.id === model) || loadByokModel(byokDef.id) === model
@@ -574,7 +575,16 @@ async function dispatchAmbientRail(
 }
 
 export async function streamManagerCompletion(opts: StreamManagerCompletionOpts): Promise<string> {
-  if (opts.mode === 'local' || opts.model.startsWith('local/')) {
+  if (opts.mode === 'opencode-go') {
+    let response = '';
+    for await (const chunk of opencodeGoProvider.streamChat({
+      messages: opts.apiMessages.map(m => ({ id: m.id, role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
+      model: { id: opts.model, label: opts.model, provider: 'opencode-go' }, mode: 'ask', signal: opts.signal,
+      basePromptOverride: `${opts.system}\n\nThe current engine is OpenCode Go. For missions use the selected Go model ID (opencode-go/...). Do not set engine to cli or pro unless the user explicitly asks to switch engines.\n\n${ACTION_FORMAT_REMINDER}`,
+    })) { response += chunk; opts.onChunk?.(); opts.onPartial?.(response); }
+    return response;
+  }
+  if (opts.mode === 'local') {
     let response = '';
     for await (const chunk of localProvider.streamChat({
       messages: opts.apiMessages.map((m) => ({ id: m.id, role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),

@@ -86,7 +86,7 @@ async function stopCancelled(opts: AfterLoopOpts): Promise<SettleResult> {
   await opts.cleanupWorktree();
   opts.onUpdate({
     id: opts.mission.id,
-    patch: { status: 'cancelled', liveAction: tx(opts.t, 'agents.runtime.stopped', 'Stoppé') },
+    patch: { status: 'cancelled', liveAction: tx(opts.t, 'agents.runtime.stopped', 'Stopped') },
   });
   opts.captureOutcome(opts.mission, opts.projectId, 'cancelled', opts.missionStartedAt);
   return { kind: 'stop' };
@@ -206,7 +206,7 @@ async function retryThenResettle(opts: AfterLoopOpts, retryReason: string, delay
     reasonText: tx(
       opts.t,
       'agents.runtime.missionFailedAfterRetry',
-      'Mission échouée après retry — voir les logs agent',
+      'Mission failed after retry — see agent logs',
     ),
     category: 'agent_failed',
   });
@@ -221,7 +221,7 @@ async function settleAgentFailed(opts: AfterLoopOpts): Promise<SettleResult> {
   const reasonText = tx(
     opts.t,
     'agents.runtime.missionFailedReason',
-    `Mission échouée — ${decision.reason}`,
+    `Mission failed — ${decision.reason}`,
     { reason: decision.reason },
   );
   return failNoRetry(opts, {

@@ -1,3 +1,4 @@
+import { createGoAgentTurnStreamer } from '../models/opencodeGoProvider.js';
 /* evaluator.ts — Mission evaluation pipeline (tester + reviewer + security + judge).
    After an implementer run produces a diff, this module spawns evaluator sub-runs
    and aggregates into a JudgeVerdict. Dispatch is mode-aware, mirroring how
@@ -267,7 +268,8 @@ async function runEvaluatorAgent(opts: {
  */
 async function runManagedEvaluatorAgent(opts: { task: string; model: string }): Promise<string> {
   let text = '';
-  for await (const chunk of streamManagedAgentTurn({
+  const stream = opts.model.startsWith('opencode-go/') ? createGoAgentTurnStreamer('lazygt-evaluator') : streamManagedAgentTurn;
+  for await (const chunk of stream({
     messages: [{ role: 'user', content: opts.task }],
     system:
       'You are an autonomous evaluator. Assess the given diff/task and output a concise JSON verdict.',
@@ -1989,7 +1991,7 @@ export async function evaluateMission(
   const worktreePath = opts.worktreePath ?? resolveWorktreePath(opts.repoPath, mission);
   const projectId = projectIdFromRoot(opts.repoPath);
 
-  if (isManagedAgentAvailable()) {
+  if (mission.model?.startsWith('opencode-go/') || isManagedAgentAvailable()) {
     opts.onProgress?.('Starting managed (Pro) evaluation pipeline…');
     return evaluateManaged(mission, worktreePath, projectId, opts.onProgress);
   }

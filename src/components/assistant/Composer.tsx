@@ -1,3 +1,4 @@
+import { goModels } from '../../lib/models/opencodeGoProvider';
 /* Composer — input + mode selector + model selector + send */
 
 import { useCallback, useRef, useState, useEffect } from 'react';
@@ -266,6 +267,13 @@ function ComposerReady({
     // native Anthropic ids don't (e.g. 'claude-sonnet-5').
     const isOpenRouter = id.includes('/');
 
+    if (id.startsWith('opencode-go/')) {
+      const selected = goModels().find(m => m.id === id);
+      if (!selected) return;
+      saveAccessSettings({ ...current, accessMode: 'opencode-go', model: id });
+      setModel(selected);
+      return;
+    }
     if (id.startsWith('local/')) {
       saveAccessSettings({ ...current, accessMode: 'local', model: id });
       setModel({ id, label: id.slice(6), provider: 'local' });
@@ -298,7 +306,7 @@ function ComposerReady({
    *  unrecognized id reports failure instead of silently no-op-ing. */
   const applyModelById = useCallback((id: string): { applied: boolean; label?: string } => {
     const isOpenRouter = id.includes('/');
-    const found = isOpenRouter ? findOpenRouterModel(id) : (ALL_MODELS.find(m => m.id === id) ?? findDevinModel(id));
+    const found = id.startsWith('opencode-go/') ? goModels().find(m => m.id === id) : isOpenRouter ? findOpenRouterModel(id) : (ALL_MODELS.find(m => m.id === id) ?? findDevinModel(id));
     if (!found) return { applied: false };
     handleModelSelect(id);
     return { applied: true, label: found.label };

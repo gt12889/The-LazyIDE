@@ -1,3 +1,4 @@
+import { goModels, activeGoModel } from './opencodeGoProvider.js';
 import { isTauri } from '../platform/index.js';
 import { ALL_MODELS, DEFAULT_MODEL } from './registry.js';
 import { loadAccessSettings } from './accessSettings.js';
@@ -35,6 +36,7 @@ export interface ModelOptionGroup {
 export type ProEntitlementState = 'active' | 'no-credits' | 'inactive';
 
 export interface ModelEntitlements {
+  opencodeGo?: boolean;
   /** Claude subscription usable right now (native CLI or BYOK). */
   claudeSub: boolean;
   pro: ProEntitlementState;
@@ -120,11 +122,11 @@ export function noModelFallbackMessage(_t?: Translate): string { return NO_MODEL
 export function modelManagedByCodexMessage(_t?: Translate): string { return MODEL_MANAGED_BY_CODEX_MESSAGE; }
 export function detectModelEntitlements(): ModelEntitlements {
  const s = loadAccessSettings();
- return { claudeSub: isTauri() && s.accessMode === 'cli' && (s.cliTool ?? 'claude') === 'claude', pro: 'inactive', byok: null, codexManaged: s.accessMode === 'cli' && s.cliTool === 'codex', devin: isTauri() && s.accessMode === 'cli' && s.cliTool === 'devin' };
+ return { opencodeGo: s.accessMode === 'opencode-go', claudeSub: isTauri() && s.accessMode === 'cli' && (s.cliTool ?? 'claude') === 'claude', pro: 'inactive', byok: null, codexManaged: s.accessMode === 'cli' && s.cliTool === 'codex', devin: isTauri() && s.accessMode === 'cli' && s.cliTool === 'devin' };
 }
 export function buildModelPickerOptions(e: ModelEntitlements, _t?: Translate): ModelPickerOptions {
- const groups: ModelOptionGroup[] = e.codexManaged ? [] : e.claudeSub ? [{ id: 'claude-sub', label: CLAUDE_SUB_LABEL, models: ALL_MODELS }] : e.devin ? [{ id: 'devin', label: DEVIN_LABEL, models: [...devinModelInfos()] }] : [{ id: 'local', label: 'Local · Ollama / LM Studio', models: localProvider.listModels() }];
- return { claudeSub: e.claudeSub, pro: 'inactive', byok: null, groups, hasOptions: groups.length > 0, proExhausted: false, codexManaged: e.codexManaged, defaultModelId: e.codexManaged ? '' : e.claudeSub ? DEFAULT_MODEL.id : e.devin ? DEFAULT_DEVIN_MODEL_ID : localProvider.listModels()[0].id };
+ const groups: ModelOptionGroup[] = e.opencodeGo ? [{ id: 'opencode-go', label: 'OpenCode Go', models: goModels() }] : e.codexManaged ? [] : e.claudeSub ? [{ id: 'claude-sub', label: CLAUDE_SUB_LABEL, models: ALL_MODELS }] : e.devin ? [{ id: 'devin', label: DEVIN_LABEL, models: [...devinModelInfos()] }] : [{ id: 'local', label: 'Local · Ollama / LM Studio', models: localProvider.listModels() }];
+ return { claudeSub: e.claudeSub, pro: 'inactive', byok: null, groups, hasOptions: groups.length > 0, proExhausted: false, codexManaged: e.codexManaged, defaultModelId: e.opencodeGo ? activeGoModel().id : e.codexManaged ? '' : e.claudeSub ? DEFAULT_MODEL.id : e.devin ? DEFAULT_DEVIN_MODEL_ID : localProvider.listModels()[0].id };
 }
 export function getModelPickerOptions(t?: Translate): ModelPickerOptions { return buildModelPickerOptions(detectModelEntitlements(), t); }
 export function isSelectablePickerModel(id: string): boolean { return getModelPickerOptions().groups.some(g => g.models.some(m => m.id === id)); }

@@ -196,8 +196,8 @@ export function captureEdit(path: string, filename: string, firstLine?: string):
   lastEditCapture.set(path, now);
 
   const text = firstLine
-    ? `Fichier sauvegardé : ${path}\nPremière ligne : ${firstLine.slice(0, 120)}`
-    : `Fichier sauvegardé : ${path}`;
+    ? `File saved: ${path}\nFirst line: ${firstLine.slice(0, 120)}`
+    : `File saved: ${path}`;
 
   if (isNoisyCapture(text)) return;
 
@@ -353,8 +353,8 @@ export function captureAgentMission(
 ): void {
   const text = [
     description ? `Description : ${description}` : '',
-    opts.taskText ? `Tâche : ${opts.taskText}` : '',
-    `Modèle : ${model}`,
+    opts.taskText ? `Task: ${opts.taskText}` : '',
+    `Model: ${model}`,
     `Worktree : ${worktree}`,
   ]
     .filter(Boolean)
@@ -398,7 +398,7 @@ export function generateChatInsights(
     insights.push({
       kind: 'success_pattern',
       title: 'Solution avec code',
-      description: 'L\'assistant a fourni une solution avec du code fonctionnel. Pattern de réussite enregistré.',
+      description: 'The assistant provided a working code solution. Success pattern saved.',
       actionable: false,
     });
   }
@@ -407,10 +407,10 @@ export function generateChatInsights(
   if (/\b(error|exception|crash|fail|bug|broken|not working|doesn't work|marche pas|erreur)\b/i.test(combined)) {
     insights.push({
       kind: 'failure_pattern',
-      title: 'Problème rencontré',
-      description: 'La conversation porte sur un problème ou une erreur. Le brain mémorise ce pattern pour aider à résoudre des problèmes similaires.',
+      title: 'Problem encountered',
+      description: 'This conversation is about a problem or error. Brain will remember this pattern to help solve similar issues.',
       actionable: true,
-      suggestion: 'Le brain utilisera ce contexte pour proposer des solutions plus ciblées lors de futures questions similaires.',
+      suggestion: 'Brain will use this context to suggest more targeted solutions for similar future questions.',
     });
   }
 
@@ -419,7 +419,7 @@ export function generateChatInsights(
     insights.push({
       kind: 'brain_adaptation',
       title: 'Discussion d\'architecture',
-      description: 'La conversation porte sur l\'architecture ou le refactoring. Le brain enrichit sa compréhension des décisions de design.',
+      description: 'This conversation is about architecture or refactoring. Brain is improving its understanding of design decisions.',
       actionable: false,
     });
   }
@@ -429,9 +429,9 @@ export function generateChatInsights(
     insights.push({
       kind: 'test_insight',
       title: 'Discussion sur les tests',
-      description: 'La conversation aborde les tests. Le brain apprend les approches de test privilégiées par l\'utilisateur.',
+      description: 'This conversation discusses tests. Brain is learning the user’s preferred testing approaches.',
       actionable: true,
-      suggestion: 'Le brain suggérera des approches de test similaires dans les futures conversations de code.',
+      suggestion: 'Brain will suggest similar testing approaches in future coding conversations.',
     });
   }
 
@@ -457,7 +457,7 @@ export function captureChatLearning(
     `Q: ${userMsg.trim().slice(0, 300)}`,
     `A: ${assistantMsg.trim().slice(0, 300)}`,
     '',
-    `Insights: ${insights.length} généré(s) depuis cette conversation`,
+    `Insights: ${insights.length} generated from this conversation`,
   ].join('\n');
 
   const event: CaptureEvent = {
@@ -583,7 +583,7 @@ export function buildConversationSummaryEvent(
   if (isNoisyCapture(transcript)) return undefined;
 
   const files = extractMentionedFiles(transcript);
-  const filesLine = files.length > 0 ? `\n\nFichiers mentionnés : ${files.join(', ')}` : '';
+  const filesLine = files.length > 0 ? `\n\nFiles mentioned: ${files.join(', ')}` : '';
 
   return {
     kind: 'episodic',

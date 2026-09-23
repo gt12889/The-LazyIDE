@@ -575,7 +575,7 @@ interface AgentsStoreValue extends AgentsState {
   // ── Loop operations ──
   /** Enable/disable a loop mission. */
   toggleLoop: (id: string, enabled: boolean) => Promise<void>;
-  /** « Passer la prochaine » — advances a loop's next run by one cadence. */
+  /** “ Passer la prochaine ” — advances a loop's next run by one cadence. */
   skipLoopNextRun: (id: string) => Promise<void>;
   /** Delete a loop and unregister it. */
   deleteLoop: (id: string) => Promise<void>;
@@ -645,7 +645,7 @@ interface AgentsStoreValue extends AgentsState {
    *  via the additive `archived` flag + a real `mission.archived` journal
    *  event — never destroys history (see the implementation's doc comment). */
   archiveMission: (id: string) => void;
-  /** R13 — bulk « Archiver les terminées » for a canvas zone's context menu:
+  /** R13 — bulk “ Archiver les terminées ” for a canvas zone's context menu:
    *  archives every terminal (done/failed/cancelled), not-yet-archived
    *  mission among `missionIds`. */
   archiveTerminalMissions: (missionIds: string[]) => void;
@@ -973,7 +973,7 @@ const ZOMBIE_RESTAMP_BOOT_GRACE_MS = 90_000;
  * key with no actual translations behind it.
  */
 const ARCHIVE_REFUSED_ACTIVE_MISSION_MESSAGE =
-  'Mission encore active — archivage refusé. Utilise la suppression pour retirer une mission en cours.';
+  'Mission is still active — archive refused. Use delete to remove an in-progress mission.';
 
 function nextMissionId(existing: readonly Mission[]): string {
   const maxSeen = existing.reduce((max, m) => Math.max(max, missionIdNumber(m.id)), missionCounter);
@@ -1616,10 +1616,10 @@ export function describePendingAction(
   switch (action.type) {
     case 'launch_mission': return t
       ? t('agents.pendingAction.launchMission', { task: truncateLabel(action.task, 80) })
-      : `Lancer la mission : ${truncateLabel(action.task, 80)}`;
+      : `Launch mission: ${truncateLabel(action.task, 80)}`;
     case 'launch_best_of_n': return t
       ? t('agents.pendingAction.launchBestOfN', { n: action.n, task: truncateLabel(action.task, 60) })
-      : `Lancer un best-of-${action.n} : ${truncateLabel(action.task, 60)}`;
+      : `Launch best-of-${action.n} : ${truncateLabel(action.task, 60)}`;
     // Double-emission fix (real user test, 2026-07-28 — see
     // mergeManagerActions' own doc comment above for the root-cause dedup):
     // this used to return a fixed, identical string regardless of WHICH
@@ -1630,45 +1630,45 @@ export function describePendingAction(
     // target (whichever identifier the action actually carries).
     case 'launch_draft': return t
       ? t('agents.pendingAction.launchDraft', { id: action.draftId ?? action.draftAlias ?? '?' })
-      : `Lancer le brouillon : ${action.draftId ?? action.draftAlias ?? '?'}`;
+      : `Launch draft: ${action.draftId ?? action.draftAlias ?? '?'}`;
     case 'create_loop': return t
       ? t('agents.pendingAction.createLoop', { task: truncateLabel(action.task, 80) })
-      : `Créer une boucle : ${truncateLabel(action.task, 80)}`;
+      : `Create loop: ${truncateLabel(action.task, 80)}`;
     case 'execute_plan': return t
       ? t('agents.pendingAction.executePlan', { planId: action.planId })
-      : `Exécuter le plan ${action.planId}`;
+      : `Run plan ${action.planId}`;
     case 'revise_plan': return t
       ? t('agents.pendingAction.revisePlan', { planId: action.planId })
-      : `Réviser le plan ${action.planId}`;
+      : `Review plan ${action.planId}`;
     case 'approve_mission': return t
       ? t('agents.pendingAction.approveMission', { missionId: action.missionId })
-      : `Approuver la mission ${action.missionId}`;
+      : `Approve mission ${action.missionId}`;
     case 'reject_mission': return t
       ? t('agents.pendingAction.rejectMission', { missionId: action.missionId })
-      : `Rejeter la mission ${action.missionId}`;
+      : `Reject mission ${action.missionId}`;
     case 'retry_mission': return t
       ? t('agents.pendingAction.retryMission', { missionId: action.missionId })
       : `Relancer la mission ${action.missionId}`;
     case 'clone_mission': return t
       ? t('agents.pendingAction.cloneMission', { missionId: action.missionId })
-      : `Cloner la mission ${action.missionId}`;
+      : `Clone mission ${action.missionId}`;
     case 'spawn_submissions': return t
       ? t('agents.pendingAction.spawnSubmissions', { missionId: action.missionId })
-      : `Lancer des soumissions pour ${action.missionId}`;
+      : `Launch submissions for ${action.missionId}`;
     case 'reassign_agent': return t
       ? t('agents.pendingAction.reassignAgent', { missionId: action.missionId, model: action.model })
-      : `Réassigner le modèle de ${action.missionId} : ${action.model}`;
-    case 'stop_all': return t ? t('agents.pendingAction.stopAll') : 'Arrêter toutes les missions';
+      : `Reassign model for ${action.missionId} : ${action.model}`;
+    case 'stop_all': return t ? t('agents.pendingAction.stopAll') : 'Stop all missions';
     case 'set_budget': return t
       ? t('agents.pendingAction.setBudget', { limitUsd: action.limitUsd })
-      : `Régler le budget à ${action.limitUsd} $`;
+      : `Set budget to ${action.limitUsd} $`;
     case 'set_approval_mode': return t
       ? t('agents.pendingAction.setApprovalMode', { mode: action.mode })
-      : `Changer le mode d'approbation : ${action.mode}`;
-    case 'start_preview': return t ? t('agents.pendingAction.startPreview') : 'Démarrer le serveur de prévisualisation';
+      : `Change approval mode: ${action.mode}`;
+    case 'start_preview': return t ? t('agents.pendingAction.startPreview') : 'Start preview server';
     case 'close_surface': return t
       ? t('agents.pendingAction.closeSurface', { surfaceId: action.surfaceId })
-      : `Fermer la surface ${action.surfaceId}`;
+      : `Close surface ${action.surfaceId}`;
     case 'provision_service': return t
       ? t('agents.pendingAction.provisionService', { service: action.service })
       : `Provisionner le service : ${action.service}`;
@@ -1677,13 +1677,13 @@ export function describePendingAction(
       : `Supprimer le service ${action.serviceId}`;
     case 'self_improve': return t
       ? t('agents.pendingAction.selfImprove')
-      : 'Lancer une mission d\'auto-amélioration';
+      : 'Launch self-improvement mission';
     case 'create_agent_template': return t
       ? t('agents.pendingAction.createAgentTemplate', { missionId: action.missionId })
-      : `Créer un template depuis la mission ${action.missionId}`;
+      : `Create template from mission ${action.missionId}`;
     case 'learn_pattern': return t
       ? t('agents.pendingAction.learnPattern', { trigger: action.trigger.slice(0, 60) })
-      : `Enregistrer un pattern appris : ${action.trigger.slice(0, 60)}`;
+      : `Save learned pattern: ${action.trigger.slice(0, 60)}`;
     case 'delete_mission': return t
       ? t('agents.pendingAction.deleteMission', { missionId: action.missionId })
       : `Supprimer la mission ${action.missionId}`;
@@ -1692,11 +1692,11 @@ export function describePendingAction(
       : `Annuler la mission ${action.missionId}`;
     case 'open_project': return t
       ? t('agents.pendingAction.openProject', { path: action.path })
-      : `Ouvrir le projet : ${action.path}`;
+      : `Open project: ${action.path}`;
     case 'create_project': return t
       ? t('agents.pendingAction.createProject', { path: action.path })
-      : `Créer le projet : ${action.path}`;
-    case 'close_project': return t ? t('agents.pendingAction.closeProject') : 'Fermer le projet';
+      : `Create project: ${action.path}`;
+    case 'close_project': return t ? t('agents.pendingAction.closeProject') : 'Close project';
     case 'clear_canvas': {
       // Composed from two optional sub-fragments (deletion + review-loss
       // warnings) rather than one giant key — each fragment is independently
@@ -1705,14 +1705,14 @@ export function describePendingAction(
       const suffixParts: string[] = [];
       if (action.mode === 'delete') {
         suffixParts.push(
-          t ? t('agents.pendingAction.clearCanvasDeleteSuffix') : ', suppression définitive',
+          t ? t('agents.pendingAction.clearCanvasDeleteSuffix') : ', permanent deletion',
         );
       }
       if (action.includeReview) {
         suffixParts.push(
           t
             ? t('agents.pendingAction.clearCanvasReviewSuffix')
-            : ', y compris les missions en revue (décision perdue)',
+            : ', including review missions (decision discarded)',
         );
       }
       const suffix = suffixParts.join('');
@@ -1774,13 +1774,13 @@ export function describePendingActionDetail(
   switch (action.type) {
     case 'launch_mission': return t
       ? t('agents.pendingAction.launchMission', { task: action.task })
-      : `Lancer la mission : ${action.task}`;
+      : `Launch mission: ${action.task}`;
     case 'launch_best_of_n': return t
       ? t('agents.pendingAction.launchBestOfN', { n: action.n, task: action.task })
-      : `Lancer un best-of-${action.n} : ${action.task}`;
+      : `Launch best-of-${action.n} : ${action.task}`;
     case 'create_loop': return t
       ? t('agents.pendingAction.createLoop', { task: action.task })
-      : `Créer une boucle : ${action.task}`;
+      : `Create loop: ${action.task}`;
     default: return describePendingAction(action, t);
   }
 }
@@ -3332,7 +3332,7 @@ async function runScanProject(
  * Never mutates `mission` itself (this codebase's immutable-update
  * convention) — normalizes a SHALLOW COPY's `judgeVerdict.reviewers` to `[]`
  * before calling the real formatter, and keeps a last-resort try/catch
- * fallback (same 'évaluation indisponible' sentinel approveGate.ts's
+ * fallback (same 'evaluation unavailable' sentinel approveGate.ts's
  * isEvaluationSettledUnavailable already uses for the identical "evaluation
  * technically absent" concept) for any other malformed shape
  * formatMissionDetail does not yet defend against.
@@ -3349,7 +3349,7 @@ export function formatMissionDetailSafe(mission: Mission, opts?: Parameters<type
   try {
     return formatMissionDetail(safeMission, opts);
   } catch {
-    return `Mission ${mission.id}: "${mission.title}" — évaluation indisponible.`;
+    return `Mission ${mission.id}: "${mission.title}" — evaluation unavailable.`;
   }
 }
 
@@ -4213,7 +4213,7 @@ async function defaultWorktreeExists(path: string): Promise<boolean> {
  * ANY resolved promise as proof of a real discard, so the search always
  * "succeeded" on the FIRST open project (whether or not the worktree ever
  * lived there) and NEVER walked on to a later project where the real
- * directory still existed — the exact bug that made "Worktree jeté" a lie
+ * directory still existed — the exact bug that made "Worktree discarded" a lie
  * for M5-M8. Every candidate is now existence-checked (`deps.exists`,
  * default: a real `platform.fs.readDir` probe) BEFORE `discardFn` is ever
  * called: absent -> this candidate is 'not_found', move to the next one
@@ -4292,16 +4292,16 @@ function describeWorktreeOutcome(
         ? t('agents.manager.realResultDigest.worktreesPrefix', {
             detail: t('agents.manager.realResultDigest.worktreesDiscarded', { count: '1', detail: basename(outcome.root) }),
           })
-        : `Worktree jeté (${basename(outcome.root)}).`;
+        : `Worktree discarded (${basename(outcome.root)}).`;
     case 'not_found':
       return t
         ? t('agents.manager.realResultDigest.worktreesPrefix', {
             detail: t('agents.manager.realResultDigest.worktreesNotFound', { count: '1' }),
           })
         : outcome.checked
-          ? `Worktree introuvable sur les ${outcome.checked} projet(s) ouvert(s) vérifié(s).`
-          : 'Worktree introuvable (déjà nettoyé ou jamais créé).';
-    case 'error': return `Échec du nettoyage du worktree : ${outcome.reason}`;
+          ? `Worktree not found across the ${outcome.checked} open project(s) checked.`
+          : 'Worktree not found (already cleaned up or never created).';
+    case 'error': return `Worktree cleanup failed: ${outcome.reason}`;
     case 'skipped': return '';
   }
 }
@@ -7152,8 +7152,8 @@ export function AgentsStoreProvider({ children }: Props) {
     }
 
     const note = managed
-      ? `Intervention en file : "${trimmed}" — sera transmise à l'agent au prochain step`
-      : `Intervention notée : "${trimmed}" — non transmissible en cours d'exécution pour ce moteur (process natif one-shot) ; à relancer manuellement`;
+      ? `Intervention queued: "${trimmed}" — will be sent to the agent at the next step`
+      : `Intervention noted: "${trimmed}" — cannot be delivered during execution for this engine (one-shot native process); retry manually`;
 
     updateMission({
       id,
@@ -7974,7 +7974,7 @@ export function AgentsStoreProvider({ children }: Props) {
 
     if (!mission.mergeSha) {
       throw new Error(
-        `Impossible d'annuler « ${mission.title} » : aucun commit de fusion n'a été enregistré pour cette mission.`,
+        `Cannot undo “${mission.title}”: no merge commit was recorded for this mission.`,
       );
     }
 
@@ -8111,9 +8111,9 @@ export function AgentsStoreProvider({ children }: Props) {
       isOrchestrator: input.orchestrator,
       subAgents: input.orchestrator
         ? [
-            { name: 'Implémenteur', status: 'queued' },
-            { name: 'Testeur', status: 'queued' },
-            { name: 'Relecteur', status: 'queued' },
+            { name: 'Implementer', status: 'queued' },
+            { name: 'Tester', status: 'queued' },
+            { name: 'Reviewer', status: 'queued' },
           ]
         : undefined,
       planSteps: [],
@@ -8366,8 +8366,8 @@ export function AgentsStoreProvider({ children }: Props) {
           // Pro-rail wording is founder-specified verbatim; the native/CLI
           // wording mirrors it for the same honest, one-step-fixable shape.
           const reason = routeKind === 'managed'
-            ? `Lancement refusé : le moteur Pro n'a plus de crédits — choisis un autre moteur.`
-            : `Lancement refusé : le CLI Claude/Codex est introuvable — choisis un autre moteur.`;
+            ? `Launch refused: the Pro engine is out of credits — choose another engine.`
+            : `Launch refused: the Claude/Codex CLI was not found — choose another engine.`;
           updateMission({
             id: newMission.id,
             patch: { status: 'failed', statusReason: reason },
@@ -8815,7 +8815,7 @@ export function AgentsStoreProvider({ children }: Props) {
   }, []);
 
   /**
-   * « Passer la prochaine » (Agent Canvas W5a) — advances the loop's
+   * “ Passer la prochaine ” (Agent Canvas W5a) — advances the loop's
    * `nextRunAt` by one cadence via the pure `skipNextRun` (loopEngine.ts),
    * then persists it through the SAME real path `toggleLoop` above uses
    * (`updateLoop` -> .lazy/loops.json), mirroring its read-current-state
@@ -9562,7 +9562,7 @@ export function AgentsStoreProvider({ children }: Props) {
   }, [updateMission]);
 
   /**
-   * « Archiver les terminées » (zone bulk action, R13): archives every
+   * “ Archiver les terminées ” (zone bulk action, R13): archives every
    * TERMINAL mission (done/failed/cancelled) among `missionIds` — the
    * caller (CanvasContextMenu's zone menu) supplies the exact node ids
    * currently rendered for that zone, so this never reaches outside what
@@ -11064,7 +11064,7 @@ stopAll(action.filter);
           const parsed = resolved ? parseRef(resolved) : null;
           if (parsed && parsed.kind === 'draft') draftId = parsed.id;
         }
-        const draftMissingMessage = 'Brouillon introuvable — il a peut-être été renommé au rechargement. Relance depuis la carte du canvas.';
+        const draftMissingMessage = 'Draft not found — it may have been renamed during reload. Launch it again from the canvas card.';
         if (!draftId) {
           throw new Error(draftMissingMessage);
         }
@@ -12251,7 +12251,7 @@ stopAll(action.filter);
         // anything downstream that actually needs the handle (e.g.
         // execute_plan), it is just never shown to the user.
         const stepCount = orch.steps.length;
-        const planSummary = `Plan proposé : « ${orch.name} » — ${stepCount} étape${stepCount === 1 ? '' : 's'}`;
+        const planSummary = `Plan proposed: “ ${orch.name} ” — ${stepCount} step${stepCount === 1 ? '' : 's'}`;
         toast(planSummary, 'success');
         return { message: planSummary, planId: orch.id };
             },
@@ -13112,7 +13112,7 @@ stopAll(action.filter);
      * maybeResumeAfterApprovalQueueDrain's approval-resume turn
      * (managerApprovalResume.ts) below. Real repro this
      * guards against: formatLoopPromotedMessage's French text ("La boucle
-     * « X » passe en autonomie...") contains a bare USER_ACTION_VERBS
+     * “ X ” passe en autonomie...") contains a bare USER_ACTION_VERBS
      * lemma ("passe") — without this flag, detectUserActionRequest would
      * false-positive a goal CAPTURE from the manager's own background
      * announcement, exactly the "not a real user request" failure mode
@@ -14934,7 +14934,11 @@ stopAll(action.filter);
     // '/') switches accessMode to 'pro'; a native Anthropic id switches it
     // to 'cli' so the turn routes through the Claude CLI the user picked.
     const current = loadAccessSettings();
-    if (model.includes('/')) {
+    if (model.startsWith('opencode-go/')) {
+      saveAccessSettings({ ...current, accessMode: 'opencode-go', model });
+    } else if (model.startsWith('local/')) {
+      saveAccessSettings({ ...current, accessMode: 'local', model });
+    } else if (model.includes('/')) {
       saveAccessSettings({ ...current, accessMode: 'pro', model });
     } else if (isDevinModel(model)) {
       // Devin-catalog id — pin cliTool so the next turn actually reaches
@@ -15779,7 +15783,7 @@ stopAll(action.filter);
     // joins (irToProposedCanvas, same ids). Accepting flips the SELECTED
     // subset to active IN PLACE (canvasStore's acceptProposedSteps) — same
     // id, same object, same position, never a delete+recreate — and drops
-    // any unselected/rejected step's ghost outright ("seules les étapes
+    // any unselected/rejected step's ghost outright ("seules les steps
     // validées sont matérialisées"). Falls back to the pre-chantier-3
     // fresh-compile path only when no preview exists for this planId (the
     // preview step failed earlier, or this orchestrator predates chantier 3)

@@ -91,7 +91,7 @@ async function killRunnerMission(baseUrl: string, missionId: string): Promise<vo
 export async function runPlanAndActLiveViaRunner(opts: PlanAndActLiveOpts): Promise<void> {
   const start = opts.t
     ? opts.t('agents.runtime.startingAgentRunner', { tool: opts.tool, model: opts.model })
-    : `Démarrage agent ${opts.tool} (${opts.model}) via runner…`;
+    : `Starting agent ${opts.tool} (${opts.model}) via runner…`;
   opts.onStep(0, 'in_progress');
   opts.onAction({ time: clockHm(), text: start, isLive: true });
   opts.onProgress(5);
@@ -110,7 +110,7 @@ export async function runPlanAndActLiveViaRunner(opts: PlanAndActLiveOpts): Prom
       await killRunnerMission(baseUrl, opts.missionId);
       opts.onAction({
         time: clockHm(),
-        text: opts.t ? opts.t('agents.runtime.missionCancelled') : 'Mission annulée.',
+        text: opts.t ? opts.t('agents.runtime.missionCancelled') : 'Mission cancelled.',
         isLive: true,
       });
       return;
@@ -120,7 +120,7 @@ export async function runPlanAndActLiveViaRunner(opts: PlanAndActLiveOpts): Prom
     opts.onStep(3, 'done');
     opts.onAction({
       time: clockHm(),
-      text: opts.t ? opts.t('agents.runtime.missionDoneRunner') : 'Mission terminée via runner.',
+      text: opts.t ? opts.t('agents.runtime.missionDoneRunner') : 'Mission completed via runner.',
       isLive: true,
     });
   } catch (err) {

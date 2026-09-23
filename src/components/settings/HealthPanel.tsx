@@ -55,12 +55,7 @@ const COMPONENT_LABEL_KEY: Record<string, string> = {
 // this used to be hardcoded to 'fr-FR' regardless of the active UI
 // language, so an English-language user still saw French time formatting.
 const TIME_LOCALE: Record<Locale, string> = {
-  fr: 'fr-FR',
   en: 'en-US',
-  es: 'es-ES',
-  de: 'de-DE',
-  ja: 'ja-JP',
-  zh: 'zh-CN',
 };
 
 // ── StatusChip ─────────────────────────────────────────────────────

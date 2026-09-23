@@ -254,7 +254,7 @@ export function AssistantStoreProvider({ children, initialSessionId }: Props) {
   const sendRef = useRef<(content: string) => Promise<void>>(() => Promise.resolve());
   const abortRef = useRef<AbortController | null>(null);
   const { t } = useI18n();
-  const { projectRoot } = useAppContext();
+  const { projectRoot, registerProject } = useAppContext();
   const { rules } = useLazyRules(projectRoot || null);
   const rulesRef = useRef<string | null>(null);
   const startupContextRef = useRef<string>('');
@@ -707,6 +707,7 @@ export function AssistantStoreProvider({ children, initialSessionId }: Props) {
         // against '.' because localStorage's 'lazygt.projectRoot' was never
         // written by any code path).
         projectRoot: projectRoot || undefined,
+        onOpenProject: registerProject,
         // Offer on-demand memory recall when the brain is enabled so the model
         // can retrieve project knowledge mid-response: semantic (brain_search)
         // plus the two STRUCTURAL tools (brain_query_css / brain_neighbours).
@@ -740,18 +741,15 @@ export function AssistantStoreProvider({ children, initialSessionId }: Props) {
         ? provider.streamChatEvents(req)
         : textEventsFromStrings(provider.streamChat(req));
 
-      // claude-code (subscription CLI): buildRunTurn (claudeCodeProvider.ts)
-      // now owns its own activity-based watchdog tuned for a CLI subprocess
-      // (tool calls can legitimately stay quiet on stdout for tens of
-      // seconds — see activityWatchdog.ts) and unblocks the stream itself
-      // on genuine silence/ceiling. This generic wrap's 15s/30s budget is
-      // tuned for HTTP-backed providers and must not preempt that CLI-aware
-      // watchdog with a false "no response" — relaxed to the same ceiling
-      // here so it becomes a pure backstop rather than the real enforcer.
-      const isSubscriptionCli = provider.id === 'claude-code';
+      // Subscription-backed coding providers can legitimately stay quiet before
+      // the first visible UI event. claude-code owns a CLI-aware watchdog;
+      // OpenCode Go's ReAct bridge waits for a complete ACTION/ARGS block
+      // before it can emit a tool event. The generic HTTP-sized 15s/30s
+      // stream guard must not preempt either path with a false timeout.
+      const usesLongCodingTurnBudget = provider.id === 'claude-code' || provider.id === 'opencode-go';
       const stream = streamTimeout(eventSource, {
         signal: abort.signal,
-        ...(isSubscriptionCli
+        ...(usesLongCodingTurnBudget
           ? { firstTokenMs: CLAUDE_CODE_ACTIVITY_CEILING_MS, idleMs: CLAUDE_CODE_ACTIVITY_CEILING_MS }
           : {}),
       });
@@ -861,9 +859,13 @@ export function AssistantStoreProvider({ children, initialSessionId }: Props) {
       }
     } catch (err) {
       const isTimeout = err instanceof StreamTimeoutError;
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (!isTimeout) console.error('[assistantStore] generation failed:', errorMessage);
       const fallbackMsg = isTimeout
         ? t('assistant.timeoutError')
-        : t('assistant.generationError');
+        : errorMessage && errorMessage !== '[object Object]'
+          ? errorMessage
+          : t('assistant.generationError');
       // Same defense-in-depth as the success path above: a stream that
       // errors mid-response still commits whatever text was accumulated so
       // far, which may itself end mid-leak.
@@ -878,7 +880,7 @@ export function AssistantStoreProvider({ children, initialSessionId }: Props) {
         ),
       }));
     }
-  }, [state.messages, state.selectedModel, state.selectedMode, state.brainEnabled, state.selectedScope, t, persistMessages, projectRoot]);
+  }, [state.messages, state.selectedModel, state.selectedMode, state.brainEnabled, state.selectedScope, t, persistMessages, projectRoot, registerProject]);
 
   useEffect(() => { sendRef.current = send; }, [send]);
 

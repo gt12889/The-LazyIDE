@@ -107,7 +107,7 @@ const quotaExhaustionPolicy: RecoveryPolicy = {
  *  already gave up on after one attempt, doubling the retry layer. */
 const isNoCreditsError = (error: string): boolean => {
   const lower = error.toLowerCase();
-  return lower.includes('crédits pro épuisés') || lower.includes('no_credits');
+  return lower.includes('pro credits exhausted') || lower.includes('no_credits');
 };
 
 const noCreditsPolicy: RecoveryPolicy = {
@@ -117,7 +117,7 @@ const noCreditsPolicy: RecoveryPolicy = {
     delayMs: 0,
     reason: t
       ? t('agents.managedAgent.noCreditsMessage')
-      : 'Crédits Pro épuisés — recharge ou bascule sur ton abonnement CLI dans Réglages > Modèles.',
+      : 'Pro credits exhausted — top up or switch to your CLI subscription in Settings > Models.',
   }),
 };
 

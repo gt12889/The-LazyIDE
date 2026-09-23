@@ -27,3 +27,5 @@ pub(crate) mod browser_recipe;
 pub(crate) mod system_pressure;
 
 pub(crate) mod local_llm;
+
+pub(crate) mod opencode_go;

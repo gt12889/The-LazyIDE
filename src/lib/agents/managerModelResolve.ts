@@ -1,3 +1,4 @@
+import { activeGoModel, goModels } from '../models/opencodeGoProvider.js';
 /* managerModelResolve — exact catalog id + tier hint → rail-valid model id.
 
    Measured 2026-08-28: resolveManagerModelId cyclomatic complexity was 42
@@ -547,6 +548,12 @@ export function resolveManagerModelId(
   engineOverride?: ManagerEngineChoice,
   modelId?: string,
 ): string {
+  if (modelId?.startsWith('opencode-go/') || (mode === 'opencode-go' && !engineOverride)) {
+    if (!modelId) return activeGoModel().id;
+    const found = goModels().find(m => m.id === modelId || m.id === `opencode-go/${modelId}`);
+    if (!found) throw new Error('Unknown OpenCode Go model. Select a model from Settings.');
+    return found.id;
+  }
   const word = tier?.toLowerCase().match(TIER_WORD)?.[0];
   const effectiveMode = pickEffectiveManagerMode(mode, engineOverride, modelId);
   if (modelId) return resolveExactManagerModelId(modelId, effectiveMode);

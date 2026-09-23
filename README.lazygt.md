@@ -1,5 +1,26 @@
 # lazygt
 
+## OpenCode Go
+
+Settings > Models > OpenCode Go connects your own Go subscription. Enter the Go
+key once; the desktop stores it in Windows Credential Manager. The native transport
+retrieves it directly and sends requests only to `https://opencode.ai/zen/go/v1`.
+No Go key is stored in localStorage, source, or logs. A stable conversation header
+and the lazygt user agent identify requests. Redirects are disabled.
+
+The model picker includes the documented Go models across Chat Completions,
+Anthropic Messages, and Responses formats. Connection testing refreshes availability
+and makes a small request against the chosen model using subscription quota.
+Unknown protocol models are excluded until an adapter is verified. Go currently
+supports read-only Ask/Plan, inline transforms, Edit-mode tools, and autonomous missions.
+Go models use the native credential bridge and the IDE tool runtime; they do not
+require a separate CLI. Code-tab tool results appear as steps. Edit can read/write
+files, run commands/tests, and open a project; it stops after 30 actions or three
+consecutive failures. Project opening ends the turn to prevent further actions in
+the old workspace. Existing tool permission rules still apply.
+Model-specific quotas and contributor-model data policies apply; no pay-as-you-go
+fallback is configured by lazygt. See https://opencode.ai/v2/docs/console/go.
+
 A local-model and CLI desktop customization of The-LazyIDE. Original authorship and license files are retained.
 
 ## Engines

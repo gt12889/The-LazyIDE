@@ -92,7 +92,7 @@ export function compileLaunchArtifacts(opts: {
   const initialTimeline: ActionEvent[] = [
     {
       time: clockHm(),
-      text: t ? t('agents.runtime.missionStarted') : 'Mission démarrée — worktree en cours de création…',
+      text: t ? t('agents.runtime.missionStarted') : 'Mission started — creating worktree…',
       isLive: true,
     },
   ];
@@ -101,7 +101,7 @@ export function compileLaunchArtifacts(opts: {
       time: clockHm(),
       text: t
         ? t('agents.runtime.planAdapted', { count: compiled.adaptations.length })
-        : `🧠 Plan adapté par le brain — ${compiled.adaptations.length} adaptation(s)`,
+        : `🧠 Plan adapted by brain — ${compiled.adaptations.length} adaptation(s)`,
       isLive: false,
     });
   }

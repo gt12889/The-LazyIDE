@@ -156,12 +156,12 @@ export function decideSilenceTimeout(input: SilenceTimeoutInput): SilenceTimeout
   if (decision.action === 'retry') {
     const waitingText = input.t
       ? input.t('agents.runtime.silenceWatchdogWaiting', { minutes })
-      : `Agent silencieux depuis ${minutes}min — nouvelle fenêtre d'attente avant arrêt`;
+      : `Agent silent for ${minutes}min — new wait window before stopping`;
     return { action: 'waiting', strikeCount, waitingText };
   }
   const stopText = input.t
     ? input.t('agents.runtime.silenceWatchdogStop', { minutes })
-    : `Mission arrêtée — agent silencieux depuis ${minutes}min, aucune réponse`;
+    : `Mission stopped — agent silent for ${minutes}min, no response`;
   const stopReason = input.t
     ? input.t('agents.runtime.silenceWatchdogReason', { minutes })
     : `${stopText}.`;

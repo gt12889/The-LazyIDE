@@ -29,13 +29,8 @@ import type { SpaceId } from '../app/AppContext';
 
 afterEach(cleanup);
 
-// I18nProvider resolves the locale from navigator.language when no saved
-// preference exists (see src/i18n/index.tsx's detectLocaleSync) — jsdom's
-// default is "en-US", not "fr". Force fr (the app's DEFAULT_LOCALE and this
-// spec's reference language) before every test — setup.ts's own afterEach
-// clears localStorage, so this can't be a one-time module-level call.
 beforeEach(() => {
-  localStorage.setItem('lazy.locale', 'fr');
+  localStorage.setItem('lazygt.locale', 'en');
 });
 
 function renderTopNav(activeSpace: SpaceId = 'agents') {
@@ -53,7 +48,7 @@ function renderTopNav(activeSpace: SpaceId = 'agents') {
 }
 
 function settingsPill(): HTMLElement {
-  return screen.getByTitle('Réglages');
+  return screen.getByTitle('Settings');
 }
 
 /** Every real nav pill's testid (nav-pill-<SpaceId>), matching TopNav.tsx's
@@ -68,9 +63,9 @@ describe('TopNav — update-available dot on the Settings pill', () => {
 
     expect(screen.queryByTestId('settings-update-dot')).toBeNull();
     // Accessibility fix (real user report): the gear's only visible content
-    // is "⚙" — an aria-label naming it "Réglages" must be present even with
+    // is "⚙" — an aria-label naming it "Settings" must be present even with
     // no update pending, not just when the update-badge variant kicks in.
-    expect(settingsPill().getAttribute('aria-label')).toBe('Réglages');
+    expect(settingsPill().getAttribute('aria-label')).toBe('Settings');
   });
 
   it('shows no dot while merely checking or downloading', () => {
@@ -84,7 +79,7 @@ describe('TopNav — update-available dot on the Settings pill', () => {
     renderTopNav();
 
     expect(screen.getByTestId('settings-update-dot')).toBeInTheDocument();
-    expect(settingsPill().getAttribute('aria-label')).toBe('Réglages — mise à jour disponible');
+    expect(settingsPill().getAttribute('aria-label')).toBe('Settings — update available');
   });
 
   it('shows the dot when an update is staged', () => {

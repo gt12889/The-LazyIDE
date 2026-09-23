@@ -57,7 +57,7 @@ function escapeShell(s: string): string {
 export function notifyMissionDone(missionId: string, title: string, t?: TFunc): Promise<void> {
   return sendOsNotification({
     kind: 'mission_done',
-    title: t ? t('cockpit.notification.missionDone.title') : 'Mission terminée',
+    title: t ? t('cockpit.notification.missionDone.title') : 'Mission complete',
     body: title,
     missionId,
   });
@@ -66,7 +66,7 @@ export function notifyMissionDone(missionId: string, title: string, t?: TFunc): 
 export function notifyMissionFailed(missionId: string, title: string, error?: string, t?: TFunc): Promise<void> {
   return sendOsNotification({
     kind: 'mission_failed',
-    title: t ? t('cockpit.notification.missionFailed.title') : 'Mission échouée',
+    title: t ? t('cockpit.notification.missionFailed.title') : 'Mission failed',
     body: error ? `${title}: ${error}` : title,
     missionId,
   });
@@ -75,7 +75,7 @@ export function notifyMissionFailed(missionId: string, title: string, error?: st
 export function notifyContestCompleted(winnerId: string, title: string, t?: TFunc): Promise<void> {
   return sendOsNotification({
     kind: 'contest_completed',
-    title: t ? t('cockpit.notification.contestCompleted.title') : 'Concours terminé',
+    title: t ? t('cockpit.notification.contestCompleted.title') : 'Contest complete',
     body: t ? t('cockpit.notification.contestCompleted.body', { title }) : `Gagnant: ${title}`,
     missionId: winnerId,
   });

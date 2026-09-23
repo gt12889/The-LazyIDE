@@ -30,7 +30,7 @@ import { projectIdFromRoot } from '../journal/projectId.js';
 
 export const MAX_CASCADE_DEPTH = 5;
 const CONTEXT_OUTPUT_CAP_CHARS = 2000;
-const TRUNCATION_SUFFIX = ' …(tronqué)…';
+const TRUNCATION_SUFFIX = ' …(truncated)…';
 const CONTEXT_TIMELINE_ENTRIES = 8;
 
 // ── Deps for refireChainDownstream ─────────────────────────────────
@@ -63,7 +63,7 @@ export function buildContextBlock(sourceMission: Mission): string {
     summary.length > CONTEXT_OUTPUT_CAP_CHARS
       ? `${summary.slice(0, CONTEXT_OUTPUT_CAP_CHARS - TRUNCATION_SUFFIX.length).trimEnd()}${TRUNCATION_SUFFIX}`
       : summary;
-  return `\n\n## CONTEXTE AMONT\nMission « ${sourceMission.title} » terminée (${sourceMission.status}).\n${capped}`;
+  return `\n\n## UPSTREAM CONTEXT\nMission “ ${sourceMission.title}” completed (${sourceMission.status}).\n${capped}`;
 }
 
 export function capturePinnedOutput(sourceMission: Mission): { text: string; pinnedAtMs: number; sourceTitle: string } {

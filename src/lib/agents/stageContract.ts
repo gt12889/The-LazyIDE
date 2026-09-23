@@ -7,6 +7,7 @@
    and integrated with LazyBrain for brain-driven plan adaptation.
 */
 
+import { truncateAgentDisplayText } from './displayText';
 import type { Mission, PlanStep } from '../agents/types.js';
 import type { BrainRecallResult } from '../platform/types.js';
 import type { PermissionMode } from './runtime.js';
@@ -206,7 +207,7 @@ export function compilePlan(opts: CompileOptions): CompiledPlan {
   stages.push({
     id: stageId('analyze', mid),
     kind: 'analyze',
-    label: `Analyser : ${mission.title.slice(0, 60)}`,
+    label: `Analyze: ${truncateAgentDisplayText(mission.title, 60)}`,
     description: 'Read relevant files, understand the codebase context, identify approach',
     model,
     permissionMode: 'plan',
@@ -227,7 +228,7 @@ export function compilePlan(opts: CompileOptions): CompiledPlan {
   stages.push({
     id: stageId('implement', mid),
     kind: 'implement',
-    label: 'Implémenter les modifications',
+    label: 'Implement changes',
     description: 'Make the code changes required by the mission',
     model,
     permissionMode: pm,
@@ -250,7 +251,7 @@ export function compilePlan(opts: CompileOptions): CompiledPlan {
   stages.push({
     id: stageId('test', mid),
     kind: 'test',
-    label: testAdaptation ? 'Tests renforcés' : 'Exécuter la validation',
+    label: testAdaptation ? 'Strengthened tests' : 'Run validation',
     description: testAdaptation
       ? 'Run tests with extra scrutiny — past similar missions had test failures'
       : 'Run the test suite and verify changes',
@@ -275,7 +276,7 @@ export function compilePlan(opts: CompileOptions): CompiledPlan {
     stages.push({
       id: stageId('security', mid),
       kind: 'security',
-      label: 'Audit de sécurité',
+      label: 'Security audit',
       description: 'Security review — brain detected security-sensitive patterns in similar past work',
       model,
       permissionMode: 'plan',
@@ -301,7 +302,7 @@ export function compilePlan(opts: CompileOptions): CompiledPlan {
   stages.push({
     id: stageId('review', mid),
     kind: 'review',
-    label: 'Revue de code',
+    label: 'Code review',
     description: 'Code quality review — check for immutability, naming, error handling',
     model,
     permissionMode: 'plan',
@@ -323,7 +324,7 @@ export function compilePlan(opts: CompileOptions): CompiledPlan {
   stages.push({
     id: stageId('fix', mid),
     kind: 'fix',
-    label: 'Corriger et réessayer',
+    label: 'Fix and retry',
     description: fixAdaptation
       ? 'Fix issues — brain shows past missions needed fix iterations'
       : 'Fix issues found by test/review/security stages',
@@ -347,7 +348,7 @@ export function compilePlan(opts: CompileOptions): CompiledPlan {
   stages.push({
     id: stageId('prepare_diff', mid),
     kind: 'prepare_diff',
-    label: 'Préparer le diff pour revue',
+    label: 'Prepare diff for review',
     description: 'Compute the final diff and transition to human review',
     model,
     permissionMode: 'plan',
@@ -423,7 +424,7 @@ export function planToSteps(plan: CompiledPlan): PlanStep[] {
       meta: s.state === 'done' && s.completedAt
         ? `fait · ${new Date(s.completedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
         : s.state === 'blocked'
-        ? `bloqué · ${s.error ?? ''}`
+        ? `blocked · ${s.error ?? ''}`
         : undefined,
     }));
 }

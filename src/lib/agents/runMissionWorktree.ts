@@ -89,7 +89,7 @@ function readyTimeline(
         time: clockHm(),
         text: t
           ? t('agents.runtime.baseBranchFallback', { branch: created.fallbackFromMissingBase })
-          : `Branche de base '${created.fallbackFromMissingBase}' absente (déjà fusionnée) — repli sur la branche principale`,
+          : `Base branch '${created.fallbackFromMissingBase}' missing (already merged) — falling back to the main branch`,
         isLive: false,
       }]
     : [];
@@ -98,10 +98,10 @@ function readyTimeline(
     ...fallback,
     {
       time: clockHm(),
-      text: t ? t('agents.runtime.worktreeCreated', { path: created.worktreePath }) : `Worktree créé : ${created.worktreePath}`,
+      text: t ? t('agents.runtime.worktreeCreated', { path: created.worktreePath }) : `Worktree created: ${created.worktreePath}`,
       isLive: false,
     },
-    { time: clockHm(), text: t ? t('agents.runtime.startingLoop') : 'Démarrage du loop agent…', isLive: true },
+    { time: clockHm(), text: t ? t('agents.runtime.startingLoop') : 'Starting agent loop…', isLive: true },
   ];
 }
 
@@ -112,7 +112,7 @@ function failTimeline(initialTimeline: ActionEvent[], err: unknown, t?: TFunc): 
       time: clockHm(),
       text: t
         ? t('agents.runtime.worktreeFailed', { error: String(err).slice(0, 80) })
-        : `Worktree échec: ${String(err).slice(0, 80)}`,
+        : `Worktree failed: ${String(err).slice(0, 80)}`,
       isLive: false,
     },
   ];
@@ -142,7 +142,7 @@ export async function createMissionWorktree(opts: {
       id: mission.id,
       patch: {
         worktree: branch,
-        liveAction: t ? t('agents.runtime.worktreeReady') : 'Worktree prêt — démarrage du loop…',
+        liveAction: t ? t('agents.runtime.worktreeReady') : 'Worktree ready — starting loop…',
         actionTimeline: readyTimeline(initialTimeline, created, t),
       },
     });
@@ -154,7 +154,7 @@ export async function createMissionWorktree(opts: {
       patch: {
         status: 'failed',
         statusReason: `worktree_creation_failed: ${String(err).slice(0, 120)}`,
-        liveAction: t ? t('agents.runtime.worktreeCreationFailed') : 'Échec création worktree',
+        liveAction: t ? t('agents.runtime.worktreeCreationFailed') : 'Worktree creation failed',
         actionTimeline: failTimeline(initialTimeline, err, t),
       },
     });

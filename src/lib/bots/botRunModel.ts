@@ -81,10 +81,10 @@ export function isBotRailReady(rail: BotModelRail): boolean {
 /** Why a rail is not usable — surfaced as the mission's statusReason. */
 export function describeBotRailNotReady(rail: BotModelRail, model: string): string {
   switch (rail) {
-    case 'cli': return `Le modèle "${model}" passe par la CLI (claude/codex/devin), qui n'est pas détectée sur ce poste.`;
-    case 'pro': return `Le modèle "${model}" passe par lazygt Pro, sans plan actif ni crédits disponibles.`;
-    case 'byok': return `Le modèle "${model}" nécessite une clé BYOK qui n'est pas configurée.`;
-    case 'free': return `Le modèle gratuit "${model}" est indisponible.`;
+    case 'cli': return `Model "${model}" uses the CLI (claude/codex/devin), which was not detected on this machine.`;
+    case 'pro': return `Model "${model}" uses lazygt Pro, with no active plan or available credits.`;
+    case 'byok': return `Model "${model}" requires a BYOK key that is not configured.`;
+    case 'free': return `Model gratuit "${model}" is unavailable.`;
   }
 }
 
@@ -225,9 +225,9 @@ export function resolveLazyBotRunModel(
       const model = hint && candidate !== hint ? applyTierHintWithinRail(hint, { model: candidate, rail }) : candidate;
       let note: string | undefined;
       if (hint && candidate !== hint) {
-        note = `indice "${hint}" appliqué sur le rail ${rail} → "${model}"`;
+        note = `hint "${hint}" applied on rail ${rail} → "${model}"`;
       } else if (wanted && model !== wanted) {
-        note = `modèle demandé "${wanted}" indisponible sur ce poste — remplacé par "${model}" (${rail})`;
+        note = `requested model "${wanted}" unavailable on this machine — replaced with "${model}" (${rail})`;
       }
       return { model, rail, note };
     }
@@ -239,7 +239,7 @@ export function resolveLazyBotRunModel(
     ? `${describeBotRailNotReady(firstBlocked.rail, firstBlocked.model)} `
     : '';
   const label = fallback.rail === 'free'
-    ? `le modèle gratuit "${fallback.model}"`
+    ? `free model "${fallback.model}"`
     : `"${fallback.model}" (${fallback.rail})`;
   return { ...fallback, note: `${blockedNote}Repli sur ${label}.`.trim() };
 }

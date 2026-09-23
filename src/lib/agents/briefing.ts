@@ -346,12 +346,7 @@ export function buildBriefingDigest(events: JournalEventRow[]): BriefingDigest {
 // ── Narrative (the one impure piece) ─────────────────────────────────
 
 const LOCALE_LANGUAGE_NAMES: Record<Locale, string> = {
-  fr: 'French',
   en: 'English',
-  es: 'Spanish',
-  zh: 'Chinese',
-  de: 'German',
-  ja: 'Japanese',
 };
 
 function formatDigestFacts(digest: BriefingDigest): string {

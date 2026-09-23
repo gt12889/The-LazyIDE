@@ -19,9 +19,10 @@ interface ModelCheckStepProps {
   onBack: () => void;
 }
 
-const MODES: AccessMode[] = ['cli', 'byok', 'pro'];
+const MODES: AccessMode[] = ['local', 'cli'];
 
 const MODE_LABEL_KEYS: Record<AccessMode, string> = {
+  'opencode-go': 'OpenCode Go',
   cli: 'onboarding.model.mode.cli',
   byok: 'onboarding.model.mode.byok',
   pro: 'onboarding.model.mode.pro',
@@ -50,6 +51,7 @@ export function ModelCheckStep({ onNext, onBack }: ModelCheckStepProps) {
   }, []);
 
   const readiness = useMemo<Record<AccessMode, EngineReadiness>>(() => ({
+    'opencode-go': getEngineReadiness('opencode-go'),
     cli: getEngineReadiness('cli'),
     byok: getEngineReadiness('byok'),
     pro: getEngineReadiness('pro'),

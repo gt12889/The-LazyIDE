@@ -1,3 +1,4 @@
+import { sanitizeAgentDisplayText } from '../../../../lib/agents/displayText';
 /* nodeChrome.tsx — shared card shell for every canvas node kind (W1b,
    spec §4.2/§4.4). Imports canvas.css exactly once (side-effect import)
    so every node file that needs the keyframes just imports from here
@@ -1291,7 +1292,7 @@ export function AgentPersonaChip({ agentName, testId }: { agentName?: string; te
   return (
     <span
       data-testid={testId}
-      title={`Agent spécialisé: ${role.displayName}`}
+      title={`Specialized agent: ${role.displayName}`}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -1444,7 +1445,7 @@ export function BrainMemoryBadge({ count, tokensSaved, adapted }: { count?: numb
   return (
     <span
       data-testid="mission-brain-badge"
-      title={`Guidé par la mémoire LazyBrain (${count ?? 1} contexte(s) injecté(s))`}
+      title={`Guided by LazyBrain memory (${count ?? 1} context item(s) injected)`}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -1476,7 +1477,7 @@ export function WorktreeBranchBadge({ worktree }: { worktree?: string }) {
   return (
     <span
       data-testid="mission-worktree-badge"
-      title={`Branche Git isolée: ${worktree}`}
+      title={`Isolated Git branch: ${worktree}`}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -1519,7 +1520,7 @@ export function ExtraReadRootsBadge({ roots }: { roots?: string[] }) {
   return (
     <span
       data-testid="mission-extra-read-roots-badge"
-      title={`Lecture cross-projet autorisée (écriture bloquée hors worktree) :\n${roots.join('\n')}`}
+      title={`Cross-project read allowed (writes blocked outside worktree):\n${roots.join('\n')}`}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -1576,7 +1577,7 @@ export function PlanStepProgressBadge({ planSteps }: { planSteps?: PlanStep[] })
           flexShrink: 0,
         }}
       >
-        Étape {Math.min(stepNumber, total)}/{total}
+        Step {Math.min(stepNumber, total)}/{total}
       </span>
       {currentStep?.label && (
         <span
@@ -1588,9 +1589,9 @@ export function PlanStepProgressBadge({ planSteps }: { planSteps?: PlanStep[] })
             textOverflow: 'ellipsis',
             color: 'var(--color-text-muted)',
           }}
-          title={currentStep.label}
+          title={sanitizeAgentDisplayText(currentStep.label)}
         >
-          {currentStep.label}
+          {sanitizeAgentDisplayText(currentStep.label)}
         </span>
       )}
     </div>
@@ -1605,7 +1606,7 @@ export function AutonomyModeChip({ mode }: { mode?: 'plan' | 'acceptEdits' | 'fu
   return (
     <span
       data-testid="mission-autonomy-badge"
-      title={`Mode d'autonomie: ${mode}`}
+      title={`Autonomy mode: ${mode}`}
       style={{
         fontSize: 9,
         fontFamily: 'var(--font-mono)',

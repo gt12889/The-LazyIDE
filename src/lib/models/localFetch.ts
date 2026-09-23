@@ -3,8 +3,11 @@ import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 type LocalEvent = { kind: 'headers'; status: number } | { kind: 'data'; bytes: number[] } | { kind: 'done' };
 
 /** Native streaming bridge avoids changing the user's Ollama CORS settings. */
-export function localFetch(url: string, init: RequestInit = {}): Promise<Response> {
-  if (!isTauri()) return fetch(url, init);
+export function localFetch(url: string, init: RequestInit = {}, go?: { endpoint: string; session: string; keyId?: string }): Promise<Response> {
+  if (!isTauri()) {
+    if (go) return Promise.reject(new Error('OpenCode Go requires the lazygt desktop app.'));
+    return fetch(url, init);
+  }
   if (init.signal?.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
   const id = crypto.randomUUID();
   return new Promise<Response>((resolve, reject) => {
@@ -13,7 +16,7 @@ export function localFetch(url: string, init: RequestInit = {}): Promise<Respons
     const cancel = () => { void invoke('local_llm_cancel', { id }).catch(() => {}); };
     const body = new ReadableStream<Uint8Array>({
       start(value) { controller = value; },
-      cancel() { ended = true; cancel(); },
+      cancel() { ended = true; init.signal?.removeEventListener('abort', abort); cancel(); },
     });
     const abort = () => {
       if (!ended) {
@@ -32,8 +35,8 @@ export function localFetch(url: string, init: RequestInit = {}): Promise<Respons
       else if (event.kind === 'data') controller.enqueue(new Uint8Array(event.bytes));
       else { ended = true; controller.close(); init.signal?.removeEventListener('abort', abort); }
     };
-    void invoke('local_llm_request', {
-      id, url, body: init.body ? JSON.parse(String(init.body)) : null, onEvent,
+    void invoke(go ? 'opencode_go_request' : 'local_llm_request', {
+      id, ...(go ?? { url }), body: init.body ? JSON.parse(String(init.body)) : null, onEvent,
     }).catch((cause: unknown) => {
       if (!ended) {
         ended = true;

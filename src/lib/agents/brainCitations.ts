@@ -19,7 +19,7 @@ const MAX_CITATIONS = 6;
 
 export interface CapturedBrainContext {
   citations: BrainCitation[];
-  /** Short human-readable label, e.g. "~1.2k tokens économisés" — undefined
+  /** Short human-readable label, e.g. "~1.2k tokens saved" — undefined
    *  when the recall reported no savings (honest empty, not "0"). */
   tokensSavedLabel?: string;
 }
@@ -40,7 +40,7 @@ export function captureBrainContext(recall: BrainRecallResult | null | undefined
   }));
 
   const tokensSavedLabel = recall.tokensSaved > 0
-    ? `~${formatTokenCountShort(recall.tokensSaved)} tokens économisés`
+    ? `~${formatTokenCountShort(recall.tokensSaved)} tokens saved`
     : undefined;
 
   return { citations, tokensSavedLabel };

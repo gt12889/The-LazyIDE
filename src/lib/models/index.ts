@@ -1,3 +1,4 @@
+import { opencodeGoProvider, activeGoModel } from './opencodeGoProvider.js';
 import { isTauri } from '../platform/index.js';
 import type { ModelInfo, ModelProvider } from './types.js';
 import { loadAccessSettings } from './accessSettings.js';
@@ -20,7 +21,7 @@ export { localProvider, isLocalAvailable, detectLocalBaseUrl, listLocalModels } 
 
 // Legacy discriminants remain for saved missions and upstream UI type compatibility.
 // None of the hosted modes can be selected or routed in lazygt.
-export type ProviderMode = 'claude-code' | 'codex' | 'devin' | 'local' | 'live-key' | 'managed' | 'pro' | 'mock';
+export type ProviderMode = 'opencode-go' | 'claude-code' | 'codex' | 'devin' | 'local' | 'live-key' | 'managed' | 'pro' | 'mock';
 export type ProPlanState = 'unknown' | 'active' | 'inactive';
 export function setManagedAvailability(_active: boolean): void {}
 export function setProPlanActive(_active: boolean): void {}
@@ -34,10 +35,12 @@ export async function initProviderMode(): Promise<void> {
 }
 export function getProviderMode(): ProviderMode {
   const settings = loadAccessSettings();
+  if (settings.accessMode === 'opencode-go') return 'opencode-go';
   if (settings.accessMode !== 'cli') return 'local';
   return settings.cliTool === 'codex' ? 'codex' : settings.cliTool === 'devin' ? 'devin' : 'claude-code';
 }
 export function getDefaultModelIdForMode(mode: ProviderMode): string {
+  if (mode === 'opencode-go') return activeGoModel().id;
   if (mode === 'local') return localProvider.listModels()[0].id;
   if (mode === 'codex') return '';
   if (mode === 'devin') return DEFAULT_DEVIN_MODEL_ID;
@@ -46,6 +49,7 @@ export function getDefaultModelIdForMode(mode: ProviderMode): string {
 export function getActiveModel(): ModelInfo {
   const mode = getProviderMode();
   const { model } = loadAccessSettings();
+  if (mode === 'opencode-go') return activeGoModel();
   if (mode === 'local') return localProvider.listModels()[0];
   if (mode === 'codex') return { id: '', label: 'Codex CLI default', provider: 'openai' };
   if (mode === 'devin') return findDevinModel(model) ?? findDevinModel(DEFAULT_DEVIN_MODEL_ID)!;
@@ -53,6 +57,7 @@ export function getActiveModel(): ModelInfo {
 }
 export interface ProviderReadiness { ready: boolean; reason?: string }
 export function describeProviderReadiness(mode = getProviderMode(), _t?: (key: string, params?: Record<string, string | number>) => string): ProviderReadiness {
+  if (mode === 'opencode-go') return { ready: isTauri(), reason: isTauri() ? undefined : 'OpenCode Go requires the desktop app.' };
   if (mode === 'local') return { ready: true };
   if (!isTauri()) return { ready: false, reason: 'CLI tools require the lazygt desktop app. Use Local in the browser.' };
   const tool = mode === 'codex' ? 'codex' : mode === 'devin' ? 'devin' : 'claude';
@@ -60,6 +65,7 @@ export function describeProviderReadiness(mode = getProviderMode(), _t?: (key: s
 }
 export function getProvider(_t?: (key: string, params?: Record<string, string | number>) => string): ModelProvider {
   const settings = loadAccessSettings();
+  if (settings.accessMode === 'opencode-go') return opencodeGoProvider;
   if (settings.accessMode === 'cli') {
     if (!isTauri()) return { id: 'none', label: 'Desktop required', listModels: () => [], async *streamChat() { throw new Error('CLI tools require the lazygt desktop app. Select Local in Settings.'); } };
     return cliBackendProvider(settings.cliTool ?? 'claude');

@@ -12,7 +12,7 @@ import type { OutputStyleSelectionEntry } from '../assistant/outputStyles.js';
 import type { ByokProvider } from './byokProviders.js';
 
 export type { ByokProvider } from './byokProviders.js';
-export type AccessMode = 'cli' | 'byok' | 'pro' | 'local';
+export type AccessMode = 'opencode-go' | 'cli' | 'byok' | 'pro' | 'local';
 export type CliTool = 'claude' | 'codex' | 'devin';
 
 export interface AccessSettings {
@@ -50,6 +50,7 @@ export function loadAccessSettings(): AccessSettings {
     if (raw) {
       const parsed = JSON.parse(raw) as AccessSettings;
       if (parsed && parsed.accessMode === 'cli' && ['claude', 'codex', 'devin'].includes(parsed.cliTool ?? 'claude')) return parsed;
+      if (parsed && parsed.accessMode === 'opencode-go') return parsed;
       if (parsed && parsed.accessMode === 'local') return { ...parsed, model: parsed.model?.startsWith('local/') ? parsed.model : 'local/hermes3' };
     }
   } catch {

@@ -1,3 +1,4 @@
+import { createGoAgentTurnStreamer, activeGoModel, goProtocol } from '../models/opencodeGoProvider.js';
 /* Agent runtime — Phase 2: real Claude Code agents in worktrees.
    Phase-1 scripted loop is preserved as the fallback (mock/web mode).
 
@@ -254,7 +255,7 @@ export function isManagedAgentAvailable(): boolean {
 // model, and (b) other call sites that genuinely want "the current engine"
 // (pause/intervene gating in agentsStore.tsx, ReviewSpace, MissionDetail).
 
-export type ModelRouteKind = 'managed' | 'native' | 'byok' | 'devin';
+export type ModelRouteKind = 'opencode-go' | 'managed' | 'native' | 'byok' | 'devin';
 
 /** OpenRouter (managed) ids always carry a '/' (e.g. 'openai/gpt-5.5',
  *  'anthropic/claude-sonnet-5'); native Anthropic ids/labels never do
@@ -268,6 +269,7 @@ export type ModelRouteKind = 'managed' | 'native' | 'byok' | 'devin';
  *  an empty/absent model — callers fall back to mode-based routing. */
 export function classifyMissionModel(model: string | undefined): ModelRouteKind | undefined {
   if (!model || model.startsWith('local/')) return undefined;
+  if (model.startsWith('opencode-go/')) return 'opencode-go';
   if (model.includes('/')) return 'managed';
   for (const def of BYOK_PROVIDER_DEFS) {
     if (def.id === 'anthropic') continue;
@@ -532,7 +534,7 @@ export function formatBudgetExceededMessage(
   const params = { spentCredits: usdToCredits(spentUsd), capCredits: usdToCredits(capUsd), pct };
   const text = t
     ? t('agents.runtime.budgetExceededStop', params)
-    : `Mission arrêtée — ${params.spentCredits} crédits consommés sur un plafond de ${params.capCredits} crédits (${pct}%)`;
+    : `Mission stopped — ${params.spentCredits} credits used out of a cap of ${params.capCredits} credits (${pct}%)`;
   const reason = t
     ? t('agents.runtime.budgetExceededReason', params)
     : `${text}.`;
@@ -595,7 +597,7 @@ export function formatDurationExceededMessage(
   const params = { elapsed: (elapsedMs / 60_000).toFixed(1), cap: (capMs / 60_000).toFixed(1), pct };
   const text = t
     ? t('agents.runtime.durationExceededStop', params)
-    : `Mission arrêtée — ${params.elapsed}min écoulées sur un plafond de ${params.cap}min (${pct}%)`;
+    : `Mission stopped — ${params.elapsed}min elapsed out of a cap of ${params.cap}min (${pct}%)`;
   const reason = t
     ? t('agents.runtime.durationExceededReason', params)
     : `${text}.`;
@@ -699,7 +701,7 @@ async function planAndActScripted(opts: PlanAndActScriptedOpts): Promise<void> {
 function unavailableEngineMessage(mode: ProviderMode, t?: TFunc): string {
   return t
     ? t('agents.runtime.unavailableEngine', { mode })
-    : `Backend indisponible : le mode "${mode}" n'est pas configuré pour exécuter des missions. Configure Claude Code ou Codex (CLI), ou active l'abonnement Pro, dans Réglages > Modèles.`;
+    : `Backend unavailable: mode "${mode}" is not configured to run missions. Configure Claude Code or Codex (CLI), or activate the Pro subscription in Settings > Models.`;
 }
 
 /** Explanation for a mission whose CHOSEN model unambiguously belongs to one
@@ -715,21 +717,21 @@ function modelMismatchMessage(kind: ModelRouteKind, t?: TFunc): string {
   if (kind === 'managed') {
     return t
       ? t('agents.runtime.modelMismatchManaged')
-      : "Modèle managé choisi mais LazyPro est inactif ou les crédits sont épuisés. Active LazyPro ou choisis un modèle de l'abonnement Claude dans Réglages > Modèles.";
+      : "Managed model selected, but LazyPro is inactive or credits are exhausted. Activate LazyPro or choose a Claude subscription model in Settings > Models.";
   }
   if (kind === 'byok') {
     return t
       ? t('agents.runtime.modelMismatchByok')
-      : "Modèle BYOK choisi mais aucune clé API n'est configurée pour ce provider. Ajoute ta clé dans Réglages > Modèles, puis clique « Utiliser ».";
+      : "BYOK model selected, but no API key is configured for this provider. Add your key in Settings > Models, then click “Use”.";
   }
   if (kind === 'devin') {
     return t
       ? t('agents.runtime.modelMismatchDevin')
-      : "Modèle Devin choisi mais le CLI Devin est introuvable ou non connecté. Installe/connecte Devin (devin auth login) ou choisis un autre modèle dans Réglages > Modèles.";
+      : "Devin model selected, but the Devin CLI was not found or is not connected. Install/connect Devin (devin auth login) or choose another model in Settings > Models.";
   }
   return t
     ? t('agents.runtime.modelMismatchNative')
-    : 'Modèle Claude choisi mais le CLI Claude est introuvable. Installe/connecte Claude Code (CLI) ou choisis un modèle LazyPro dans Réglages > Modèles.';
+    : 'Claude model selected, but the Claude CLI was not found. Install/connect Claude Code (CLI) or choose a LazyPro model in Settings > Models.';
 }
 
 /** Marks every plan step 'done' with an error marker and posts the failure
@@ -749,11 +751,11 @@ function failAllSteps(
   t?: TFunc,
 ): void {
   onAction(agentErrorEvent(nowTime(), message, t));
-  onStep(0, 'done', `erreur · ${nowTime()}`);
-  onStep(1, 'done', `erreur · ${nowTime()}`);
-  onStep(2, 'done', `erreur · ${nowTime()}`);
-  onStep(3, 'done', `erreur · ${nowTime()}`);
-  onStep(4, 'done', `erreur · ${nowTime()}`);
+  onStep(0, 'done', `error · ${nowTime()}`);
+  onStep(1, 'done', `error · ${nowTime()}`);
+  onStep(2, 'done', `error · ${nowTime()}`);
+  onStep(3, 'done', `error · ${nowTime()}`);
+  onStep(4, 'done', `error · ${nowTime()}`);
   onProgress(100);
 }
 
@@ -972,7 +974,12 @@ export async function planAndAct(opts: {
   // isTauriRuntime() up front so a non-Tauri call (web/browser demo) always
   // falls through to the unchanged mode-based branch below, which already
   // resolves correctly to planAndActScripted there.
-  if (getProviderMode() === 'local') throw new Error('Local chat is ready. Autonomous missions require a CLI engine in Settings.');
+  if (isTauriRuntime() && (opts.managedModel?.startsWith('opencode-go/') || (!opts.managedModel && getProviderMode() === 'opencode-go'))) {
+    const model = opts.managedModel ?? activeGoModel().id;
+    goProtocol(model);
+    return planAndActManaged({ ...opts, model, streamTurn: createGoAgentTurnStreamer(opts.missionId), pauseSignal: opts.pauseSignal ?? (() => false), drainIntervenes: opts.drainIntervenes ?? (() => []) });
+  }
+  if (getProviderMode() === 'local') throw new Error('This engine supports chat and code suggestions. Autonomous missions require a CLI engine in Settings.');
   const chosenKind = isTauriRuntime() ? classifyMissionModel(opts.managedModel) : undefined;
   if (chosenKind === 'managed') return dispatchChosenManaged(opts);
   if (chosenKind === 'byok') return dispatchChosenByok(opts);
@@ -1307,7 +1314,7 @@ export async function runMission(
   if (stopSignal()) {
     // #22: discard the worktree on early cancel after creation
     await cleanupWorktree();
-    onUpdate({ id: mission.id, patch: { status: 'cancelled', liveAction: runtimeLabel(t, 'agents.runtime.stopped', 'Stoppé') } });
+    onUpdate({ id: mission.id, patch: { status: 'cancelled', liveAction: runtimeLabel(t, 'agents.runtime.stopped', 'Stopped') } });
     captureOutcome(mission, projectId, 'cancelled', missionStartedAt);
     return;
   }
@@ -1435,7 +1442,7 @@ export async function runMission(
         time: nowTime(),
         text: t
           ? t('agents.runtime.budgetEquivalentNoticeNative', { credits: spentCredits, cap: budgetCapCredits, pct })
-          : `Effort équivalent : ${spentCredits} crédits (non débités — abonnement Claude), ${pct}% du plafond informatif de ${budgetCapCredits} crédits ; mission non interrompue.`,
+          : `Equivalent effort: ${spentCredits} credits (not charged — Claude subscription), ${pct}% of the informational cap ${budgetCapCredits} credits ; mission not interrupted.`,
         isLive: false,
       },
     ];
@@ -1500,7 +1507,7 @@ export async function runMission(
             time: nowTime(),
             text: t
               ? t('agents.runtime.budgetWarningNative', { pct })
-              : `Avertissement budget : ${pct}% du plafond atteint (process natif déjà terminé — aucune pause possible pour ce moteur).`,
+              : `Budget warning: ${pct}% of the cap reached (native process already finished — this engine cannot be paused).`,
             isLive: false,
           },
         ];

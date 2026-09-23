@@ -151,7 +151,7 @@ function dispatchLiveStep(opts: PlanAndActLiveOpts, state: LiveRunState, step: A
     state.lastSummary = step.summary ?? state.lastSummary;
     const resultText = opts.t
       ? opts.t('agents.runtime.resultLine', { summary: state.lastSummary })
-      : `Résultat: ${state.lastSummary}`;
+      : `Result: ${state.lastSummary}`;
     emitStepText(opts, resultText, false);
     return;
   }
@@ -377,8 +377,8 @@ function announceLiveSuccess(opts: PlanAndActLiveOpts, lastSummary: string): voi
   opts.onStep(4, 'in_progress');
   opts.onProgress(90);
   const text = lastSummary
-    ? (opts.t ? opts.t('agents.runtime.agentDone', { summary: lastSummary.slice(0, 100) }) : `Agent terminé: ${lastSummary.slice(0, 100)}`)
-    : (opts.t ? opts.t('agents.runtime.agentDoneNoSummary') : 'Agent terminé');
+    ? (opts.t ? opts.t('agents.runtime.agentDone', { summary: lastSummary.slice(0, 100) }) : `Agent complete: ${lastSummary.slice(0, 100)}`)
+    : (opts.t ? opts.t('agents.runtime.agentDoneNoSummary') : 'Agent complete');
   opts.onAction({ time: clockHm(), text, isLive: false });
 }
 
@@ -390,7 +390,7 @@ async function runOneNativePass(
   if (announceStart) {
     const startText = opts.t
       ? opts.t('agents.runtime.startingAgent', { tool: opts.tool, model: opts.model })
-      : `Démarrage agent ${opts.tool} (${opts.model})…`;
+      : `Starting agent ${opts.tool} (${opts.model})…`;
     opts.onStep(0, 'in_progress');
     opts.onAction({ time: clockHm(), text: startText, isLive: true });
     opts.onProgress(5);
@@ -448,7 +448,7 @@ export async function runPlanAndActLive(opts: PlanAndActLiveOpts): Promise<void>
     const state = await runOneNativePass(opts, resumeSessionId, pass === 0);
 
     if (state.stopped) {
-      const stopText = opts.t ? opts.t('agents.runtime.stopped') : 'Stoppé';
+      const stopText = opts.t ? opts.t('agents.runtime.stopped') : 'Stopped';
       opts.onAction({ time: clockHm(), text: stopText, isLive: false });
       return;
     }
@@ -457,7 +457,7 @@ export async function runPlanAndActLive(opts: PlanAndActLiveOpts): Promise<void>
       opts.onPaused?.(state.sessionId);
       const outcome = await waitWhilePaused(opts);
       if (outcome === 'stop') {
-        const stopText = opts.t ? opts.t('agents.runtime.stopped') : 'Stoppé';
+        const stopText = opts.t ? opts.t('agents.runtime.stopped') : 'Stopped';
         opts.onAction({ time: clockHm(), text: stopText, isLive: false });
         return;
       }

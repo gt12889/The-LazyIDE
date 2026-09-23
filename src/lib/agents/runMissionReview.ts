@@ -83,7 +83,7 @@ export function announceReviewReady(opts: {
   const preserved = 'step cap reached — deliverable preserved for review';
   const reviewText = opts.stepCapFallthroughReason
     ? preserved
-    : tx(opts.t, 'agents.runtime.diffComputed', 'Diff calculé — mission prête pour revue');
+    : tx(opts.t, 'agents.runtime.diffComputed', 'Diff computed — mission ready for review');
   const finalTimeline: ActionEvent[] = [
     ...opts.timeline.map((e) => ({ ...e, isLive: false })),
     { time: clockHm(), text: reviewText, isLive: false },
@@ -163,13 +163,13 @@ function applyEvalSuccess(
   evalTimeline: ActionEvent[],
   verdict: Awaited<ReturnType<typeof evaluateMission>>,
 ): void {
-  const scoreFallback = opts.t ? opts.t('agents.runtime.scoreUnavailable') : 'score indisponible';
+  const scoreFallback = opts.t ? opts.t('agents.runtime.scoreUnavailable') : 'score unavailable';
   const result = verdict.passed
-    ? tx(opts.t, 'agents.runtime.evalPassed', 'PASSÉ')
-    : tx(opts.t, 'agents.runtime.evalFailed', 'RECALÉ');
+    ? tx(opts.t, 'agents.runtime.evalPassed', 'PASSED')
+    : tx(opts.t, 'agents.runtime.evalFailed', 'FAILED');
   const doneText = opts.t
     ? opts.t('agents.runtime.evalDone', { score: formatVerdictScoreLine(verdict, scoreFallback), result })
-    : `[eval] Évaluation terminée — ${formatVerdictScoreLine(verdict, 'score indisponible')} — ${verdict.passed ? 'PASSÉ' : 'RECALÉ'}`;
+    : `[eval] Evaluation complete — ${formatVerdictScoreLine(verdict, 'score unavailable')} — ${verdict.passed ? 'PASSED' : 'FAILED'}`;
   opts.onUpdate({
     id: opts.mission.id,
     patch: {
@@ -218,12 +218,12 @@ async function applyEvalUnavailable(
         ...evalTimeline.map((e) => ({ ...e, isLive: false })),
         {
           time: clockHm(),
-          text: tx(opts.t, 'agents.runtime.evalUnavailable', '[eval] Évaluation indisponible — revue manuelle requise'),
+          text: tx(opts.t, 'agents.runtime.evalUnavailable', '[eval] Evaluation unavailable — manual review required'),
           isLive: false,
         },
       ],
       liveAction: undefined,
-      judgesApproved: 'évaluation indisponible',
+      judgesApproved: 'evaluation unavailable',
     },
   });
   await persistLearningStage(opts, withDiff);
@@ -234,7 +234,7 @@ export async function runAutomatedEvaluation(opts: AutomatedEvalOpts): Promise<v
     ...opts.finalTimeline,
     {
       time: clockHm(),
-      text: tx(opts.t, 'agents.runtime.evalStarting', "Démarrage de l'évaluation automatique…"),
+      text: tx(opts.t, 'agents.runtime.evalStarting', "Starting automatic evaluation…"),
       isLive: true,
     },
   ];
@@ -242,7 +242,7 @@ export async function runAutomatedEvaluation(opts: AutomatedEvalOpts): Promise<v
     id: opts.mission.id,
     patch: {
       actionTimeline: evalTimeline,
-      liveAction: tx(opts.t, 'agents.runtime.evalInProgress', 'Évaluation en cours…'),
+      liveAction: tx(opts.t, 'agents.runtime.evalInProgress', 'Evaluation in progress…'),
     },
   });
   const withDiff = missionWithDiff(opts.mission, opts.diff);

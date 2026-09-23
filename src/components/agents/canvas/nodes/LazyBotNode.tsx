@@ -122,7 +122,7 @@ export const LazyBotNodeCard = memo(function LazyBotNodeCard({
           data-testid={`bot-vm-open-${bot.id}`}
           onClick={(e) => { e.stopPropagation(); toggleBotVmWindow(bot.id); }}
           style={vmOpen ? S.vmBtnActive : S.vmBtn}
-          title={vmOpen ? 'Fermer la fenêtre VM' : 'Ouvrir la fenêtre VM'}
+          title={vmOpen ? 'Close VM window' : 'Open VM window'}
         >
           {vmOpen ? '✕ VM' : '▶ VM'}
         </button>

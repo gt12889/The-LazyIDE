@@ -5,6 +5,19 @@ import { localFetch } from '../lib/models/localFetch';
 
 beforeEach(() => { native.invoke.mockReset(); native.isTauri.mockReturnValue(true); });
 
+it('routes Go requests only through its dedicated native command without frontend credentials', async () => {
+  native.invoke.mockImplementation(async (_command, args) => {
+    args.onEvent.onmessage({ kind: 'headers', status: 200 });
+    args.onEvent.onmessage({ kind: 'done' });
+  });
+  await localFetch('', { body: JSON.stringify({ model: 'kimi-k3' }) }, { endpoint: 'chat/completions', session: 'conversation' });
+  expect(native.invoke).toHaveBeenCalledWith('opencode_go_request', expect.objectContaining({ endpoint: 'chat/completions', session: 'conversation' }));
+  expect(native.invoke.mock.calls[0][1]).not.toHaveProperty('url');
+  expect(native.invoke.mock.calls[0][1]).not.toHaveProperty('headers');
+  native.isTauri.mockReturnValue(false);
+  await expect(localFetch('', {}, { endpoint: 'models', session: 'conversation' })).rejects.toThrow('desktop');
+});
+
 it('forwards native status and streams response bytes', async () => {
   native.invoke.mockImplementation(async (_command, args) => {
     args.onEvent.onmessage({ kind: 'headers', status: 404 });

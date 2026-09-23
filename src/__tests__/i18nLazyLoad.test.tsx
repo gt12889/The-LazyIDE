@@ -1,28 +1,21 @@
 /**
  * i18nLazyLoad.test.tsx
  *
- * Regression tests for the i18n lazy-loading refactor (src/i18n/index.tsx):
- * previously all 6 locale dictionaries (~476KB of source) were statically
- * imported into the eager entry chunk even though detectLocaleSync()
- * resolves exactly ONE locale before first render. Now only fr
- * (DEFAULT_LOCALE) and en (the practical fallback for most non-fr
- * navigator.language values, including jsdom's own default "en-US" used
- * across this test suite) are eager; es/zh/de/ja are code-split and
- * fetched on first use.
+ * Regression tests for the English-only i18n runtime (src/i18n/index.tsx).
+ * The legacy non-English dictionaries still exist for historical fixtures
+ * and key parity, but production locale resolution must ignore stale saved
+ * values and never auto-switch from OS/browser locale.
  *
  * Two contracts must hold:
  *   1. Key parity — all 6 dictionaries expose the exact same key set, so
  *      switching locale (or falling back to DEFAULT_LOCALE mid-load) never
  *      silently drops a translation.
- *   2. No flash of untranslated keys — even before a lazy locale's chunk
- *      has loaded, t() must return a real DEFAULT_LOCALE string, never the
- *      raw key. Eager locales (fr/en) must resolve with zero gap at all
- *      (this is the regression guard for the ~11 existing test files that
- *      render the real I18nProvider and assert real fr/en copy).
+ *   2. English-only resolution — stale fr/es/zh/de/ja preferences normalize
+ *      to English immediately, with no raw-key flash and no async flip.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { fr } from '../i18n/locales/fr';
 import { en } from '../i18n/locales/en';
 import { es } from '../i18n/locales/es';
@@ -45,8 +38,13 @@ function LocaleProbe({ testKey = 'nav.home' }: { testKey?: string }) {
   );
 }
 
-function setSavedLocale(locale: Locale): void {
-  localStorage.setItem('lazy.locale', locale);
+function LocaleListProbe() {
+  const { LOCALES: runtimeLocales } = useI18n();
+  return <span data-testid="locales">{runtimeLocales.map((l) => l.code).join(',')}</span>;
+}
+
+function setSavedLocale(locale: Locale, key = 'lazygt.locale'): void {
+  localStorage.setItem(key, locale);
 }
 
 beforeEach(() => {
@@ -79,94 +77,61 @@ describe('i18n locale dictionaries — 6-way key parity', () => {
   });
 });
 
-describe('I18nProvider — eager locales resolve with zero gap', () => {
-  it('fr (DEFAULT_LOCALE) renders its real string on the very first synchronous render', () => {
-    setSavedLocale('fr');
-    render(
-      <I18nProvider>
-        <LocaleProbe />
-      </I18nProvider>,
-    );
-    // No await/waitFor — fr is statically imported, so this must be correct
-    // synchronously, exactly like before the lazy-loading refactor.
-    expect(screen.getByTestId('value')).toHaveTextContent(fr['nav.home']);
-  });
-
-  it('en renders its real string on the very first synchronous render (jsdom default locale)', () => {
+describe('I18nProvider — English-only locale resolution', () => {
+  it('en (DEFAULT_LOCALE) renders its real string on the very first synchronous render', () => {
     setSavedLocale('en');
     render(
       <I18nProvider>
         <LocaleProbe />
       </I18nProvider>,
     );
+    expect(screen.getByTestId('locale')).toHaveTextContent('en');
     expect(screen.getByTestId('value')).toHaveTextContent(en['nav.home']);
   });
-});
 
-describe('I18nProvider — lazy (code-split) locales', () => {
-  it('never flashes a raw untranslated key while a lazy locale is loading', () => {
+  it('normalizes a stale current-key French preference to English', () => {
+    setSavedLocale('fr');
+    render(
+      <I18nProvider>
+        <LocaleProbe />
+      </I18nProvider>,
+    );
+    expect(screen.getByTestId('locale')).toHaveTextContent('en');
+    expect(screen.getByTestId('value')).toHaveTextContent(en['nav.home']);
+    expect(localStorage.getItem('lazygt.locale')).toBe('en');
+  });
+
+  it('removes the old lazy.locale key and still renders English', () => {
+    setSavedLocale('zh', 'lazy.locale');
+    render(
+      <I18nProvider>
+        <LocaleProbe />
+      </I18nProvider>,
+    );
+    expect(screen.getByTestId('locale')).toHaveTextContent('en');
+    expect(screen.getByTestId('value')).toHaveTextContent(en['nav.home']);
+    expect(localStorage.getItem('lazy.locale')).toBeNull();
+    expect(localStorage.getItem('lazygt.locale')).toBe('en');
+  });
+
+  it('does not flash raw untranslated keys for stale non-English locales', () => {
     setSavedLocale('es');
     render(
       <I18nProvider>
         <LocaleProbe testKey="nav.home" />
       </I18nProvider>,
     );
-    // Synchronously (before any await lets the es chunk's dynamic import
-    // resolve), the rendered value must be a REAL dictionary string — the
-    // fr fallback — never the bare key "nav.home".
-    const immediateValue = screen.getByTestId('value').textContent;
-    expect(immediateValue).not.toBe('nav.home');
-    expect(Object.values(DICTS).map((d) => d['nav.home'])).toContain(immediateValue);
+    expect(screen.getByTestId('value')).toHaveTextContent(en['nav.home']);
+    expect(screen.getByTestId('value')).not.toHaveTextContent('nav.home');
   });
 
-  it('eventually applies the lazy locale once its chunk resolves', async () => {
-    setSavedLocale('es');
+  it('exposes only English in the runtime locale picker metadata', () => {
     render(
       <I18nProvider>
-        <LocaleProbe testKey="nav.home" />
+        <LocaleListProbe />
       </I18nProvider>,
     );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('value')).toHaveTextContent(es['nav.home']);
-    });
-    expect(screen.getByTestId('locale')).toHaveTextContent('es');
-  });
-
-  it('loads a different lazy locale (zh) correctly, independent of es', async () => {
-    setSavedLocale('zh');
-    render(
-      <I18nProvider>
-        <LocaleProbe testKey="nav.home" />
-      </I18nProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('value')).toHaveTextContent(zh['nav.home']);
-    });
-  });
-
-  it('loads de and ja correctly as well (full 6-locale coverage)', async () => {
-    setSavedLocale('de');
-    const { unmount } = render(
-      <I18nProvider>
-        <LocaleProbe testKey="nav.home" />
-      </I18nProvider>,
-    );
-    await waitFor(() => {
-      expect(screen.getByTestId('value')).toHaveTextContent(de['nav.home']);
-    });
-    unmount();
-
-    setSavedLocale('ja');
-    render(
-      <I18nProvider>
-        <LocaleProbe testKey="nav.home" />
-      </I18nProvider>,
-    );
-    await waitFor(() => {
-      expect(screen.getByTestId('value')).toHaveTextContent(ja['nav.home']);
-    });
+    expect(screen.getByTestId('locales')).toHaveTextContent('en');
   });
 });
 

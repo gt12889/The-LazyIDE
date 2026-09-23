@@ -735,7 +735,7 @@ export function createOpenAICompatProvider(def: ByokProviderDef, t?: Translate):
       if (!apiKey) {
         yield t
           ? `❌ ${t('models.byok.noKeyConfigured', { provider: def.label })}\n`
-          : `❌ Aucune clé API ${def.label} configurée. Ajoute-la dans Réglages > Modèles.\n`;
+          : `❌ No API key ${def.label} configured. Add it in Settings > Models.\n`;
         return;
       }
       const system = buildSystemPrompt(req.mode, req.brainRecall, {

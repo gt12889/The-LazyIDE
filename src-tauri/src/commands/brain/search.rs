@@ -406,21 +406,20 @@ fn recall_from_warm_sidecar(
     port: u16,
     token: &str,
 ) -> Result<Option<RecallText>, String> {
-    let mut url = format!(
-        "http://127.0.0.1:{}/_api/recall?q={}&maxTokens=1500&nudge=tool",
-        port,
-        urlencoding::encode(query)
-    );
-    if let Some(c) = cwd {
-        url.push_str(&format!("&cwd={}", urlencoding::encode(c)));
-    }
-    if let Some(s) = session_id {
-        url.push_str(&format!("&sessionId={}", urlencoding::encode(s)));
-    }
+    let url = format!("http://127.0.0.1:{}/_api/recall", port);
+    let body = serde_json::json!({
+        "query": query,
+        "cwd": cwd,
+        "sessionId": session_id,
+        "maxTokens": 1500,
+        "nudge": "tool",
+    });
 
     let resp = http_client_with_timeout(RECALL_WARM_TIMEOUT_SECS)
-        .get(&url)
+        .post(&url)
         .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .json(&body)
         .send()
         .map_err(|e| format!("warm sidecar unreachable: {}", e))?;
 
@@ -649,7 +648,7 @@ pub(crate) fn brain_fetch_search_scoped(
                 return Ok(serde_json::json!({
                     "hits": [],
                     "total_ms": 0,
-                    "error": format!("Brain introuvable à {} — lance `lazybrain init`", brain_path),
+                    "error": format!("Brain not found at {} — run `lazybrain init`", brain_path),
                 }));
             }
             let root = project_state.0.lock().map(|g| g.clone()).unwrap_or_default();
@@ -707,7 +706,7 @@ pub(crate) fn brain_fetch_search_scoped(
                 log::warn!("brain_fetch_search_scoped: brain not found at {}", brain_path.display());
                 return Ok(serde_json::json!({
                     "hits": [], "total_ms": 0,
-                    "error": format!("Brain introuvable à {} — lance `lazybrain init`", brain_path.display()),
+                    "error": format!("Brain not found at {} — run `lazybrain init`", brain_path.display()),
                 }));
             }
             let brain_path_str = brain_path.to_string_lossy().into_owned();
@@ -820,7 +819,7 @@ pub(crate) fn brain_fetch_search_scoped(
 /// than `<project_root>/.lazybrain/brain` — an env override, a UI-persisted
 /// global/custom brain, or a different multi-tenant brainId — used to fail
 /// this pre-check and surface an actionable-SOUNDING but WRONG "Brain
-/// introuvable — lance `lazybrain init`" error, even while the exact same
+/// introuvable — run `lazybrain init`" error, even while the exact same
 /// live sidecar was already answering BrainSpace's graph for that very
 /// project (a genuinely indexed, thousands-of-neuron brain). The manager
 /// would then paraphrase that error as "no brain accessible for this
@@ -902,7 +901,7 @@ fn recall_current_scope(
                 return serde_json::json!({
                     "text": "", "sourceProjects": [],
                     "error": format!(
-                        "Brain introuvable à {} — lance `lazybrain init`",
+                        "Brain not found at {} — run `lazybrain init`",
                         brain_path
                     ),
                 });
@@ -960,7 +959,7 @@ pub(crate) fn brain_fetch_recall_scoped(
         Ok(b) => b,
         Err(e) => return Ok(serde_json::json!({
             "text": "", "sourceProjects": [],
-            "error": format!("LazyBrain introuvable: {}", e),
+            "error": format!("LazyBrain not found: {}", e),
         })),
     };
 
@@ -981,7 +980,7 @@ pub(crate) fn brain_fetch_recall_scoped(
                 return Ok(serde_json::json!({
                     "text": "", "sourceProjects": [],
                     "error": format!(
-                        "Brain introuvable à {} — lance `lazybrain init`",
+                        "Brain not found at {} — run `lazybrain init`",
                         brain_path.display()
                     ),
                 }));
@@ -1390,7 +1389,7 @@ mod tests {
     /// one BrainSpace's graph reaches, unconditionally) must answer even when
     /// the LOCALLY recomputed `brain_path` — `resolve_unified_brain_path`'s
     /// result for "the current project" — does not exist on disk. Before the
-    /// fix this returned an immediate "Brain introuvable ... lance
+    /// fix this returned an immediate "Brain not found ... lance
     /// `lazybrain init`" error without ever attempting the sidecar.
     #[test]
     fn recall_current_scope_reaches_a_live_sidecar_even_when_the_locally_resolved_brain_path_does_not_exist() {
@@ -1471,7 +1470,7 @@ mod tests {
     /// The other half of the same claim: when the sidecar is GENUINELY
     /// unreachable (not merely a locally-divergent path), the local
     /// existence check still gates the cold-CLI fallback and the honest
-    /// "Brain introuvable" error still surfaces — the fix narrows WHEN the
+    /// "Brain not found" error still surfaces — the fix narrows WHEN the
     /// check applies, it does not remove the check's real purpose.
     #[test]
     fn recall_current_scope_still_reports_brain_introuvable_when_sidecar_unreachable_and_local_path_missing() {
@@ -1510,9 +1509,9 @@ mod tests {
 
         let error = result.get("error").and_then(|e| e.as_str()).unwrap_or("");
         assert!(
-            error.contains("Brain introuvable"),
+            error.contains("Brain not found"),
             "when the sidecar is genuinely unreachable AND the local brain_path does not exist, the honest \
-             'Brain introuvable — lance lazybrain init' error must still surface (the one case where the \
+             'Brain not found — run lazybrain init' error must still surface (the one case where the \
              local existence check is meaningful — the cold CLI fallback needs a real brain on disk). Got: {:?}",
             result
         );

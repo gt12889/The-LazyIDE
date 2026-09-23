@@ -1031,6 +1031,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::local_llm::local_llm_request,
             commands::local_llm::local_llm_cancel,
+            commands::opencode_go::opencode_go_request,
             commands::fs::read_dir,
             commands::fs::read_file,
             commands::fs::read_file_base64,

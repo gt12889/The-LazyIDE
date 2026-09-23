@@ -1,35 +1,20 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { type Locale, type TranslationDict, DEFAULT_LOCALE, LOCALES } from './types';
-import { fr } from './locales/fr';
 import { en } from './locales/en';
-import { isTauri } from '../lib/platform';
 
 const LS_KEY = 'lazygt.locale';
+const LEGACY_LS_KEY = 'lazy.locale';
 
 // ── Dictionary loading ───────────────────────────────────────────────
 //
-// Only fr (DEFAULT_LOCALE — t()'s own missing-key fallback target) and en
-// (the practical fallback nearly every non-fr navigator.language / OS
-// locale resolves to via mapOsLocale below) are bundled into the eager
-// entry chunk. Previously all 6 locale dictionaries (~476KB of source)
-// were statically imported here even though detectLocaleSync() only ever
-// needs ONE before first render — 4-5 of them were dead weight on every
-// session. es/zh/de/ja are now code-split: fetched once, the first time
-// they're actually needed (resolved as the active locale, or picked from
-// the language switcher), then cached for the rest of the session.
+// English-only product build: do not import non-English dictionaries or chunks.
 const dictCache = new Map<Locale, TranslationDict>([
-  ['fr', fr],
   ['en', en],
 ]);
 const dictPromises = new Map<Locale, Promise<TranslationDict>>();
 
 const LOCALE_LOADERS: Record<Locale, () => Promise<TranslationDict>> = {
-  fr: () => Promise.resolve(fr),
   en: () => Promise.resolve(en),
-  es: () => import('./locales/es').then((m) => m.es),
-  zh: () => import('./locales/zh').then((m) => m.zh),
-  de: () => import('./locales/de').then((m) => m.de),
-  ja: () => import('./locales/ja').then((m) => m.ja),
 };
 
 function getDict(locale: Locale): TranslationDict | undefined {
@@ -52,66 +37,31 @@ function loadDict(locale: Locale): Promise<TranslationDict> {
   return promise;
 }
 
-/**
- * Map a BCP-47 / POSIX locale tag (e.g. "fr-FR", "en_US", "zh-Hans-CN")
- * to one of the app's supported Locale codes, or return DEFAULT_LOCALE.
- */
-function mapOsLocale(raw: string | null): Locale {
-  if (!raw) return DEFAULT_LOCALE;
-  // Normalise: "fr_FR" → "fr-FR", take first segment.
-  const lang = raw.replace('_', '-').split('-')[0].toLowerCase();
-  const match = LOCALES.find((l) => l.code === lang);
-  return match ? match.code : DEFAULT_LOCALE;
+function persistEnglishPreference(): void {
+  try {
+    localStorage.setItem(LS_KEY, DEFAULT_LOCALE);
+    localStorage.removeItem(LEGACY_LS_KEY);
+  } catch { /* localStorage may be unavailable in SSR */ }
 }
 
 /**
  * Synchronous locale resolution:
- * 1. User's explicit saved preference (localStorage) — always wins.
- * 2. navigator.language as web fallback (used until async OS check resolves).
+ * lazygt is English-only for this build. Older versions persisted locale
+ * choices under both lazygt.locale and lazy.locale; normalize them at boot so
+ * stale French/Spanish/German/etc. values cannot leak back into the UI.
  */
 function detectLocaleSync(): Locale {
-  try {
-    const saved = localStorage.getItem(LS_KEY) as Locale | null;
-    if (saved && LOCALES.some((l) => l.code === saved)) return saved;
-  } catch { /* localStorage may be unavailable in SSR */ }
-  // Web fallback — will be overridden asynchronously on Tauri.
-  return mapOsLocale(navigator.language);
+  persistEnglishPreference();
+  return DEFAULT_LOCALE;
 }
 
 /**
- * Boot-time dictionary preload — awaited from main.tsx in PARALLEL with
- * initByokVault so the detected non-eager locale's chunk (de/es/ja/zh —
- * ~50KB each, lazy by design above) is already cached before the first
- * render. Without this, every t() call renders the fr fallback until the
- * chunk resolves — a visible French flash for e.g. a German user. The boot
- * splash in index.html covers the wait; cost is one parallel chunk fetch.
+ * Boot-time dictionary preload — English-only now, so this stays cheap and
+ * deterministic regardless of OS/browser locale.
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export function preloadDetectedLocale(): Promise<void> {
   return loadDict(detectLocaleSync()).then(() => undefined);
-}
-
-/**
- * Asynchronously fetch the OS locale via Tauri's os plugin.
- * Returns null outside Tauri or when the locale cannot be resolved.
- * Only used on first run (no saved preference).
- *
- * Non-fatal by design: detectLocaleSync()'s navigator.language guess already
- * stands as the fallback, so a failure here must never throw. It is still
- * logged (not silently swallowed) so a genuine regression — e.g. plugin-os
- * becoming unbundleable again, see vite.config.ts's external comment — is
- * diagnosable instead of vanishing.
- */
-async function fetchOsLocale(): Promise<Locale | null> {
-  if (!isTauri()) return null;
-  try {
-    const { locale } = await import('@tauri-apps/plugin-os');
-    const raw = await locale();
-    return mapOsLocale(raw);
-  } catch (err: unknown) {
-    console.warn('[i18n] OS locale detection failed, keeping navigator.language fallback:', err);
-    return null;
-  }
 }
 
 // ── Missing-key logging dedupe ──────────────────────────────────────
@@ -220,27 +170,15 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [, forceRerender] = useState(0);
 
   const setLocale = useCallback((l: Locale) => {
-    setLocaleState(l);
-    try {
-      localStorage.setItem(LS_KEY, l);
-    } catch { /* localStorage may be unavailable */ }
+    void l;
+    setLocaleState(DEFAULT_LOCALE);
+    persistEnglishPreference();
   }, []);
 
-  // On first run (no saved preference), resolve locale from the OS asynchronously.
+  // Normalize any stale locale value from older multilingual builds.
   useEffect(() => {
-    let cancelled = false;
-    const hasSaved = (() => {
-      try { return !!localStorage.getItem(LS_KEY); } catch { return false; }
-    })();
-    if (!hasSaved) {
-      fetchOsLocale().then((detected) => {
-        if (!cancelled && detected) {
-          setLocaleState(detected);
-          // Do NOT persist to localStorage — user hasn't made an explicit choice yet.
-        }
-      });
-    }
-    return () => { cancelled = true; };
+    persistEnglishPreference();
+    setLocaleState(DEFAULT_LOCALE);
   }, []); // run once on mount
 
   // Ensure the active locale's dictionary is loaded, and re-render once it
@@ -261,7 +199,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   const t = useCallback(
     (key: string, params?: Record<string, string | number>): string => {
-      // fr (DEFAULT_LOCALE) is always eager/cached — this fallback can
+      // en (DEFAULT_LOCALE) is always eager/cached — this fallback can
       // never actually miss.
       const fallbackDict = getDict(DEFAULT_LOCALE)!;
       const dict = getDict(locale) ?? fallbackDict;

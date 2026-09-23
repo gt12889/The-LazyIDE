@@ -63,6 +63,36 @@ function httpGet(
   });
 }
 
+function httpPostJson(
+  url: string,
+  body: unknown,
+  headers?: Record<string, string>,
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify(body);
+    const req = http.request(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload).toString(),
+          ...headers,
+        },
+      },
+      (res) => {
+        let responseBody = '';
+        res.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body: responseBody }));
+      },
+    );
+    req.on('error', reject);
+    req.end(payload);
+  });
+}
+
 const MOCK_HIT_NOTE = {
   id: 'file-fixture-src-auth-ts',
   text: 'src/auth.ts — rotateRefreshToken, signAccessToken, validateSession',
@@ -205,6 +235,37 @@ describe('/_api/recall — turn-mode scored recall', () => {
     );
     const json = JSON.parse(res.body);
     expect(json.tokens).toBeLessThanOrEqual(500);
+  });
+
+  it('accepts POST JSON so large prompts do not overflow the request URL/header parser', async () => {
+    const { route } = await import('../../retrieval/router.js');
+    vi.mocked(route).mockResolvedValue({
+      hits: [
+        {
+          id: MOCK_HIT_NOTE.id,
+          path: 'notes/2026-07/file-fixture-src-auth-ts.html',
+          score: 0.9,
+          level: 'L2',
+          note: MOCK_HIT_NOTE,
+        },
+      ],
+      levelUsed: 'L2',
+      totalMs: 5,
+    });
+
+    const longQuery = `how does auth work ${'extra context '.repeat(2000)}`;
+    const res = await httpPostJson(`http://127.0.0.1:${port}/_api/recall`, {
+      query: longQuery,
+      cwd: '/fixture-project',
+      maxTokens: 500,
+      nudge: 'tool',
+    });
+
+    expect(res.status).toBe(200);
+    const json = JSON.parse(res.body);
+    expect(json.query).toBe(longQuery);
+    expect(json.text).toMatch(/auth/);
+    expect(vi.mocked(route)).toHaveBeenCalled();
   });
 
   it('returns empty text (not an error) when route() finds nothing', async () => {

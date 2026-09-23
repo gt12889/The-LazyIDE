@@ -167,6 +167,7 @@ function byokPool(provider: ByokProvider): string {
 export function resolveProvider(mission: Mission): string {
   const chosenKind: ModelRouteKind | undefined = classifyMissionModel(mission.model);
 
+  if (chosenKind === 'opencode-go') return 'opencode-go';
   if (chosenKind === 'managed') return 'managed';
   if (chosenKind === 'native') return resolveNativePool();
   // A BYOK-catalog model whose provider key is set (deepseek-chat, grok-4,
@@ -199,6 +200,7 @@ function resolveNativePool(): string {
 }
 
 function resolveModePool(mode: ProviderMode): string {
+  if (mode === 'opencode-go') return 'opencode-go';
   if (mode === 'managed') return 'managed';
   if (mode === 'claude-code' || mode === 'codex' || mode === 'devin') return 'claude-cli';
   if (mode === 'live-key') return byokPool(loadAccessSettings().byokProvider ?? 'anthropic');

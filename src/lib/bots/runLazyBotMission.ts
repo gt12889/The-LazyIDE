@@ -80,7 +80,7 @@ function label(t: TFunc | undefined, key: string, fallback: string, params?: Rec
 function initialBotSteps(t: TFunc | undefined): PlanStep[] {
   return [
     { label: label(t, 'agents.lazybot.stepSession', 'Ordinateur cloud Solari'), state: 'todo' },
-    { label: label(t, 'agents.lazybot.stepRun', 'Exécution de la tâche'), state: 'todo' },
+    { label: label(t, 'agents.lazybot.stepRun', 'Task execution'), state: 'todo' },
     { label: label(t, 'agents.lazybot.stepReport', 'Rapport final'), state: 'todo' },
   ];
 }
@@ -124,7 +124,7 @@ function chargeBot(mission: Mission, metrics: AgentMetrics | undefined): void {
 export function resolveBotBrain(model: string | undefined): BotBrain | { error: string } {
   const rail = classifyBotModelRail(model);
   if (!rail) {
-    return { error: `Aucun rail de modèle exécutable pour "${model ?? ''}" (clé BYOK, CLI, lazygt Pro ou modèle gratuit).` };
+    return { error: `No executable model rail for "${model ?? ''}" (BYOK key, CLI, lazygt Pro, or free model).` };
   }
   return brainForRail(rail, model ?? '');
 }
@@ -175,20 +175,20 @@ export async function runLazyBotMission(
     captureOutcome(mission, projectId, 'failed', startedAt, finalMetrics, undefined, { category, message: reason });
   };
   const cancel = (): void => {
-    pushTimeline(label(t, 'agents.runtime.stopped', 'Stoppé'), false);
+    pushTimeline(label(t, 'agents.runtime.stopped', 'Stopped'), false);
     patch({ status: 'cancelled', liveAction: undefined, actionTimeline: [...timeline] });
     captureOutcome(mission, projectId, 'cancelled', startedAt, finalMetrics);
   };
 
   const brainLabel = (b: BotBrain): string =>
-    label(t, 'agents.lazybot.brain', `LazyBot "${botName}" — cerveau ${b.rail} : ${b.model || 'modèle par défaut de la CLI'}`, {
+    label(t, 'agents.lazybot.brain', `LazyBot "${botName}" — brain ${b.rail} : ${b.model || 'default CLI model'}`, {
       bot: botName, rail: b.rail, model: b.model || 'CLI',
     });
 
   const brain = resolveBotBrain(mission.model);
   pushTimeline(
     'error' in brain
-      ? label(t, 'agents.lazybot.started', `LazyBot "${botName}" — démarrage…`, { bot: botName })
+      ? label(t, 'agents.lazybot.started', `LazyBot "${botName}" — starting…`, { bot: botName })
       : brainLabel(brain),
     false,
   );
@@ -202,7 +202,7 @@ export async function runLazyBotMission(
     const reason = label(
       t,
       'agents.lazybot.solariMissing',
-      'Clé Solari absente — configure-la dans Réglages > Solari puis relance le bot.',
+      'Solari key missing — configure it in Settings > Solari, then rerun the bot.',
     );
     emitEvent({ type: 'mission.failed', tsMs: Date.now(), projectId, missionId: mission.id, actor: 'system', payload: { reason: 'solari_not_configured' } });
     fail(reason, 'solari_not_configured');
@@ -362,8 +362,8 @@ export async function runLazyBotMission(
   const fullReport = report?.trim() || undefined;
   pushTimeline(
     timelineReport
-      ? label(t, 'agents.lazybot.doneWithReport', `LazyBot terminé — ${timelineReport}`, { report: timelineReport })
-      : label(t, 'agents.lazybot.done', 'LazyBot terminé'),
+      ? label(t, 'agents.lazybot.doneWithReport', `LazyBot complete — ${timelineReport}`, { report: timelineReport })
+      : label(t, 'agents.lazybot.done', 'LazyBot complete'),
     false,
   );
   steps = steps.map((s) => ({ ...s, state: 'done' as const }));

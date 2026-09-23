@@ -173,6 +173,8 @@ export interface StreamChatRequest {
    * field existed) keeps falling back to the old localStorage read unchanged.
    */
   projectRoot?: string;
+  /** UI-owned project registration; never serialized to the model API. */
+  onOpenProject?: (path: string) => Promise<void>;
   /**
    * useI18n().t, forwarded from assistantStore.tsx (the only caller with
    * live i18n context) so the ReAct loop's in-chat status lines

@@ -75,7 +75,7 @@ export function classifyMissionFit(task: string): MissionFitVerdict {
     return {
       fit: 'poor-fit',
       reason: 'La mission est vide.',
-      suggestion: 'Décrivez la tâche avec un objectif mesurable.',
+      suggestion: 'Describe the task with a measurable goal.',
     };
   }
 
@@ -88,32 +88,32 @@ export function classifyMissionFit(task: string): MissionFitVerdict {
     return {
       fit: 'poor-fit',
       reason: taste
-        ? 'Tâche à fort enjeu esthétique/UX — les générateurs donnent du "correct", pas du "grand".'
-        : 'Décision d’architecture — une erreur ici est coûteuse et difficile à défaire.',
-      suggestion: 'Faites le choix vous-même (ou avec le manager), puis lancez l’agent sur l’implémentation précise qui en découle.',
+        ? 'High-stakes visual/UX task — generators tend to produce “acceptable,” not “great.”'
+        : 'Architecture decision — a mistake here is costly and hard to undo.',
+      suggestion: 'Make the decision yourself (or with the manager), then launch the agent on the precise implementation that follows.',
     };
   }
 
   if (open) {
     return {
       fit: 'risky',
-      reason: 'Objectif ouvert, sans critère de succès mesurable — la boucle n’a pas de boussole.',
-      suggestion: 'Ajoutez un critère d’acceptation concret (tests, métrique, comportement observable).',
+      reason: 'Open-ended goal with no measurable success criteria — the loop has no compass.',
+      suggestion: 'Add a concrete acceptance criterion (tests, metric, observable behavior).',
     };
   }
 
   if (mech) {
     return {
       fit: 'good-fit',
-      reason: 'Tâche mécanique/répétitive avec un résultat vérifiable.',
-      suggestion: 'Parfait pour un agent : résultat vérifiable, incréments isolés.',
+      reason: 'Mechanical/repetitive task with a verifiable result.',
+      suggestion: 'Good fit for an agent: verifiable result, isolated increments.',
     };
   }
 
   return {
     fit: 'good-fit',
-    reason: 'Tâche clairement délimitée.',
-    suggestion: 'Lancez la mission — le juge vérifiera le résultat.',
+    reason: 'Clearly bounded task.',
+    suggestion: 'Launch the mission — the judge will verify the result.',
   };
 }
 
@@ -140,7 +140,7 @@ export function recommendGuidedWorkflow(task: string): GuidedWorkflow {
     recommended: true,
     steps: ['grill', 'spec', 'decompose', 'run', 'review'],
     why: large
-      ? 'Portée large : découpez en étapes taillées pour la smart zone (une étape = une session fraîche).'
-      : 'Objectif ouvert : grillez d’abord pour transformer les suppositions en spécification mesurable.',
+      ? 'Broad scope: split it into smart-zone-sized steps (one step = one fresh session).'
+      : 'Open-ended goal: plan first to turn assumptions into a measurable specification.',
   };
 }

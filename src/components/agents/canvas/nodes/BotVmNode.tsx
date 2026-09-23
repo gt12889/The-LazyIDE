@@ -47,7 +47,7 @@ export function BotVmNodeCard({ data }: { data: BotVmNodeData }) {
         <span style={S.spacer} />
         <button
           style={S.close}
-          title="Fermer la fenêtre VM"
+          title="Close VM window"
           data-testid={`bot-vm-close-${botId}`}
           onClick={(e) => {
             e.stopPropagation();

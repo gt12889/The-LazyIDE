@@ -398,7 +398,7 @@ export function buildWikiPayloadFromMeta(meta: BrainNoteMeta, t?: TFunc): WikiPa
     links: [],
     files: [],
     validity: meta.created
-      ? (t ? t('brain.wiki.createdActive', { date: meta.created.slice(0, 10) }) : `Créé le ${meta.created.slice(0, 10)} · actif`)
+      ? (t ? t('brain.wiki.createdActive', { date: meta.created.slice(0, 10) }) : `Created on ${meta.created.slice(0, 10)} · active`)
       : (t ? t('brain.wiki.active') : 'Actif'),
     cluster: (meta.topic ?? 'unknown') as ClusterId,
     // Contradiction-detection signal — surfaced by BrainWiki as a warning

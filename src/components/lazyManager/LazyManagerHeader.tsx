@@ -300,7 +300,7 @@ export function LazyManagerHeader({
     const byokDef = resolveByokDef(loadAccessSettings().byokProvider);
     engineLabel = byokDef ? `${byokDef.label} · clé API` : t(ENGINE_I18N_KEY['live-key']);
   } else {
-    engineLabel = engineMode === 'local' ? 'Local · Ollama' : t(ENGINE_I18N_KEY[engineMode as EngineKey] ?? 'assistant.engine.mock');
+    engineLabel = engineMode === 'opencode-go' ? 'OpenCode Go' : engineMode === 'local' ? 'Local · Ollama' : t(ENGINE_I18N_KEY[engineMode as EngineKey] ?? 'assistant.engine.mock');
   }
   const engineBg = ENGINE_COLOR[engineMode] ?? ENGINE_COLOR['mock'];
   const engineColor = ENGINE_TEXT_COLOR[engineMode] ?? ENGINE_TEXT_COLOR['mock'];
